@@ -10,7 +10,8 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 
 const args = process.argv.slice(2);
-const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i > -1 ? args[i + 1] : d; };
+// A flag given without a value (end of args, or followed by another --flag) falls back to its default.
+const opt = (n, d) => { const i = args.indexOf(`--${n}`); const v = i > -1 ? args[i + 1] : undefined; return v && !v.startsWith('--') ? v : d; };
 const has = n => args.includes(`--${n}`);
 const repo = opt('repo'); const org = opt('org');
 if (!repo || !org) { console.error('Usage: install.mjs --repo <path> --org <github-org> [--project-name X] [--force] [--dry-run]'); process.exit(2); }
