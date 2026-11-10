@@ -157,11 +157,31 @@ The build workflow reads the story itself, so Jira only sends the issue key.
 
 ## Step 4c. SF AI Tester in CI
 
-1. Ask the SF AI Tester owner for: the package name and install command, how it authenticates to Salesforce in headless mode (the guide assumes the `SF_ALIAS` of an `sf` login), which model provider key it reads and under which env var, and its exit codes.
-2. SF AI Tester uses the connected Claude Code account. In CI it gets the same `CLAUDE_CODE_OAUTH_TOKEN` (Step 4). Confirm that it reads that variable headless. Set the repo variables `SF_AI_TESTER_PACKAGE` (package name) and `SF_AI_TESTER_IN_CI=true` only after a CI run succeeds. Until then, the Tester runs it on the laptop in `qa-explore` (G6).
-3. Copy the `sf-ai-tester-suites` skill into the repo at `.claude/skills/sf-ai-tester-suites/`, so every laptop and CI uses the same validator.
+SF AI Tester is [pavansaikodanda/sf-ai-tester](https://github.com/pavansaikodanda/sf-ai-tester). It is not on npm, so
+CI builds its CLI from source at a pinned commit (`scripts/ci/install-sf-ai-tester.sh`).
 
-**Verify:** on a laptop logged in to the QA sandbox, `SF_ALIAS=qa-sandbox sf-ai-tester run test-cases/<a suite>.sf-tests.yaml --mode manual` writes `.sf-ai-tester/runs/<timestamp>/results.json`. Keep that file: Phase 5 adapts the verdict script to its shape.
+| Question | Answer (from the tool's source, `src/cli.ts`) |
+|---|---|
+| Install | `git clone` → `npm ci` → `npm run build` → browsers (`playwright install chromium`, `@playwright/mcp install-browser chrome-for-testing`). On Windows laptops, the VSIX in its `releases/` folder |
+| Run | `node <tool>/dist/cli.js run <suite.yaml> --mode manual|automation|both --login headless --workers 1-4`, from the repo root |
+| Salesforce login | `SF_ALIAS=<alias>`: it opens the org with the sf CLI session (`sf org open --url-only`), so the JWT login from Step 5 is enough. No password |
+| Claude login | The Claude Code subscription login. It removes `ANTHROPIC_API_KEY` and keeps `CLAUDE_CODE_OAUTH_TOKEN` (Step 4) |
+| Exit code | 0 only if every case passed, else 1 (CI ignores it and uses `scripts/ci/ai-tester-verdict.mjs`) |
+| Output | `.sf-ai-tester/runs/<time>/results.json` (`{ suite, org, results: [{ id, mode, status, summary, defects }] }`), `report.html`, `analysis.json`, `evidence/` |
+
+1. Set the repo variables:
+   ```bash
+   gh variable set SF_AI_TESTER_REF  --repo <ORG>/<REPO> --body "<commit SHA of sf-ai-tester to use>"
+   gh variable set SF_AI_TESTER_MODE --repo <ORG>/<REPO> --body manual      # manual | automation | both
+   ```
+   The repo is public, so CI needs no token to fetch it. To use a fork, also set `SF_AI_TESTER_REPO=<owner>/<name>`.
+2. Turn it on with `gh variable set SF_AI_TESTER_IN_CI --repo <ORG>/<REPO> --body true` after one PR run of the
+   `qa` job passes with it. Until then, the Tester runs it on the laptop in `qa-explore` (G6).
+3. The installer copies the `sf-ai-tester-suites` skill to `.claude/skills/sf-ai-tester-suites/`, so laptops and CI
+   use the same suite rules and validator.
+
+**Verify:** on a laptop logged in to the QA org, `SF_ALIAS=qa node <tool>/dist/cli.js run test-cases/<a suite>.sf-tests.yaml --mode manual --login headless`
+writes `.sf-ai-tester/runs/<timestamp>/results.json`, and `node scripts/ci/ai-tester-verdict.mjs` prints a route.
 
 ---
 

@@ -59,7 +59,9 @@ Verify: every tool prints a version; `gh auth status` OK; config filled.
    gh variable set MAX_AI_ATTEMPTS -R $ORG/$REPO --body 3
    gh variable set SF_INSTANCE_URL_SANDBOX -R $ORG/$REPO --body https://test.salesforce.com
    gh variable set SF_INSTANCE_URL_PROD -R $ORG/$REPO --body https://login.salesforce.com
-   gh variable set SF_AI_TESTER_IN_CI -R $ORG/$REPO --body false
+   gh variable set SF_AI_TESTER_IN_CI -R $ORG/$REPO --body false      # true after one green qa job with it
+   gh variable set SF_AI_TESTER_REF -R $ORG/$REPO --body <sha>        # commit of github.com/pavansaikodanda/sf-ai-tester
+   gh variable set SF_AI_TESTER_MODE -R $ORG/$REPO --body manual
    gh api -X PUT repos/$ORG/$REPO/environments/production
    ```
 

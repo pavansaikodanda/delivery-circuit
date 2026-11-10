@@ -26,3 +26,5 @@ transcripts:
 ai:
   max_attempts: 3
   sf_ai_tester_in_ci: false         # true once the SF AI Tester CLI runs headless in CI (sets SF_AI_TESTER_IN_CI)
+  sf_ai_tester_ref: ""              # commit SHA of github.com/pavansaikodanda/sf-ai-tester for CI (SF_AI_TESTER_REF)
+  sf_ai_tester_mode: manual         # manual | automation | both (SF_AI_TESTER_MODE)

@@ -11,7 +11,8 @@ Persona: **Tester** (`cc-qa`). Input: `$ARGUMENTS` = PR number. Org: `qa` only.
    `gh run download <id> -n test-evidence -D .ai/evidence`. Read `verdict.json`, Apex results and the SF AI Tester
    `results.json` / `analysis.json` / screenshots.
 2. **Re-check what didn't pass:** for each `failed` or `blocked` case, re-run that suite locally with SF AI Tester
-   against `qa` (Mission Control, or `SF_ALIAS=qa sf-ai-tester run <suite> --mode manual`; verify CLI flags).
+   against `qa` (Mission Control in VS Code, or `SF_ALIAS=qa node <tool>/dist/cli.js run <suite> --mode manual --login headless`,
+   where `<tool>` comes from `bash scripts/ci/install-sf-ai-tester.sh`). Open the run's `report.html` for screenshots.
    Classify each one:
    - **defect:** the app behaves differently from an expected result → request changes on the PR with the case
      id, steps, expected vs actual and the screenshot path;

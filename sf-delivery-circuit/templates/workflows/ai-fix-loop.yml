@@ -74,12 +74,16 @@ jobs:
             FAILED_JOBS=$(echo "$JOBS" | jq -r '.jobs[] | select(.conclusion=="failure") | .name')
             FAILED_STEPS=$(echo "$JOBS" | jq -r '.jobs[] | .steps[]? | select(.conclusion=="failure") | .name')
             if echo "$FAILED_JOBS" | grep -qx guard; then ROUTE=human
-            elif echo "$FAILED_STEPS" | grep -qE '^(Login QA sandbox|Install tools|Set up job)$|^Run npm i -g'; then ROUTE=infra
+            elif echo "$FAILED_STEPS" | grep -qE '^(Login QA sandbox|Install tools|Set up job)$'; then ROUTE=infra
             elif echo "$FAILED_STEPS" | grep -qx 'Acceptance tests (SF AI Tester)' && [ "$(echo "$FAILED_STEPS" | wc -l)" -eq 1 ]; then
               gh run download "$RUN_ID" --repo "$R" -n test-evidence -D ev >/dev/null 2>&1 || true
               ROUTE=$(jq -r '.route // "infra"' ev/verdict.json 2>/dev/null || echo infra)
             fi
             FEEDBACK=$(gh run view "$RUN_ID" --repo "$R" --log-failed 2>/dev/null | tail -c 5000 || true)
+            if [ "$ROUTE" = dev ] && [ -f ev/verdict.json ]; then
+              FAILS=$(jq -r '.failed[] | "- \(.suite) \(.id) (\(.mode)): \(.summary)\(if (.defects|length) > 0 then "\n  defects: " + (.defects|join("; ")) else "" end)"' ev/verdict.json | tail -c 3000)
+              FEEDBACK=$(printf 'SF AI Tester failed cases (the app did not match the expected results):\n%s\n\n%s\n' "$FAILS" "$FEEDBACK")
+            fi
             REV=$(echo "$INFO" | jq -r '[.comments[].body | select(test("VERDICT: BLOCK"))] | last // empty' | tail -c 2500)
             [ -z "$REV" ] || FEEDBACK=$(printf '%s\n\nReviewer findings:\n%s\n' "$FEEDBACK" "$REV")
           else

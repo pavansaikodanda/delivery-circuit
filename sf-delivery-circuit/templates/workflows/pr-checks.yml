@@ -136,18 +136,24 @@ jobs:
           SF_ALIAS: qa
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           BRANCH: ${{ github.head_ref }}
-          SF_AI_TESTER_PACKAGE: ${{ vars.SF_AI_TESTER_PACKAGE }}
+          SF_AI_TESTER_REPO: ${{ vars.SF_AI_TESTER_REPO || 'pavansaikodanda/sf-ai-tester' }}
+          SF_AI_TESTER_REF: ${{ vars.SF_AI_TESTER_REF }}
+          SF_AI_TESTER_MODE: ${{ vars.SF_AI_TESTER_MODE || 'manual' }}
+          SF_AI_TESTER_WITH_DEPS: '1'
         run: |
-          [[ "$SF_AI_TESTER_PACKAGE" =~ ^[@a-z0-9._/-]+(@[0-9][0-9a-z.-]*)?$ ]] || { echo "Set repo variable SF_AI_TESTER_PACKAGE"; exit 1; }
-          npm i -g "$SF_AI_TESTER_PACKAGE"   # VERIFY package name with the SF AI Tester owner
-          npx playwright install --with-deps chromium
+          [[ "$SF_AI_TESTER_MODE" =~ ^(manual|automation|both)$ ]] || { echo "SF_AI_TESTER_MODE must be manual, automation or both"; exit 1; }
           KEY=$(printf '%s' "$BRANCH" | grep -oE '^feature/[A-Z][A-Z0-9]+-[0-9]+' | cut -d/ -f2 || true)
           SUITES=()
           if [ -n "$KEY" ]; then eval "$(bash scripts/ci/resolve-story.sh "$KEY")"; [ -f "$SUITE" ] && SUITES+=("$SUITE"); fi
           for f in test-cases/regression-*.sf-tests.yaml; do [ -f "$f" ] && SUITES+=("$f"); done
           if [ ${#SUITES[@]} -eq 0 ]; then echo '{"route":"pass","total":0,"note":"no suites"}' > verdict.json; exit 0; fi
-          for s in "${SUITES[@]}"; do sf-ai-tester run "$s" --mode both || true; done   # VERIFY CLI flags
-          node scripts/ci/ai-tester-verdict.mjs .sf-ai-tester/runs > verdict.json
+          TOOL=$(bash scripts/ci/install-sf-ai-tester.sh "$RUNNER_TEMP/sf-ai-tester" | tail -1)
+          # SF_ALIAS=qa: the CLI opens the org through the sf CLI session from the JWT login above (no password).
+          # Exit code 1 means "not all passed"; the verdict below decides the route, so keep going.
+          for s in "${SUITES[@]}"; do
+            node "$TOOL/dist/cli.js" run "$s" --mode "$SF_AI_TESTER_MODE" --login headless --workers 2 || true
+          done
+          node scripts/ci/ai-tester-verdict.mjs .sf-ai-tester/runs --expect "${#SUITES[@]}" > verdict.json
           cat verdict.json
           [ "$(jq -r .route verdict.json)" = "pass" ]
       - if: always() && env.RUN == '1'

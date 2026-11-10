@@ -138,10 +138,12 @@ disabled because CI and the no-AI release workflow handle those.
 
 ## Requirements
 
+- [SF AI Tester](https://github.com/pavansaikodanda/sf-ai-tester) for AI-driven UI acceptance tests: the VS Code
+  extension on laptops, and its CLI (built from source at a pinned commit) in CI.
 - Claude Code on a Claude subscription (Pro, Max, Team or Enterprise). CI uses `CLAUDE_CODE_OAUTH_TOKEN` from
   `claude setup-token` on a dedicated seat. **No Anthropic API key is used anywhere.**
 - GitHub (organisation with teams), Salesforce DEV and QA sandboxes plus production, Jira Cloud, Confluence + Lucid,
-  Slack. Fireflies, CodeRabbit and SF AI Tester are optional.
+  Slack. Fireflies and CodeRabbit are optional.
 - Node 22+, Salesforce CLI, `gh`, `jq`, `uv` + `specify-cli`, Python 3 (for the SF AI Tester validator).
 - Built on [GitHub Spec Kit](https://github.com/github/spec-kit) and
   [spec-kit-sf](https://github.com/Evernorth/spec-kit-sf) v2.0.1. Both are installed from upstream into each client
@@ -156,5 +158,5 @@ The plugin, its templates and its tests are built and checked locally:
 - the installer was tested on a scratch repo, including re-runs (idempotent, merges existing settings).
 
 Not yet run end to end against live systems: that is runbook phase B11 (dry run). Items marked **VERIFY** (action
-versions, MCP URLs, Spec Kit flags, SF AI Tester CLI flags and output format, sfdx-git-delta flags) are checked
+versions, MCP URLs, Spec Kit flags, sfdx-git-delta flags) are checked
 against vendor docs during bootstrap.

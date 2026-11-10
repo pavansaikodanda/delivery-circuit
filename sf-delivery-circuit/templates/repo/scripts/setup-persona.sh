@@ -31,6 +31,10 @@ QA_URL=$(grep -E '^\s*qa_sandbox_url:' build.config.yml 2>/dev/null | awk '{prin
 sf org display --target-org dev >/dev/null 2>&1 || sf org login web --alias dev --instance-url "${DEV_URL:-https://test.salesforce.com}"
 if [ "$P" = tester ]; then
   sf org display --target-org qa >/dev/null 2>&1 || sf org login web --alias qa --instance-url "${QA_URL:-https://test.salesforce.com}"
+  echo "   SF AI Tester (https://github.com/pavansaikodanda/sf-ai-tester):"
+  echo "   - VS Code: install the VSIX from its releases/ folder (Windows), or build it from source (npm ci && npm run package)."
+  echo "   - CLI: SF_AI_TESTER_REF=<sha> bash scripts/ci/install-sf-ai-tester.sh ~/.sf-ai-tester-cli"
+  echo "          then: SF_ALIAS=qa node ~/.sf-ai-tester-cli/dist/cli.js run test-cases/<suite>.sf-tests.yaml --mode manual"
 fi
 
 echo "== 3. Shell alias $ALIAS"
