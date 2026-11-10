@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "salesforce": {
+      "command": "npx",
+      "args": ["-y", "@salesforce/mcp", "--orgs", "qa", "--toolsets", "orgs,metadata,data,testing"]
+    },
+    "playwright": { "command": "npx", "args": ["-y", "@playwright/mcp"] },
+    "github":     { "type": "http", "url": "https://api.githubcopilot.com/mcp/" },
+    "atlassian":  { "type": "http", "url": "VERIFY: Atlassian Rovo remote MCP URL from Atlassian docs" }
+  }
+}

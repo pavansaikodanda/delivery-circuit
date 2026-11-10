@@ -1,0 +1,27 @@
+# VERIFY keys against the current CodeRabbit configuration schema.
+language: en
+reviews:
+  profile: assertive
+  request_changes_workflow: true
+  high_level_summary: true
+  auto_review: { enabled: true, drafts: false, base_branches: [main] }
+  path_instructions:
+    - path: "force-app/**/classes/**"
+      instructions: >
+        Salesforce Apex. Flag SOQL/DML in loops, missing sharing keywords, missing CRUD/FLS, hard-coded IDs,
+        duplicated logic that exists elsewhere in force-app, tests without assertions, and unit test cases
+        from tests/story_NN.tc.json that no test references ("// TC: Sxx-TC-yy").
+    - path: "force-app/**/lwc/**"
+      instructions: "Error handling, loading states, LDS/UI API before Apex, Jest coverage."
+    - path: "force-app/**/flows/**"
+      instructions: "Recursion, missing fault paths, hard-coded values, entry criteria."
+    - path: "force-app/**/objects/**"
+      instructions: "Every new object or field must appear in the feature's data-model.md; flag anything else."
+    - path: "test-cases/**"
+      instructions: "Expected results must be observable on screen and specific; steps use exact UI labels; ids match tests/story_NN.tc.json."
+    - path: ".specify/specs/**"
+      instructions: "Acceptance criteria are Given/When/Then and testable; plan lists reuse and blast radius."
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns: ["CLAUDE.md", ".specify/memory/constitution.md", "docs/definition-of-done.md"]

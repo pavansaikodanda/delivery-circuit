@@ -1,0 +1,13 @@
+
+# --- delivery circuit (appended by circuit-bootstrap) ---
+.ai/
+.sf-ai-tester/runs/
+coverage/
+test-results/
+playwright-report/
+**/.auth.json
+delta/
+build.config.local.yml
+.specify/extensions/sf/sf-config.local.yml
+*.key
+*.pem

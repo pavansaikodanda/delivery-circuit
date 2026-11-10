@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Read", "Glob", "Grep",
+      "Bash(sf project retrieve start:*)",
+      "Bash(sf project retrieve preview:*)",
+      "Bash(sf project deploy validate:*)",
+      "Bash(sf data query:*)",
+      "Bash(sf sobject describe:*)",
+      "Bash(sf apex run test:*)",
+      "Bash(sf org list:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npx jest:*)",
+      "Bash(node scripts/ci/check-tc-coverage.mjs:*)",
+      "Bash(python .claude/skills/sf-ai-tester-suites/scripts/validate_suite.py:*)",
+      "Bash(python .claude/skills/sf-ai-tester-suites/scripts/org_snapshot.py:*)",
+      "Bash(git status)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git switch:*)",
+      "Bash(gh pr view:*)", "Bash(gh pr diff:*)", "Bash(gh pr list:*)", "Bash(gh run view:*)", "Bash(gh run download:*)"
+    ],
+    "deny": [
+      "Bash(sf project deploy quick:*)",
+      "Bash(sf org login:*)",
+      "Bash(gh pr merge:*)",
+      "Edit(.github/**)", "Write(.github/**)",
+      "Edit(.claude/settings.json)", "Write(.claude/settings.json)",
+      "Edit(.claude/hooks/**)", "Write(.claude/hooks/**)",
+      "Read(**/*.key)", "Read(**/*.pem)", "Read(.env*)", "Read(~/.sf/**)", "Read(~/.sfdx/**)", "Read(~/.sfkeys/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell|Edit|MultiEdit|Write|NotebookEdit|Read",
+        "hooks": [
+          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/circuit-guard.mjs\"", "timeout": 10 }
+        ]
+      }
+    ]
+  }
+}

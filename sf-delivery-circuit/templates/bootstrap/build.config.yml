@@ -1,0 +1,28 @@
+# Filled in by a person at HC-1. Every bootstrap phase reads it. Contains no secrets.
+github:
+  org: conscendo-<client>           # GitHub organisation
+  repo: <client>-salesforce         # new or existing Salesforce DX repo
+  default_branch: main
+people:                             # GitHub username + Atlassian email + Slack handle. Keep the three teams disjoint.
+  architects: [{ gh: "", atlassian: "", slack: "" }]
+  developers: [{ gh: "", atlassian: "", slack: "" }]
+  testers:    [{ gh: "", atlassian: "", slack: "" }]
+jira:
+  site: https://<site>.atlassian.net
+  project_key: ABC
+  test_tool: none                   # none | xray | zephyr
+confluence:
+  space_key: SD                     # "Solution Designs"
+salesforce:
+  dev_sandbox_url: https://<my-domain>--dev.sandbox.my.salesforce.com
+  qa_sandbox_url:  https://<my-domain>--qa.sandbox.my.salesforce.com
+  prod_url:        https://<my-domain>.my.salesforce.com
+  api_version: "62.0"               # VERIFY current API version
+slack:
+  workspace: <name>
+  channels: { arch: arch-gate, dev: dev-gate, qa: qa-gate }
+transcripts:
+  source: file                      # file | fireflies | both
+ai:
+  max_attempts: 3
+  sf_ai_tester_in_ci: false         # true once the SF AI Tester CLI runs headless in CI (sets SF_AI_TESTER_IN_CI)

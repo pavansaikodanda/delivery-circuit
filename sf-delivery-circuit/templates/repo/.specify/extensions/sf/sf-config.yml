@@ -1,0 +1,22 @@
+# spec-kit-sf configuration for the delivery circuit (template: sf-config.template.yml in spec-kit-sf v2.0.1).
+# Production has NO alias on purpose: no persona or CI AI step can target it. deploy-prod.yml logs in by itself.
+project:
+  name: "PROJECT_NAME"
+  org_aliases:
+    dev: "dev"
+    qa: "qa"
+    uat: "qa"
+    prod: "none"
+
+scoring:
+  metadata: 80
+  apex: 80
+  lwc: 80
+  testing: 80
+
+deployment:
+  always_dry_run: true
+  test_level: "RunSpecifiedTests"
+
+constitution:
+  article_iii_posture: "auto"

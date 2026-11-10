@@ -1,0 +1,15 @@
+# Last match wins. Replace @ORG with the GitHub organisation (bootstrap does this).
+*                                   @ORG/architects @ORG/developers
+/force-app/                         @ORG/developers
+/force-app/main/default/objects/    @ORG/architects @ORG/developers
+/force-app/main/default/permissionsets/ @ORG/architects
+/.specify/                          @ORG/architects
+/.specify/specs/*/tests/            @ORG/testers
+/test-cases/                        @ORG/testers
+/docs/plans/                        @ORG/developers @ORG/testers
+/inputs/                            @ORG/architects
+/.claude/                           @ORG/architects
+/CLAUDE.md                          @ORG/architects
+/.coderabbit.yaml                   @ORG/architects
+/scripts/ci/                        @ORG/architects
+/.github/                           @ORG/architects

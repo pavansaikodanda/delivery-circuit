@@ -1,0 +1,19 @@
+{
+  "name": "conscendo-delivery",
+  "owner": { "name": "Conscendo", "email": "maintainer@example.com" },
+  "metadata": {
+    "description": "Conscendo AI + Human Salesforce delivery plugins",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "sf-delivery-circuit",
+      "source": "./sf-delivery-circuit",
+      "description": "AI + Human Salesforce delivery circuit: transcript to spec to Jira to tests to code to deploy, with Architect, Developer and Tester personas, gates G1-G9, and a bootstrap that installs the pipeline into any SFDX repo. Built on GitHub Spec Kit and spec-kit-sf.",
+      "version": "0.1.0",
+      "author": { "name": "Conscendo" },
+      "category": "development",
+      "keywords": ["salesforce", "spec-kit", "sdd", "personas", "github-actions", "jira", "qa"]
+    }
+  ]
+}

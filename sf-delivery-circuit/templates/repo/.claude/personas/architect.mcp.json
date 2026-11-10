@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "salesforce": {
+      "command": "npx",
+      "args": ["-y", "@salesforce/mcp", "--orgs", "dev", "--toolsets", "orgs,metadata,data"]
+    },
+    "github":    { "type": "http", "url": "https://api.githubcopilot.com/mcp/" },
+    "atlassian": { "type": "http", "url": "VERIFY: Atlassian Rovo remote MCP URL from Atlassian docs" },
+    "lucid":     { "type": "http", "url": "VERIFY: Lucid MCP URL from Lucid docs" },
+    "fireflies": { "type": "http", "url": "VERIFY: Fireflies MCP URL from Fireflies docs" }
+  }
+}

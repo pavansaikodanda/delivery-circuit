@@ -1,0 +1,10 @@
+# Org-specific local data (never commit)
+.sf/
+.sfdx/
+.siid-code/
+*.key
+*.pem
+.env*
+# Scratch
+.ai/
+node_modules/

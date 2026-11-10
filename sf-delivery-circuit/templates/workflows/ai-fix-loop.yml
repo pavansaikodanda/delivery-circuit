@@ -1,0 +1,123 @@
+name: ai-fix-loop
+# Routes failures on AI PRs. One dispatch per head commit, max MAX_AI_ATTEMPTS Developer attempts.
+#   guard failure                      -> needs-human
+#   login/install failure, AI tester error -> one automatic re-run (no AI attempt used)
+#   SF AI Tester blocked only          -> needs-qa (Tester fixes the suite or data; no AI attempt used)
+#   anything else failing, CodeRabbit or a developers/testers member requesting changes -> Developer attempt N+1
+on:
+  workflow_run:
+    workflows: [pr-checks]
+    types: [completed]
+  pull_request_review:
+    types: [submitted]
+
+concurrency:
+  group: ai-fix-${{ github.event.workflow_run.pull_requests[0].number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  route:
+    if: >
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure') ||
+      (github.event_name == 'pull_request_review' && github.event.review.state == 'changes_requested')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: { persist-credentials: false, sparse-checkout: scripts/ci }
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+      - name: Decide route and act
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          MAX: ${{ vars.MAX_AI_ATTEMPTS }}
+          DRY_RUN: ${{ vars.AI_LOOP_DRY_RUN }}
+          ORG: ${{ github.repository_owner }}
+          PR_FROM_RUN: ${{ github.event.workflow_run.pull_requests[0].number }}
+          PR_FROM_REVIEW: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          EVENT_SHA: ${{ github.event.workflow_run.head_sha || github.event.review.commit_id }}
+          REVIEWER: ${{ github.event.review.user.login }}
+          REVIEW_BODY: ${{ github.event.review.body }}
+          HOOK_DEV: ${{ secrets.SLACK_WEBHOOK_DEV }}
+          HOOK_QA: ${{ secrets.SLACK_WEBHOOK_QA }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          R="$GITHUB_REPOSITORY"; MAX=${MAX:-3}
+          PR=${PR_FROM_RUN:-$PR_FROM_REVIEW}
+          [ -n "$PR" ] || { echo "No PR"; exit 0; }
+          INFO=$(gh pr view "$PR" --repo "$R" --json headRefName,headRefOid,labels,comments,isDraft)
+          has_label() { echo "$INFO" | jq -e --arg l "$1" '.labels[].name | select(.==$l)' >/dev/null; }
+          has_label ai-generated || { echo "Not an AI PR"; exit 0; }
+          if has_label needs-human || has_label needs-qa; then echo "A person owns this PR"; exit 0; fi
+          [ "$(echo "$INFO" | jq -r .headRefOid)" = "$EVENT_SHA" ] || { echo "Stale event"; exit 0; }
+          MARK="<!-- ai-fix:$EVENT_SHA -->"
+          if echo "$INFO" | jq -e --arg m "$MARK" '.comments[].body | select(contains($m))' >/dev/null; then echo "Already handled"; exit 0; fi
+
+          BRANCH=$(echo "$INFO" | jq -r .headRefName)
+          KEY=$(printf '%s' "$BRANCH" | grep -oE '^feature/[A-Z][A-Z0-9]+-[0-9]+' | cut -d/ -f2 || true)
+          [ -n "$KEY" ] || { echo "Not a story branch"; exit 0; }
+          ROUTE=dev; FEEDBACK=""
+
+          if [ -n "$RUN_ID" ]; then
+            JOBS=$(gh run view "$RUN_ID" --repo "$R" --json jobs)
+            FAILED_JOBS=$(echo "$JOBS" | jq -r '.jobs[] | select(.conclusion=="failure") | .name')
+            FAILED_STEPS=$(echo "$JOBS" | jq -r '.jobs[] | .steps[]? | select(.conclusion=="failure") | .name')
+            if echo "$FAILED_JOBS" | grep -qx guard; then ROUTE=human
+            elif echo "$FAILED_STEPS" | grep -qE '^(Login QA sandbox|Install tools|Set up job)$|^Run npm i -g'; then ROUTE=infra
+            elif echo "$FAILED_STEPS" | grep -qx 'Acceptance tests (SF AI Tester)' && [ "$(echo "$FAILED_STEPS" | wc -l)" -eq 1 ]; then
+              gh run download "$RUN_ID" --repo "$R" -n test-evidence -D ev >/dev/null 2>&1 || true
+              ROUTE=$(jq -r '.route // "infra"' ev/verdict.json 2>/dev/null || echo infra)
+            fi
+            FEEDBACK=$(gh run view "$RUN_ID" --repo "$R" --log-failed 2>/dev/null | tail -c 5000 || true)
+            REV=$(echo "$INFO" | jq -r '[.comments[].body | select(test("VERDICT: BLOCK"))] | last // empty' | tail -c 2500)
+            [ -z "$REV" ] || FEEDBACK=$(printf '%s\n\nReviewer findings:\n%s\n' "$FEEDBACK" "$REV")
+          else
+            if [ "$REVIEWER" != "coderabbitai[bot]" ]; then
+              ok=0
+              for t in developers testers architects; do
+                [ "$(gh api "orgs/$ORG/teams/$t/memberships/$REVIEWER" --jq .state 2>/dev/null || true)" = active ] && ok=1
+              done
+              [ "$ok" = 1 ] || { echo "Changes requested by a non-persona user; ignoring."; exit 0; }
+            fi
+            FEEDBACK=$(printf 'Review by %s:\n%s\n' "$REVIEWER" "$REVIEW_BODY"
+                       gh api "repos/$R/pulls/$PR/comments" --jq ".[] | select(.user.login==\"$REVIEWER\") | \"\(.path):\(.line) \(.body)\"" | tail -c 5000)
+          fi
+
+          case "$ROUTE" in
+            infra)
+              if [ "${RUN_ATTEMPT:-1}" = "1" ] && [ -n "$RUN_ID" ]; then gh run rerun "$RUN_ID" --repo "$R" --failed; echo "Re-ran infra failure"; exit 0; fi
+              ROUTE=human ;;
+            qa)
+              gh pr edit "$PR" --repo "$R" --add-label needs-qa
+              gh pr comment "$PR" --repo "$R" --body "$MARK SF AI Tester reported blocked cases. Tester: run /qa-explore, fix the suite or test data in a tests/ PR, then remove needs-qa and re-run checks."
+              HOOK="$HOOK_QA" bash scripts/ci/slack.sh "Blocked acceptance tests on PR #$PR ($KEY). QA action needed."
+              exit 0 ;;
+            pass) echo "Nothing to fix"; exit 0 ;;
+          esac
+
+          LAST=$(echo "$INFO" | jq -r '[.labels[].name | select(startswith("ai-attempt-")) | ltrimstr("ai-attempt-") | tonumber] | max // 1')
+          NEXT=$((LAST+1))
+          if [ "$ROUTE" = human ] || [ "$NEXT" -gt "$MAX" ]; then
+            gh pr edit "$PR" --repo "$R" --add-label needs-human
+            gh pr comment "$PR" --repo "$R" --body "$MARK AI stopped (route: $ROUTE, attempts: $LAST of $MAX). A developer takes over."
+            HOOK="$HOOK_DEV" bash scripts/ci/slack.sh "AI stopped on PR #$PR ($KEY) after $LAST attempt(s), route $ROUTE. A developer needs to take over."
+            bash scripts/ci/jira.sh comment "$KEY" "AI stopped after $LAST attempt(s); needs a developer." || true
+            exit 0
+          fi
+
+          gh pr comment "$PR" --repo "$R" --body "$MARK Dispatching Developer attempt $NEXT of $MAX."
+          PAYLOAD=$(jq -n --arg key "$KEY" --arg branch "$BRANCH" --arg fb "$(printf '%s' "$FEEDBACK" | tail -c 6000)" --argjson n "$NEXT" \
+            '{event_type:"claude-fix", client_payload:{key:$key, branch:$branch, attempt:$n, feedback:$fb}}')
+          if [ "$DRY_RUN" = "true" ]; then echo "DRY RUN, would dispatch:"; echo "$PAYLOAD" | jq '.client_payload | {key,branch,attempt}'; exit 0; fi
+          echo "$PAYLOAD" | gh api "repos/$R/dispatches" --input -

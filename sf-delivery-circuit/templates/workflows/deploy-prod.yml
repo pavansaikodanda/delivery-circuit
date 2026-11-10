@@ -1,0 +1,74 @@
+name: deploy-prod
+# NO AI. Merge to main (G8, Architect) -> environment approval (G9, Architect) -> delta validate -> quick deploy.
+# DEPLOY_ENVIRONMENT=production-dryrun (holding QA secrets) lets the dry run (B11) exercise this without production.
+on:
+  push:
+    branches: [main]
+    paths: ["force-app/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prod-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ vars.DEPLOY_ENVIRONMENT || 'production' }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0, persist-credentials: false }
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - run: npm i -g @salesforce/cli && echo y | sf plugins install sfdx-git-delta
+      - name: Build delta since last production deploy
+        run: |
+          FROM=$(git rev-list -n1 prod-deployed 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -1)
+          mkdir -p delta
+          sf sgd source delta --from "$FROM" --to HEAD --output-dir delta --generate-delta   # VERIFY flags for your sgd version
+          echo "--- package.xml"; cat delta/package/package.xml
+          echo "--- destructiveChanges.xml"; cat delta/destructiveChanges/destructiveChanges.xml 2>/dev/null || true
+          if ! grep -q '<members>' delta/package/package.xml && ! grep -q '<members>' delta/destructiveChanges/destructiveChanges.xml 2>/dev/null; then
+            echo "EMPTY=1" >> "$GITHUB_ENV"
+          fi
+      - name: Login target org
+        if: env.EMPTY != '1'
+        env:
+          SF_JWT_KEY: ${{ secrets.SF_JWT_KEY_PROD }}
+          SF_CLIENT_ID: ${{ secrets.SF_CLIENT_ID_PROD }}
+          SF_USERNAME: ${{ secrets.SF_USERNAME_PROD }}
+          SF_URL: ${{ vars.SF_INSTANCE_URL_PROD }}
+        run: bash scripts/ci/sf-login.sh release
+      - name: Validate, then quick deploy
+        if: env.EMPTY != '1'
+        run: |
+          ARGS=(--manifest delta/package/package.xml --target-org release --test-level RunLocalTests --wait 120 --json)
+          if grep -q '<members>' delta/destructiveChanges/destructiveChanges.xml 2>/dev/null; then
+            ARGS+=(--post-destructive-changes delta/destructiveChanges/destructiveChanges.xml)
+          fi
+          JOB=$(sf project deploy validate "${ARGS[@]}" | jq -r '.result.id')
+          [ -n "$JOB" ] && [ "$JOB" != null ] || { echo "Validation failed"; exit 1; }
+          sf project deploy quick --job-id "$JOB" --target-org release --wait 60
+      - id: app
+        if: env.EMPTY != '1'
+        uses: actions/create-github-app-token@v2
+        with: { app-id: "${{ secrets.APP_ID }}", private-key: "${{ secrets.APP_PRIVATE_KEY }}" }
+      - name: Move prod-deployed tag
+        if: env.EMPTY != '1' && vars.DEPLOY_ENVIRONMENT != 'production-dryrun'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/prod-deployed" -X PATCH -f sha="$GITHUB_SHA" -F force=true >/dev/null \
+            || gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref=refs/tags/prod-deployed -f sha="$GITHUB_SHA" >/dev/null
+      - name: Report
+        if: always()
+        env:
+          HOOK: ${{ secrets.SLACK_WEBHOOK_ARCH }}
+          STATUS: ${{ job.status }}
+          ENVN: ${{ vars.DEPLOY_ENVIRONMENT || 'production' }}
+        run: |
+          bash scripts/ci/slack.sh "Deploy to $ENVN: $STATUS for ${GITHUB_SHA:0:8}${EMPTY:+ (no metadata changes)}"

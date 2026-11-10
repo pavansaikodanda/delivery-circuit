@@ -1,0 +1,8 @@
+{
+  "name": "sf-delivery-circuit",
+  "version": "0.1.0",
+  "description": "AI + Human Salesforce delivery circuit with Architect, Developer and Tester personas, human gates G1-G9, a persona guard hook, and a bootstrap that installs Spec Kit + spec-kit-sf + CI workflows into any SFDX repo.",
+  "author": { "name": "Conscendo", "email": "maintainer@example.com" },
+  "license": "UNLICENSED",
+  "keywords": ["salesforce", "spec-kit", "spec-kit-sf", "sdd", "personas", "jira", "github-actions", "sf-ai-tester"]
+}
