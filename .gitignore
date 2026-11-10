@@ -8,3 +8,6 @@
 # Scratch
 .ai/
 node_modules/
+
+# Client Salesforce projects opened alongside the plugin get their own repos
+salesDemoOrg/

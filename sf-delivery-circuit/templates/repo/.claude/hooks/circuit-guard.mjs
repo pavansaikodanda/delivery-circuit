@@ -55,6 +55,15 @@ function prodAliases() {
 const PROD = prodAliases();
 const DEPLOY_ORGS = new Set((process.env.CIRCUIT_DEPLOY_ORGS || 'qa').split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
 const isProdLike = a => !!a && (PROD.has(a.toLowerCase()) || /(^|[-_.])(prod|production|live)([-_.]|$)/i.test(a));
+// The org an sf command uses when it names none: SF_TARGET_ORG, else the project's .sf/config.json target-org.
+function defaultTargetOrg() {
+  if (process.env.SF_TARGET_ORG) return process.env.SF_TARGET_ORG;
+  for (const dir of new Set([input.cwd, projectDir].filter(Boolean))) {
+    const f = join(dir, '.sf', 'config.json');
+    try { const t = JSON.parse(readFileSync(f, 'utf8'))['target-org']; if (t) return t; } catch { /* none */ }
+  }
+  return null;
+}
 
 // ---------- Bash ----------
 function segments(cmd) {
@@ -92,6 +101,10 @@ function checkBash(cmd) {
       const target = flag(seg, ['--target-org', '-o', '--targetusername', '-u', '--alias', '-a']);
       const url = flag(seg, ['--instance-url', '-r', '--instanceurl']);
       if (isProdLike(target)) deny(`production org "${target}" is off limits to AI. Production is deployed only by deploy-prod.yml after human approval (G9).`);
+      if (!target && !/\borg\s+(login|list|logout)\b|\b(config|alias|plugins|version|update|help|which)\b|--help\b/.test(seg)) {
+        const def = defaultTargetOrg();
+        if (isProdLike(def)) deny(`this command has no --target-org, so it would run against the project default "${def}", which is production. Name a sandbox with --target-org, or set the default to the DEV sandbox (\`sf config set target-org dev\`).`);
+      }
       if (/\borg\s+login\b/.test(seg) && url && (/\/\/login\.salesforce\.com/i.test(url) || (/\.my\.salesforce\.com/i.test(url) && !/sandbox/i.test(url)))) {
         deny('logging in to a production instance is not allowed. Use a sandbox URL (test.salesforce.com or <domain>--<sbx>.sandbox.my.salesforce.com).');
       }

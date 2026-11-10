@@ -84,6 +84,29 @@ for (const [persona, input, expected] of cases) {
   if (got !== expected || res.status !== 0) { fail++; console.log(`FAIL ${label}\n     expected ${expected}, got ${got} (exit ${res.status}) ${res.stderr}`); }
   else console.log(`ok   ${label}`);
 }
+// A command without --target-org is checked against the project's default org
+const proj2 = mkdtempSync(join(tmpdir(), 'circuit-guard-default-'));
+mkdirSync(join(proj2, '.sf'), { recursive: true });
+writeFileSync(join(proj2, '.sf', 'config.json'), JSON.stringify({ 'target-org': 'salesOrgSDO' }));
+const defaultCases = [
+  [B('sf data query -q "select id from account"'), 'deny'],
+  [B('sf project retrieve start -m ApexClass'), 'deny'],
+  [B('sf data query -q "select id from account" --target-org dev'), 'allow'],
+  [B('sf org list'), 'allow'],
+  [B('sf config set target-org dev'), 'allow'],
+];
+for (const [input, expected] of defaultCases) {
+  const res = spawnSync(process.execPath, [GUARD], {
+    input: JSON.stringify({ ...input, cwd: proj2 }),
+    env: { ...process.env, CLAUDE_PROJECT_DIR: proj2, CIRCUIT_PERSONA: '', CIRCUIT_PROD_ALIASES: 'salesOrgSDO', SF_TARGET_ORG: '' },
+    encoding: 'utf8',
+  });
+  const got = res.stdout.includes('"deny"') ? 'deny' : 'allow';
+  if (got !== expected) { fail++; console.log(`FAIL default-org ${input.tool_input.command}: expected ${expected}, got ${got}`); }
+  else console.log(`ok   default-org ${input.tool_input.command}`);
+}
+cases.push(...defaultCases);
+
 // Plugin mode steps aside when the project ships its own guard
 mkdirSync(join(proj, '.claude', 'hooks'), { recursive: true });
 writeFileSync(join(proj, '.claude', 'hooks', 'circuit-guard.mjs'), '// project copy');

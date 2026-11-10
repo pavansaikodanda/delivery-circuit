@@ -151,7 +151,7 @@ disabled because CI and the no-AI release workflow handle those.
 
 The plugin, its templates and its tests are built and checked locally:
 
-- guard policy tests: 47/47 pass (`node sf-delivery-circuit/tests/guard.test.mjs`);
+- guard policy tests: 52/52 pass (`node sf-delivery-circuit/tests/guard.test.mjs`);
 - all 8 workflows pass `actionlint`; the CI scripts pass `shellcheck`;
 - the installer was tested on a scratch repo, including re-runs (idempotent, merges existing settings).
 
