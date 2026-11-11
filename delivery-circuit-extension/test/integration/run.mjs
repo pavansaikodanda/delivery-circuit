@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 import { runTests } from "@vscode/test-electron";
 
 const extRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -51,6 +52,9 @@ try {
   console.error(`Integration tests failed: ${e?.message ?? e}`);
   code = 1;
 } finally {
+  // Stop every VS Code process still using this run's temp profile. Without this, a test copy that does not exit
+  // keeps running (each holds ~150 MB) and repeated runs exhausted the machine's memory.
+  killLeftovers(tmp);
   if (!process.env.DC_KEEP_WORKSPACE) {
     // Code.exe child processes can hold the folder for a moment after exit; a leftover temp copy is harmless.
     try { fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 }); }
@@ -58,3 +62,16 @@ try {
   }
 }
 process.exit(code);
+
+function killLeftovers(dir) {
+  try {
+    if (process.platform === "win32") {
+      const needle = dir.replace(/'/g, "''");
+      execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
+        `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains('${needle}') -and $_.ProcessId -ne ${process.pid} } | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop } catch {} }`],
+        { stdio: "ignore", timeout: 30000 });
+    } else {
+      execFileSync("pkill", ["-f", dir], { stdio: "ignore", timeout: 30000 });
+    }
+  } catch { /* nothing left to stop */ }
+}
