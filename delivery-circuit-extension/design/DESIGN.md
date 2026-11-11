@@ -1,434 +1,541 @@
-# Delivery Circuit — UI design (v2 "Calm Circuit")
+# Delivery Circuit — UI design v2 ("Quiet Circuit")
 
-Reference prototype: `design/prototype.html` (open in a browser; dark and light side by side; motion live).
-Scope: `media/shared/base.css`, `media/shared/ui.js` (window.DC) and the seven pages. Everything below is buildable
-with plain CSS + the existing `h()` renderer. No framework.
+Reference prototype: `design/prototype.html` (open in a browser: palette swatches, then dark and light side by side
+with a Developer view, a Connections list and a Testing run panel; hover reveal, expand and the overflow menu work).
+Scope: `media/shared/base.css`, `media/shared/ui.js` (`window.DC`) and the seven pages. Plain CSS + the existing
+`h()` renderer, no framework. v1 ("Calm Circuit") was rejected as cluttered; §0 lists what this version drops.
+
+## 0. What changed from v1 (and why)
+
+| v1 (rejected) | v2 |
+|---|---|
+| Every row showed gate chip + links row + checks row + reviews rows + 2-3 buttons | A row shows **title · one status · age · one primary action**. The rest appears on hover (action strip) or on expand. |
+| Link chips with labels on every card | Links are **monochrome app logos** in the hover strip (tooltip = label); the full link list is inside the expanded row. |
+| Uppercase 11 px section headings, counts in chips | Sentence-case 15 px headings, count as muted text (`Waiting on you · 3`). |
+| Persona tint (purple/blue/green) across rails, chips and text | One global 3-colour palette; the persona is a small text chip in the header. |
+| Cards in cards, 2 px coloured left rails, status tint backgrounds | Lists with 1 px dividers; at most one level of boxing (the sticky run panel, the chat log). Status is a 6 px dot + word. |
+| 12 px body, 1.45 line height | 13 px body, 1.5 line height; three type levels only. |
+| Disabled reason rendered inline next to the button | Disabled button carries the reason as tooltip (`data-tip` + `aria-describedby`); the expanded row repeats it as one muted line. |
+| `null` printed by the prototype | `h()` ignores `null`/`undefined`/`false`; nothing is ever stringified without a guard. |
 
 ## 1. Principles
 
-1. **Native first.** Every colour comes from a `--vscode-*` variable; the page must look like a VS Code view
-   (Settings, Testing, SCM), not a web dashboard. One accent (`--vscode-focusBorder`/textLink) plus a *persona* tint.
-2. **Hierarchy before decoration.** Three surfaces, two border strengths, a 6-step type scale. Titles 600,
-   body 400, meta 12 px muted. Status is carried by icon + colour + word, never colour alone.
-3. **Reactive means "the UI answers you".** Hover lifts, press settles, a changed row flashes once, a running thing
-   visibly runs, a result lands with a toast. Each reaction is ≤ 240 ms, single-property where possible, and happens
-   only on the element you touched or the data that changed. Nothing idles except one pulse (current stage) and
-   spinners for work in flight.
-4. **Change is local.** Re-rendering never moves scroll, never steals focus, never re-animates unchanged rows.
-   `DC.mount` reconciles by key; only changed rows flash, only new rows enter.
-5. **Icons carry meaning.** Codicons for personas, gates, stages, links, statuses and actions, so a row can be read
-   at a glance and in high contrast.
-6. **Calm by default.** No gradients, glow, neon, confetti, parallax, bounce. `prefers-reduced-motion` turns the
-   system into instant state changes with the same information.
+1. **Essentials first, everything else one gesture away.** A row answers three questions at a glance: what is it, what
+   state is it in, what can I do. Links, secondary actions, checks and review detail are reached by hover/focus (action
+   strip) or by expanding the row. Nothing on a page competes for attention with the primary action of the row you
+   are looking at.
+2. **Three colours, used for three jobs.** Primary indigo = action, selection, focus, active tab. Secondary teal =
+   progress and positive highlight, and the one "attention" accent (a count that needs you). Tertiary slate = text
+   hierarchy, borders, icons, neutral chips. Status (pass/warn/fail) is a 6 px dot or thin coloured text, never a
+   block.
+3. **Native surfaces.** Backgrounds come from the VS Code theme (`editor-background`, `sideBar-background`); the brand
+   colours sit on top of them. In high contrast the brand colours map to VS Code's HC variables.
+4. **Air is structure.** 16 px gutters, 12 px row padding, 32 px between sections, 1 px dividers instead of boxes.
+   A row holds at most two lines of meta; anything longer goes into the expanded state.
+5. **Lists, not cards.** Repeating things are rows in a list with dividers. Boxing is used once per page at most
+   (a live run panel, a chat log), never nested.
+6. **Icons are quiet.** Codicons for concepts, monochrome brand logos for apps; both drawn in the icon colour
+   (slate), 16 px, tinting to primary only on hover of their own control.
+7. **Motion is confirmation, not decoration.** Hover reveal 120 ms, expand 200 ms, a changed row highlights once,
+   progress bars move. `prefers-reduced-motion` turns all of it into instant state changes.
+8. **Change is local.** `DC.mount` reconciles by key: unchanged rows are untouched, scroll and focus survive, an
+   expanded row stays expanded across re-renders.
 
-## 2. Tokens (`base.css` `:root`, overridden under `body.vscode-light`, `body.vscode-high-contrast`, `body.vscode-high-contrast-light`)
+## 2. Tokens
 
-VS Code adds the body class itself in webviews. The preview harness must add `vscode-dark`/`vscode-light` to `<body>`
-(one-line change in `preview/serve.mjs`). Defaults below are dark-safe; light and HC override only what differs.
+Defined on `:root` in `base.css`; VS Code adds `body.vscode-light`, `body.vscode-high-contrast`,
+`body.vscode-high-contrast-light` itself (the preview harness adds the same classes). Dark values are the defaults.
+Every value below was checked for contrast in §10.
+
+### 2.1 Brand palette (exactly three)
+
+| Token | Role | Dark | Light | High contrast (maps to) |
+|---|---|---|---|---|
+| `--dc-primary` | text/icon/border uses of primary: links, selected tab, active row rail, focus ring, hover tint of brand icons | `#818CF8` | `#4F46E5` | `--vscode-focusBorder` |
+| `--dc-primary-strong` | primary button background (white text) | `#5B5FEA` | `#4F46E5` | `--vscode-button-background` |
+| `--dc-primary-soft` | selection background, pressed state, "changed" highlight | `color-mix(in srgb, var(--dc-primary) 14%, transparent)` | 10 % | `transparent` |
+| `--dc-secondary` | progress fill, done stages, positive highlight, the "needs you" count | `#2DD4BF` | `#0F766E` | `--vscode-textLink-foreground` |
+| `--dc-secondary-soft` | progress track highlight, teal chip background | 14 % mix | 10 % mix | `transparent` |
+| `--dc-tertiary` | the slate family (below) | — | — | — |
+
+Slate (tertiary) is a family of neutral steps rather than one value:
+
+| Token | Role | Dark | Light | HC |
+|---|---|---|---|---|
+| `--dc-fg` | titles, body text | `var(--vscode-foreground, #E2E8F0)` | `var(--vscode-foreground, #1E293B)` | `--vscode-foreground` |
+| `--dc-muted` | meta text, counts, disabled labels | `#9AA4B2` | `#475569` | `--vscode-descriptionForeground` |
+| `--dc-icon` | codicons, brand logos, chevrons | `#8B95A5` | `#64748B` | `--vscode-icon-foreground` |
+| `--dc-border` | dividers, input borders | `#363B45` | `#E2E8F0` | `--vscode-contrastBorder` |
+| `--dc-border-strong` | hovered control border, the single box | `#4A5160` | `#CBD5E1` | `--vscode-contrastActiveBorder` |
+| `--dc-chip` | neutral chip background | `rgba(148,163,184,.14)` | `rgba(71,85,105,.10)` | `transparent` + border |
+
+### 2.2 Surfaces (from the theme)
 
 ```css
-:root {
-  /* surfaces (elevation 0-3) */
-  --dc-surface-0: var(--vscode-editor-background, #1f1f1f);          /* page */
-  --dc-surface-1: var(--vscode-sideBar-background, #181818);          /* cards, lists, logs */
-  --dc-surface-2: var(--vscode-editorWidget-background, #202020);     /* raised: hover state, popovers, skeleton base */
-  --dc-surface-3: var(--vscode-editorHoverWidget-background, #202020);/* tooltips, toasts */
-  --dc-hover: var(--vscode-list-hoverBackground, rgba(128,128,128,.12));
-  --dc-selected: var(--vscode-list-activeSelectionBackground, rgba(128,128,128,.2));
-  --dc-selected-fg: var(--vscode-list-activeSelectionForeground, var(--dc-fg));
-  --dc-shadow-1: 0 1px 2px rgba(0,0,0,.35);                           /* hover lift */
-  --dc-shadow-2: 0 4px 16px rgba(0,0,0,.45);                          /* toast, popover (= widget shadow) */
-  /* text */
-  --dc-fg: var(--vscode-foreground, #cccccc);
-  --dc-muted: var(--vscode-descriptionForeground, #9d9d9d);
-  --dc-faint: color-mix(in srgb, var(--dc-muted) 60%, transparent);   /* placeholders, dividers in text */
-  /* borders */
-  --dc-border: var(--vscode-panel-border, var(--vscode-widget-border, rgba(128,128,128,.35)));
-  --dc-border-strong: color-mix(in srgb, var(--dc-fg) 28%, transparent);
-  --dc-focus: var(--vscode-focusBorder, #0078d4);
-  /* accents */
-  --dc-accent: var(--vscode-textLink-foreground, #4daafc);
-  --dc-persona-architect: var(--vscode-charts-purple, #b180d7);
-  --dc-persona-developer: var(--vscode-charts-blue, #3794ff);
-  --dc-persona-tester:    var(--vscode-charts-green, #89d185);
-  --dc-persona: var(--dc-accent);               /* set by body[data-persona=...] */
-  --dc-persona-tint: color-mix(in srgb, var(--dc-persona) 14%, transparent);
-  /* status */
-  --dc-ok:   var(--vscode-testing-iconPassed, #73c991);
-  --dc-warn: var(--vscode-editorWarning-foreground, #cca700);
-  --dc-err:  var(--vscode-testing-iconFailed, var(--vscode-errorForeground, #f14c4c));
-  --dc-info: var(--vscode-charts-blue, #3794ff);
-  --dc-tint-strength: 16%;                      /* status/row tints: color-mix(status, this, transparent) */
-  /* radii */
-  --dc-r-1: 3px;  /* chips, kbd */
-  --dc-r-2: 6px;  /* cards, buttons, inputs, list */
-  --dc-r-3: 10px; /* toasts, empty states */
-  --dc-r-pill: 999px;
-  /* spacing scale */
-  --dc-s-1: 4px; --dc-s-2: 8px; --dc-s-3: 12px; --dc-s-4: 16px; --dc-s-5: 24px; --dc-s-6: 32px;
-  /* type scale (base = VS Code font size, 13px) */
-  --dc-font: var(--vscode-font-family, system-ui, sans-serif);
-  --dc-mono: var(--vscode-editor-font-family, ui-monospace, monospace);
-  --dc-t-xs: 11px; --dc-t-sm: 12px; --dc-t-base: var(--vscode-font-size, 13px); --dc-t-md: 14px; --dc-t-lg: 16px; --dc-t-xl: 20px;
-  --dc-lh: 1.45; --dc-lh-tight: 1.25;
-  /* motion */
-  --dc-d-press: 80ms; --dc-d-hover: 120ms; --dc-d-enter: 180ms; --dc-d-expand: 240ms; --dc-d-flash: 900ms;
-  --dc-ease: cubic-bezier(.4,0,.2,1); --dc-ease-out: cubic-bezier(.16,1,.3,1);
-}
-body[data-persona="architect"] { --dc-persona: var(--dc-persona-architect); }
-body[data-persona="developer"] { --dc-persona: var(--dc-persona-developer); }
-body[data-persona="tester"]    { --dc-persona: var(--dc-persona-tester); }
-
-body.vscode-light {
-  --dc-surface-1: var(--vscode-sideBar-background, #f8f8f8);
-  --dc-surface-2: var(--vscode-editorWidget-background, #f3f3f3);
-  --dc-shadow-1: 0 1px 2px rgba(0,0,0,.08); --dc-shadow-2: 0 4px 16px rgba(0,0,0,.14);
-  --dc-persona-architect: var(--vscode-charts-purple, #652d90);
-  --dc-persona-developer: var(--vscode-charts-blue, #005fb8);
-  --dc-persona-tester:    var(--vscode-charts-green, #388a34);
-  --dc-ok: var(--vscode-testing-iconPassed, #388a34); --dc-warn: var(--vscode-editorWarning-foreground, #bf8803);
-  --dc-err: var(--vscode-testing-iconFailed, #e51400); --dc-info: var(--vscode-charts-blue, #005fb8);
-  --dc-tint-strength: 12%;
-}
-body.vscode-high-contrast, body.vscode-high-contrast-light {
-  --dc-surface-1: var(--dc-surface-0); --dc-surface-2: var(--dc-surface-0); --dc-surface-3: var(--dc-surface-0);
-  --dc-border: var(--vscode-contrastBorder, #6fc3df); --dc-border-strong: var(--vscode-contrastActiveBorder, var(--dc-border));
-  --dc-shadow-1: none; --dc-shadow-2: none; --dc-tint-strength: 0%;   /* colour only on text, icons, borders */
-  --dc-hover: transparent; --dc-persona-tint: transparent;
-}
+--dc-surface-0: var(--vscode-editor-background, #1F1F1F);     /* page       light fallback #FFFFFF */
+--dc-surface-1: var(--vscode-sideBar-background, #181818);    /* sidebar, run panel, log   light #F8F8F8 */
+--dc-surface-2: var(--vscode-editorWidget-background, #202020);/* menus, toasts, tooltips   light #F3F3F3 */
+--dc-hover:  rgba(255,255,255,.04);   /* light: rgba(15,23,42,.035) */
+--dc-shadow: 0 4px 16px rgba(0,0,0,.40); /* menus and toasts only; light: rgba(15,23,42,.12); HC: none */
 ```
 
-Rules: tints are always `color-mix(in srgb, <status> var(--dc-tint-strength), transparent)` so HC collapses them to
-nothing. Persona colour is used for icon, 2 px rail, chip border and 600-weight text ≥ 12 px — never for body text.
-Focus ring: `outline: 1px solid var(--dc-focus); outline-offset: 1px` (VS Code's own); cards/rows use `-1px` offset.
+### 2.3 Status (dots and thin text only)
 
-## 3. Iconography — `@vscode/codicons` (new devDependency, copied to `media/shared/codicons/` by `build.mjs`)
+| Token | Dark | Light | HC |
+|---|---|---|---|
+| `--dc-ok` | `#4ADE80` | `#15803D` | `--vscode-testing-iconPassed` |
+| `--dc-warn` | `#FBBF24` | `#A16207` | `--vscode-editorWarning-foreground` |
+| `--dc-err` | `#F87171` | `#B91C1C` | `--vscode-testing-iconFailed` |
+| `--dc-info` (running, pending, waiting) | `var(--dc-primary)` | `var(--dc-primary)` | `--vscode-focusBorder` |
 
-Load `codicon.css` from `base.css` via `@import url("codicons/codicon.css")` (CSP: style + font from `cspSource`,
-both already allowed). `DC.icon("name")` → `<i class="codicon codicon-<name>" aria-hidden="true">`; `{spin:true}` adds
-`codicon-modifier-spin`; `{label}` adds `role="img" aria-label`.
+Rules: a status colour may paint a 6 px dot, a 12 px icon, a 2 px progress segment or 12-13 px text. It never paints
+a background larger than a chip, never a border around a row, never a rail.
 
-| Concept | Codicon |
-|---|---|
-| Persona Architect / Developer / Tester | `symbol-structure` / `code` / `beaker` |
-| Switch persona · act-as | `arrow-swap` |
-| Gates G1 Plan signed off · G2 Testability · G3 AI plan approved · G4 AI test plan approved · G5 Code review · G6 QA on sandbox · G7 Schema/design review · G8 Merge · G9 Production approval | `checklist` · `beaker` · `sparkle` · `tasklist` · `code-review` · `verified` · `type-hierarchy` · `git-merge` · `rocket` |
-| Gate state done / waiting / blocked / not-started | `pass-filled` / `clock` / `error` / `circle-outline` |
-| Stages intake · clarify · plan · signoff · stories · tests · jira · build · qa · release | `inbox` · `comment-discussion` · `map` · `verified` · `book` · `beaker` · `issues` · `tools` · `bug` · `rocket` |
-| Stage state done / active / todo / blocked | `check` / `play-circle` / `circle-outline` / `error` |
-| Connections github · claude · sf-dev, sf-qa · jira · confluence · slack · fireflies · lucid · testing-browsers · coderabbit · code-analyzer · ai-reviewer · mcp-* | `github` · `sparkle` · `cloud` · `issues` · `book` · `comment` · `mic` · `graph` · `browser` · `hubot` · `shield` · `sparkle` · `plug` |
-| Connection state connected / disconnected / expiring / error / checking / unknown | `pass-filled` / `circle-outline` / `clock` / `error` / `loading` (spin) / `question` |
-| Scope personal / project · admin · secret | `account` / `repo` · `shield` · `key` |
-| Review source human / coderabbit / ai-reviewer / code-analyzer / sf-ai-tester | `person` / `hubot` / `sparkle` / `shield` / `beaker` |
-| Review state approved / changes-requested / commented / pass / block | `check` / `request-changes` / `comment` / `pass` / `circle-slash` |
-| PR · draft PR · merged · branch · label · check success / failure / pending / missing | `git-pull-request` · `git-pull-request-draft` · `git-merge` · `git-branch` · `tag` · `pass` / `error` / `clock` / `circle-outline` |
-| Test status passed / failed / blocked / error / running / not run | `testing-passed-icon` / `testing-failed-icon` / `circle-slash` / `warning` / `loading` (spin) / `circle-outline` |
-| Route pass / dev / qa / infra | `pass` / `code` / `beaker` / `server` |
-| Links github · jira · salesforce · slack · confluence · lucid · fireflies · coderabbit · file · report · url | `github` · `issues` · `cloud` · `comment` · `book` · `graph` · `mic` · `hubot` · `file` · `report` · `link-external` |
-| Actions refresh · run · run all · cancel/stop · export · settings · connect · disconnect · check · manage · validate · generate (AI) · send · dismiss · copy · open feature · sign in · terminal · human step · form · verify · save · search · filter · more | `refresh` · `play` · `run-all` · `debug-stop` · `export` · `settings-gear` · `plug` · `debug-disconnect` · `sync` · `link-external` · `checklist` · `sparkle` · `send` · `close` · `copy` · `arrow-right` · `sign-in` · `terminal` · `person` · `edit` · `verified` · `save` · `search` · `filter` · `kebab-vertical` |
-| Notice info / warn / err / ok · empty state · loading | `info` / `warning` / `error` / `pass` · `inbox`, `search`, `beaker` (context) · `loading` |
-| Keyboard hint | `keyboard` |
+### 2.4 Type scale (three levels + page title)
 
-## 4. Motion system
-
-| Token | Value | Used for |
+| Level | Size / weight / line height | Used for |
 |---|---|---|
-| `--dc-d-press` 80 ms | ease | button press: `transform: scale(.98)` (ghost: background only) |
-| `--dc-d-hover` 120 ms | ease | hover: background, border-colour, `translateY(-1px)` + `--dc-shadow-1` on cards; link underline |
-| `--dc-d-enter` 180 ms | ease-out | list/card enter: `opacity 0→1, translateY(4px)→0`; stagger `calc(var(--i) * 20ms)`, `--i` capped at 8 (≤160 ms) |
-| `--dc-d-expand` 240 ms | ease | tab indicator slide (`transform`/`width`), progress bar width, details expand (grid-template-rows 0fr→1fr), toast in/out |
-| `--dc-d-flash` 900 ms | ease | changed row: background `color-mix(status 22%)` → transparent, plus 2 px left rail in status colour that stays |
-| pulse 2 s | ease-in-out ∞ | **only** the current stage segment: `box-shadow: 0 0 0 0 → 0 0 0 5px transparent` of `--dc-persona-tint` |
-| spin 1 s | linear ∞ | `codicon-modifier-spin` for checking/running |
-| shimmer 1.4 s | linear ∞ | skeleton: moving 40 %-wide highlight of `--dc-surface-2` → `--dc-hover` |
-| toast life 5 s | linear | thin bottom progress line on auto-dismiss toasts; pauses on hover/focus |
+| Page title | 18 px / 600 / 1.3 | `DC.header` title |
+| Title | 15 px / 600 / 1.4 | section headings, run panel heading |
+| Body | 13 px (`--vscode-font-size`) / 400 / 1.5 | row titles (500), buttons, inputs, chat |
+| Meta | 12 px / 400 / 1.5, `--dc-muted` | age, detail line, counts, chips, tooltips |
 
-Never animates: text colour of body copy, font size, layout columns/widths, table cells, scroll position
-(no smooth scroll on data updates), counts (no number tween), page-level fade (**remove** the current whole-`#app`
-`.fade`), unchanged rows on re-render, anything on hidden tabs.
+Mono: `--vscode-editor-font-family`, 12 px, for branches, ids, secrets, logs. No uppercase, no letter-spacing.
+Row title 500 so it reads before its meta; nothing else on a row is bold.
 
-`@media (prefers-reduced-motion: reduce)` (and `body.dc-reduced-motion` for testing): all transitions → 0 ms,
-no transforms, no stagger, no shimmer (static skeleton), no pulse (current stage keeps its ring), toast appears/
-disappears instantly, changed-row flash becomes the 2 px rail only (kept 2 s). Spinners stay (they are status).
+### 2.5 Spacing and radii
 
-## 5. Components (anatomy · states · DC API)
+`--dc-s-1: 4px · s-2: 8px · s-3: 12px · s-4: 16px · s-5: 24px · s-6: 32px · s-7: 48px`.
+Page gutter 16 px (sidebar 12 px). Row: `padding: 12px 16px`, min height 44 px, 1 px divider `--dc-border`.
+Section gap 32 px; heading to list 8 px. Expanded panel: `padding: 4px 16px 16px 40px` (indented under the title).
+Radii: `--dc-r-1: 4px` chips, inputs · `--dc-r-2: 6px` buttons, menus, toasts · `--dc-r-3: 8px` the one box per
+page · `--dc-r-pill: 999px` persona chip, segmented control.
 
-Shared states: **default** · **hover** (`--dc-hover` bg, border-strong) · **focus** (focus ring; never removed) ·
-**active/press** · **disabled** (opacity .55, `cursor:not-allowed`, keeps colour meaning, reason inline) ·
-**loading** (spinner replaces icon, label dimmed, `aria-busy`) · **selected** (`--dc-selected` + 2 px accent rail).
+### 2.6 Motion
 
-### 5.1 App header — `DC.header({title, sub, persona, personas, onSwitch, actions, icon})`
+| Token | Value | Use |
+|---|---|---|
+| `--dc-d-hover` | 120 ms ease | action strip opacity, background hover, icon tint |
+| `--dc-d-expand` | 200 ms ease | expand/collapse (`grid-template-rows 0fr→1fr`), chevron rotate, tab underline slide, menu open |
+| `--dc-d-progress` | 240 ms ease | progress bar width, ring offset |
+| `--dc-d-flash` | 900 ms ease-out | changed row: background `--dc-primary-soft` → transparent, once |
+| spin | 1 s linear ∞ | `loading` icon only |
+
+Never animated: text colour, font size, layout width, scroll position, counts, page fade (removed). Under
+`prefers-reduced-motion: reduce` (or `body.dc-reduced-motion`) every duration is 0 ms, the strip is simply shown,
+the flash becomes a 1 px primary left border for 2 s, spinners keep spinning (they are status).
+
+## 3. Icons
+
+### 3.1 Concept icons — `@vscode/codicons`
+
+`DC.icon(name, {size: 16|12, spin, label})` → `<i class="codicon codicon-<name>">`. Colour `--dc-icon` unless inside
+a status context. The mapping table from v1 stays valid (persona, gates, stages, states, actions); the only changes:
+expand chevron `chevron-right` (rotates 90° when open), overflow menu `kebab-horizontal` rendered as "…", external
+link `link-external` (12 px, after a link label inside the expanded panel).
+
+### 3.2 App logos — `simple-icons` (monochrome)
+
+Source: npm package `simple-icons` **16.37.0** (checked 2026-11-11; package licence CC0-1.0, each icon's own brand
+guidelines apply, see its `DISCLAIMER.md`). SVGs are `viewBox="0 0 24 24"`, single `<path>`, drawn with
+`fill: currentColor`. We ship only the paths we use, copied verbatim; we never redraw a logo.
+
+| App | Slug in package | Present in 16.37.0 | Rendered as |
+|---|---|---|---|
+| GitHub | `github` | yes | brand path |
+| Jira | `jira` | yes | brand path |
+| Confluence | `confluence` | yes | brand path |
+| Atlassian (MCP) | `atlassian` | yes | brand path |
+| Lucid | `lucid` | yes | brand path |
+| CodeRabbit | `coderabbit` | yes | brand path |
+| Claude | `claude` | yes | brand path (`claudecode` also present; we use `claude`) |
+| Anthropic | `anthropic` | yes | brand path (AI Reviewer rows) |
+| Slack | — | **missing** (removed at the brand's request) | codicon `comment` |
+| Salesforce | — | **missing** (removed at the brand's request) | codicon `cloud` |
+| Fireflies | — | **missing** (never added) | codicon `mic` |
+
+Rendering rules: 16 px box, `color: var(--dc-icon)`, `opacity: .9`; a logo inside a hovered or focused control
+tints to `--dc-primary` (120 ms). Never shown in brand colour, never larger than 16 px (20 px in the Connections
+row), never with a background tile. Each logo has `role="img" aria-label="<App>"` when it is the only content of a
+control (icon-only link), otherwise `aria-hidden`.
+
+`DC.brand(id, {size})` where id ∈ `github | jira | confluence | atlassian | lucid | coderabbit | claude | anthropic |
+slack | salesforce | fireflies`; the three fallbacks resolve to `DC.icon(...)` internally so pages never branch.
+Connection ids map: `sf-dev`, `sf-qa`, `mcp-salesforce` → salesforce; `mcp-atlassian` → atlassian; `mcp-*` others →
+their app; `ai-reviewer` → anthropic; `code-analyzer` → salesforce; `testing-browsers` → codicon `browser`.
+`DeepLink.kind` maps 1:1 (`file` → codicon `file`, `report` → `report`, `url` → `link-external`).
+
+Build step (`build.mjs`, new devDependency `simple-icons@16.37.0`, copy at build time, not at runtime):
+
+```js
+// build.mjs — brand logos (CC0 paths from simple-icons; see DESIGN.md §3.2)
+import { siGithub, siJira, siConfluence, siAtlassian, siLucid, siCoderabbit, siClaude, siAnthropic } from "simple-icons";
+const BRANDS = { github: siGithub, jira: siJira, confluence: siConfluence, atlassian: siAtlassian, lucid: siLucid,
+  coderabbit: siCoderabbit, claude: siClaude, anthropic: siAnthropic };
+const out = Object.fromEntries(Object.entries(BRANDS).map(([k, i]) => [k, { title: i.title, path: i.path }]));
+await fs.writeFile("media/shared/brands/brands.js", `// generated by build.mjs from simple-icons ${version}; do not edit\nwindow.DC_BRANDS = ${JSON.stringify(out)};\n`);
 ```
-┌ [icon] Title                                        [persona chip ▾]  [⟳ Refresh] [⚙] ┐
-│        sub line: login · owner/repo · Updated 10:42                                     │
-└──────────────────────────────────────────── border ────────────────────────────────────┘
+
+`media/shared/brands/` is gitignored and listed in `.vscodeignore` exceptions; `webview.ts` adds the script before
+`ui.js`. `DC.brand` builds `<svg viewBox="0 0 24 24"><path d=…></svg>` from `window.DC_BRANDS` and falls back to the
+codicon when the key is absent (so a future removal from the package degrades gracefully).
+
+## 4. Progressive disclosure
+
+Three patterns, used everywhere; no fourth.
+
+### 4.1 Hover / focus action strip
+
 ```
-Title `--dc-t-xl` 600, sub `--dc-t-sm` muted. Persona chip: codicon + name, border 1 px `--dc-persona`, bg
-`--dc-persona-tint`, text `--dc-persona` 600. If `personas.length > 1` the chip is a `<button aria-haspopup="listbox">`
-that opens a small popover (`--dc-surface-3`, shadow-2, enter 120 ms) listing personas with icon, check on active,
-arrow keys + Enter/Esc. Switching posts `switchPersona` and sets `body[data-persona]` immediately (optimistic tint).
-Header is `position: sticky; top: 0` with `--dc-surface-0` and bottom border; no shadow until scrolled
-(`.is-scrolled` toggled by a passive scroll listener → `--dc-shadow-1`).
-
-### 5.2 Sidebar section — `DC.section(title, {count, icon, actions, collapsible, key}, body)`
-Uppercase 11 px 600 tracking .04 em title (like VS Code's view headers), count chip right, optional chevron that
-collapses (`details`-like, 240 ms grid expand, state in `localStorage`-free `vscode.setState`). Section bodies carry
-`data-key` for reconcile.
-
-### 5.3 Queue card — `DC.queueCard(q, {allowed, onFeature, compact})`
+default   │ [ic] Approve AI plan: CE-13 Tier 2 routing        ● waiting on you · 1 d   [AI review plan]  ›
+hover     │ [ic] Approve AI plan: CE-13 Tier 2 routing   gh jira file  …   · 1 d       [AI review plan]  ›
 ```
-┃ [G3 ▸ sparkle]  Approve AI plan: CE-13 Tier 2 routing                 1 d ·
-┃  docs/plans/CE-13/PLAN.md on draft PR
-┃  [gh PR #43] [jira CE-13] [file PLAN.md] [→ Feature 001]
-┃  [AI review plan] [Add plan-approved]   ⓘ Not available as Tester
+
+The strip (`.dc-strip`) sits in the meta slot to the left of the age; it reserves its width always and has
+`opacity: 0` until the row is `:hover` or `:focus-within` (then `opacity: 1`, 120 ms). It holds: up to **three** link
+logos (icon-only ghost buttons with tooltip = link label), then an overflow "…" button when there are more links or
+secondary actions. The status text hides while the strip is visible so the row never changes width or height.
+Touch/no-hover devices: `@media (hover: none)` shows the strip always at 70 % opacity.
+
+### 4.2 Expand row
+
+Clicking the row (anywhere that is not a control) or the chevron toggles `aria-expanded` on the row button and
+`.is-open` on the row; the panel below animates `grid-template-rows 0fr→1fr`. The panel contains, in this order and
+only when present: detail line · links list (logo + label + 12 px external icon) · checks line (dots + names) ·
+reviews list (source logo, author, state word, summary) · secondary actions (ghost buttons) · one muted reason line
+for disabled actions. Open state is page-local UI state keyed by row key (`ui.open[key]`), so a re-render keeps it.
+Keyboard: Enter/Space toggles, Esc collapses, arrows move between rows (roving tabindex in a list).
+
+### 4.3 Overflow menu "…"
+
+`DC.menu(items, {label})` → `<button aria-haspopup="menu">…</button>` + popover (`--dc-surface-2`, shadow, radius 6,
+`role="menu"`, items `role="menuitem"` with optional icon, disabled items keep their reason as `title`). Opens on
+click, closes on Esc/outside click/item; arrows move. Used for secondary actions and links beyond the first three.
+
+## 5. Components — anatomy, states, `DC.*` API
+
+Shared states: default · hover (`--dc-hover` bg) · focus (`outline: 1px solid var(--dc-primary); outline-offset: -1px`
+on rows, `2px` on buttons; `:focus-visible` only) · selected (`--dc-primary-soft` bg + 2 px left border primary) ·
+disabled (`opacity: .5; cursor: not-allowed`, reason in tooltip) · loading (`loading` icon replaces the icon, label
+stays, `aria-busy`, width locked) · busy row (`aria-busy`, controls disabled, spinner in status slot).
+
+### 5.1 Header — `DC.header({title, sub, persona, personas, onSwitch, actions})`
 ```
-Anatomy: 2 px left rail in persona colour of the gate owner (own gate = `--dc-persona`, else `--dc-border`); gate chip
-(gate codicon + id, `title` = gate label); title 500; age right, muted, `title` = ISO; links row (icon + label chips,
-hover bg); actions row: first action primary, rest secondary; a disabled action shows its reason **inline** in
-`--dc-muted` with `info` icon (not only `title`). Hover: card lifts (-1 px, shadow-1, border-strong). Enter: stagger.
-Changed (age/state/actions hash) → flash. Overdue (`since` > 3 d) → age chip `warn`.
-
-### 5.4 Feature card — `DC.featureCard(f, {onOpen})`, uses `DC.stageBar`, `DC.gateStrip`, `DC.gateRing`
+Developer view                                            Developer ▾     ⟳
+Signed in as ravi-dev · acme-org/salesDemoOrg
+────────────────────────────────────────────────────────────────────────
 ```
-┌ 001-case-escalation                                  (◔ 6/9) score 92 ┐
-│ Case escalation with reason and queue routing                        │
-│ ▰▰▰▰▰▰▰◉▱▱   Build (current)                                         │
-│ G1✓ G2✓ G3◷ G4◷ G5◷ G6◷ G7○ G8○ G9○      next G3 · Developer (you)   │
-│ 0 open questions · 4 stories · [gh] [jira] [confluence] [file spec]  │
-└──────────────────────────────────────────────────────────────────────┘
+Title 18/600; sub 12 muted. Persona chip: pill, `--dc-chip` bg, `--dc-fg` text 12/500, codicon of the persona at
+12 px, chevron when switchable (opens a `DC.menu` listbox). Header actions: **one** ghost icon button (Refresh);
+anything else (Settings, Export…) goes in a "…" menu. Sticky, `--dc-surface-0`, 1 px bottom border, no shadow.
+
+### 5.2 Section — `DC.section(title, {count, action, key}, body)`
+`<h2>` 15/600 sentence case; count appended as muted text `· 3`; when the count means "needs you" it is rendered in
+`--dc-secondary` 600. Optional single ghost action at the right (`Show all`, `Check all`). No chevrons, no
+uppercase, no icon.
+
+### 5.3 Row — `DC.row({key, icon, title, status:{tone, text}, age, primary, strip:[...], menu:[...], expanded, open})`
+The base of every list. Grid: `16px icon | 1fr title | auto strip | auto status | auto age | auto primary | 16px chevron`.
 ```
-- `DC.stageBar(stages, {label})`: 10 equal segments, 6 px tall, gap 2 px, radius 2 px. done = `--dc-ok`, active =
-  `--dc-persona` + **pulse** (only element that pulses), todo = `--dc-border`, blocked = `--dc-err`. `title` per
-  segment; current stage name text right. Progress animates width only when a segment flips (reconcile flash).
-- `DC.gateStrip(gates, {viewer})`: chips `G1`…`G9` with state icon; own gates 600 + persona border; others opacity .7;
-  `blocked` err. Hover shows gate label + owner tooltip.
-- `DC.gateRing(done, total, {size:20})`: SVG ring, stroke `--dc-ok` over `--dc-border`, `stroke-dashoffset`
-  transition 240 ms; `aria-label="6 of 9 gates done"`.
-
-### 5.5 PR row — `DC.prRow(p, {onFeature})`
+[ic]  Title in 500, truncates with ellipsis                 ● status text · 1 d   [Primary]  ›
+      optional one-line detail in meta (only when `meta` is given)
 ```
-┃ [git-pull-request] #42 Agent escalates a Case         [needs you] [ai-attempt-2]   5 h
-┃  feature/CE-12-escalation · by dev-bot · CE-12
-┃  checks: [✓ guard] [✓ static] [◷ qa] [○ spec-gate]        gates: G5◷ G6○
-┃  reviews: [person alice · approved] [hubot CodeRabbit · 1 nit] [sparkle AI reviewer · PASS]
-┃           [shield Code Analyzer · no signal yet]
+`status.tone` ∈ ok | warn | err | info | muted. `primary` is one `DC.button` (kind primary when the row needs the
+viewer, otherwise secondary); a disabled primary keeps its reason as tooltip. `strip` = up to three `{brand, label,
+href}`; `menu` = further links and actions. `expanded` = a function returning the panel content (rendered only when
+open). The row sets `data-key`/`data-hash` for reconcile, and its hash excludes `open`.
+
+### 5.4 Queue row — `DC.queueRow(q, {onFeature})` (Home and Persona "Waiting on you")
+Icon = gate codicon (tooltip "G3 · AI plan approved · Developer"). Status = `waiting on you` (tone info) or
+`waiting on <persona>` when the viewer cannot act (tone muted); age with tooltip = ISO `since`; overdue (> 3 d) turns
+the age `--dc-warn`. Primary = `q.actions[0]`; other actions and links in the menu; expanded shows detail, links,
+all actions, reason line. Home sidebar uses the compact variant (`compact: true`): no strip, status under the title,
+primary becomes an icon-only ghost arrow that opens the persona view.
+
+### 5.5 Feature row — `DC.featureRow(f, {onOpen})` with `DC.stageLine(stages)`
 ```
-Check chips: icon by state, name; pending spins; failure chip err with hover tooltip of state. Review-signal chips:
-source icon + author + state word, coloured border by state, link icon opens url. "No signal yet" chips muted dashed
-border. `needs you` chip uses `--dc-persona`. Draft PR uses the draft icon and muted title.
-
-### 5.6 Connection row — `DC.connectionRow(r, {onConnect, onCheck, onDisconnect, onManage})`
+[map]  001-case-escalation                                     ● Build · G3 next, you   [Open]  ›
+       ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ 7/10 stages
 ```
-┃ [github]  GitHub                 ● Connected · pavansaikodanda      [Reconnect] [Check] [Manage]
-┃           Signed in · acme-org/salesDemoOrg · admin   [gh Repo]
+Stage line: 10 segments, 3 px tall, 2 px gap, radius 2; done `--dc-secondary`, active `--dc-primary`, todo
+`--dc-border`, blocked `--dc-err`; `role="progressbar"` with `aria-valuetext="Build, 7 of 10 stages"`. Status text
+= current stage name; when a gate waits on the viewer, `· G3 next, you` in `--dc-secondary`. Expanded: title line,
+gates list (`G1 Plan signed off · Architect · done` with dot, own gates 500), `n open questions · n stories ·
+score 92`, links list. No gate chips, no ring.
+
+### 5.6 PR row — `DC.prRow(p, {onFeature, viewer})`
 ```
-State pill: icon + word (`connected` ok, `expiring` warn + expiry chip, `error` err, `checking` spinner,
-`unknown` muted question, `disconnected` outline). **Check** sets the row `data-state="checking"` optimistically
-(spinner, buttons disabled, `aria-busy`); the result arrives via state → row hash changes → flash in the new state's
-colour, `DC.announce("GitHub: Connected")`. "Check all" runs the same per row, staggered visually by arrival order.
-Secret rows reuse the row with `key` icon, mono name, env chip.
-
-### 5.7 Counters — `DC.counter(label, value, {state, icon, onClick})`
-Inline stat `value` `--dc-t-lg` 600 + label `--dc-t-xs` muted uppercase; optional colour; clickable → ghost-button
-hover. Used for test totals (passed/failed/blocked/error) and header counts. Value changes do not tween; the counter
-flashes via reconcile when its hash changes.
-
-### 5.8 Tabs — `DC.tabs(items, selected, onSelect)` (same signature)
-Adds a single `.tab-ink` element positioned under the selected tab (`left`/`width` set from `offsetLeft/offsetWidth`
-after mount, `transition: left,width 240ms`). Tabs: icon optional, count chip optional (`{count}`), disabled keeps
-label for screen readers. Keyboard: arrow keys move, Home/End, roving tabindex. Hidden tab panels are not rendered.
-
-### 5.9 Segmented control — `DC.segmented(options, value, onChange, {label, size})`
-`role="radiogroup"`, pill container `--dc-surface-2` border, selected option `--dc-surface-0` + shadow-1 + 600; the
-selected background slides (same ink technique). Replaces the `<select>`s for Mode / Org on Testing and Act-as.
-
-### 5.10 Buttons — `DC.button(label, onclick, {kind, icon, loading, disabled, reason, size, title})`
-Kinds: **primary** (`button-background`), **secondary** (`button-secondaryBackground`), **ghost** (transparent,
-accent text, hover bg), **danger** (transparent, `--dc-err` text + border on hover; used for Disconnect, Cancel run,
-Discard). Height 26 px (sm 22), padding 0 10 px, radius `--dc-r-2`, icon 16 px left. Hover: brightness(1.08)
-(primary) / bg (others), 120 ms; press scale(.98) 80 ms; focus ring; disabled opacity .55 + inline `reason` rendered
-as sibling `.dc-reason` by `actionButtons` (icon `info`); loading: spinner replaces icon, label stays, `aria-busy`,
-width locked (`min-width` from measured width) so layout doesn't jump.
-`DC.actionButtons(actions, allowed, {reason: (a) => a.reason})` renders one reason line for all blocked actions.
-
-### 5.11 Toasts — `DC.toast(text, {kind, icon, actions:[{label,onClick}], timeout=5000, id})`
-Bottom-right stack (`#dc-toasts`, `role="region" aria-label="Notifications"`), max 3, `--dc-surface-3`, shadow-2,
-radius `--dc-r-3`, 2 px left rail in kind colour, icon, text, optional action link, close `×`, bottom life line.
-Enter: translateY(8px)+fade 240 ms; exit: fade 180 ms. Pauses on hover/focus. `DC.announce` mirrors text to the
-live region. Pages emit toasts on: gate action accepted, run finished (route), connection result, config saved.
-
-### 5.12 Skeletons — `DC.skeleton({kind:"rows"|"cards"|"table"|"lines", n})`
-Blocks of `--dc-surface-2` with shimmer, radius `--dc-r-1`, `aria-hidden`, `aria-busy` on the container. Shown by
-pages for `mode:"loading"` and by Testing/Connections before first state; replaced by content with enter stagger.
-
-### 5.13 Empty states — `DC.empty({icon, title, text, action:{label,onClick}})` (string overload keeps old behaviour)
-Centered, dashed border `--dc-r-3`, 32 px codicon in `--dc-faint`, title 500, text muted, one secondary/ghost CTA.
-
-### 5.14 Progress — `DC.progressBar({value, max, segments:{passed,failed,blocked,error}})`, `DC.ring(value, max, {size, label})`
-Bar: 6 px, stacked segments in status colours, widths transition 240 ms, `role="progressbar"` with `aria-valuenow`.
-Ring: SVG, same stroke rules as gate ring; 28 px in run header, 20 px inline; indeterminate = `codicon loading` spin.
-
-### 5.15 Live run log — `DC.log(id, lines, {follow:true})`
-`<pre role="log" aria-live="off">` in `--dc-surface-1`, mono 12 px, line classes: `[W1]` worker prefix muted,
-`===` case headers 600, `->` tool calls faint, lines containing `error`/`failed` err. New lines append in place
-(no rerender), auto-follow while scrolled to bottom, "Jump to latest" ghost button appears when not following.
-
-### 5.16 Keyboard hints & tooltips — `DC.kbd("Ctrl+Enter")`, `data-tip` attribute
-`kbd`: mono 11 px, 1 px border, radius 3, `--dc-surface-2`. Tooltips: CSS-only `[data-tip]::after` (instant, 120 ms
-fade, `--dc-surface-3`, shadow-2, max 280 px), plus the same text in `aria-label`/`title` for AT. Use for icon-only
-buttons, gate chips, check chips, segments.
-
-### 5.17 Status chip — `DC.chip(text, {state, icon, tone:"solid"|"outline", title})` (`DC.badge` stays as alias)
-Height 18 px, 11 px 500, icon 12 px, outline tone by default (border = colour, text = colour), solid tone =
-`color-mix(colour var(--dc-tint-strength))` bg. `DC.dot` stays for dense rows.
-
-## 6. Per-page layouts
-
-### 6.1 Home (sidebar)
+collapsed │ [pr]  #44 CE-14 Notify the account owner on escalation      ● 2 checks failing · 3 h   [Take over]  ›
+expanded  │ [pr]  #44 CE-14 Notify the account owner on escalation      ● 2 checks failing · 3 h   [Take over]  ˅
+          │        feature/CE-14-escalation-notify · claude[bot] · attempt 3 · needs-human
+          │        Checks    ● guard  ● static  ● qa  ● spec-gate  ○ gate/developer  ○ gate/tester
+          │        Reviews   [cr] CodeRabbit · changes requested · SOQL inside loop in NotifyOwnerHandler
+          │                  [an] AI Reviewer · block · VERDICT: BLOCK (bulk safety)
+          │                  [sf] Code Analyzer · block · 2 violations
+          │                  [bk] SF AI Tester · block · S03-TC-01 failed: no email sent
+          │        Links     [gh] PR #44 ↗   [jira] CE-14 ↗   [cr] CodeRabbit ↗   [gh] Checks ↗
+          │        [AI review]  [Approve (G5)]  — Approve needs every check green
 ```
-● pavansaikodanda  [beaker Tester ▾]           ⟳
-──────────────────────────────────────────────
-WAITING ON YOU                              (3)
-┃ [G4] Approve AI test plan: CE-13       1 d
-┃  … links … [Approve] [AI review]
-┃ [G6] QA on sandbox: PR #42              5 h
-Show all 7 →
-GO TO
-  [beaker] Testing             2 running ⟳
-  [plug]   Connections         1 expiring
-  [symbol-structure] Persona view
-Updated 10:42 · Refresh
+Status text is computed, one phrase, in priority order: `n checks failing` (err) → `blocked by <tool>` (err) →
+`waiting on you` (info) → `checks running` (info) → `review pending` (muted) → `ready` (ok) → `draft` (muted).
+Labels are not shown collapsed; `ai-attempt-n ≥ 3` appears in the expanded meta line. Draft PR: muted title and
+draft icon. Checks line: dots + names, pending dot pulses once per state change only. Reviews: logo (human =
+codicon `person`), author, state word in its tone, summary truncated to one line, link via the whole line.
+
+### 5.7 Connection row — `DC.connectionRow(r, {onConnect, onCheck, onDisconnect, onManage})`
 ```
-Changes: identity line becomes the persona chip + switcher; sections get uppercase headers and counts; queue items
-become `queueCard` compact (rail + gate chip + icon links); nav rows get icons and status chips; loading mode shows
-skeleton rows; `github-error` notices use the notice component with icon. Reactive: row hover, flash on new/changed
-queue items, "Refresh" button spins while a refresh is in flight (`DC.state.refreshing`), toast on gate action.
+[gh]  GitHub                                      ● Connected · pavansaikodanda     [Reconnect]  ›
+[cl]  Claude (subscription)                       ● Expires in 19 days               [Reconnect]  ›
+[at]  Atlassian MCP                               ● Problem                          [Sign in]    ›
+```
+Brand logo 20 px. Status word from state (`Connected` ok · `Expires in n days` warn · `Problem` err · `Checking`
+spinner · `Not verified` muted · `Not connected` muted) followed by `· account` when it fits in one line. Primary =
+`connectLabel`; strip = Check (codicon `sync`) + Manage (logo of the vendor page) ; menu = Disconnect (danger) when
+allowed. Expanded: detail line, links, scope + needed-by personas as muted text, disabled reason. Check puts the row
+in busy state; the result arrives through state → hash changes → flash + `DC.announce`.
+Secret rows (`DC.secretRow`) reuse the row with codicon `key`, mono name, status `set / missing / not visible to you`,
+primary `Set`/`Replace`.
+
+### 5.8 Tabs — `DC.tabs(items, selected, onSelect)`
+Text 13/500, selected `--dc-fg` with 2 px `--dc-primary` underline (one `.tab-ink` that slides 200 ms), others
+`--dc-muted`. Count as muted text after the label. Roving tabindex, arrows, Home/End. Hidden panels not rendered.
+
+### 5.9 Segmented — `DC.segmented(options, value, onChange, {label})`
+Pill container 1 px `--dc-border`; selected option `--dc-primary-soft` bg + `--dc-primary` text 500; `role="radiogroup"`.
+Used for Mode / Org on Testing and for Act-as on Connections.
+
+### 5.10 Buttons — `DC.button(label, onClick, {kind, icon, iconOnly, loading, disabled, reason, size, tip})`
+Kinds: **primary** (`--dc-primary-strong` bg, white text) · **secondary** (transparent, 1 px `--dc-border-strong`,
+`--dc-fg`) · **ghost** (transparent, `--dc-fg` text or `--dc-icon` icon, hover bg) · **danger** (ghost with
+`--dc-err` text; only inside menus and confirmations). Height 28 px (sm 24), padding 0 12 px, radius 6, 13/500.
+Hover: primary darkens 6 % (`color-mix(... black 6%)`), others get `--dc-hover`; press: none (no scale); focus:
+2 px primary ring offset 2. Disabled: opacity .5, `reason` becomes `data-tip` and `aria-describedby` → a visually
+hidden element; nothing inline. `iconOnly` requires `label` (becomes `aria-label` + tooltip).
+`DC.actionButtons(actions, allowed)` returns `{primary, rest}`: the first allowed action (or the first action if none
+is allowed) is primary; the rest go to the menu or the expanded panel.
+
+### 5.11 Toast — `DC.toast(text, {kind, action, timeout = 5000, id})`
+Bottom-right, max 3, `--dc-surface-2`, shadow, radius 6, 6 px dot in kind colour, text 13, one action link, close.
+Enters with 8 px rise + fade 200 ms; pauses on hover. `DC.announce` mirrors to the live region.
+
+### 5.12 Skeleton — `DC.skeleton({kind: "rows", n})`
+Rows of two bars (title 40 %, meta 24 %), `--dc-chip` colour, no shimmer (static; reduced-motion safe by design).
+
+### 5.13 Empty state — `DC.empty({icon, title, text, action})`
+Centred, 24 px codicon in `--dc-icon`, title 13/500, text meta, one secondary button. No dashed box.
+
+### 5.14 Progress — `DC.progress({value, max, segments})`, `DC.ring(value, max, {size})`
+Bar 4 px, track `--dc-border`, fill `--dc-secondary` (stacked segments in status colours when `segments` given),
+width transition 240 ms, `role="progressbar"`. Ring 20 px, stroke 2, same colours; used only in the run panel heading.
+
+### 5.15 Log — `DC.log(id, lines, {follow})`
+`<pre role="log">`, `--dc-surface-1`, mono 12, line classes as v1, max-height 240 px, "Jump to latest" ghost link
+when not following. The only box on the Testing page besides the run panel that contains it.
+
+### 5.16 Chip — `DC.chip(text, {tone})`
+18 px, 12/500, `--dc-chip` bg, `--dc-muted` text; tones `primary` (soft primary bg, primary text) and `secondary`.
+No status chips: status is `DC.status(tone, text)` = dot + text.
+
+### 5.17 Tooltip — `data-tip`
+CSS tooltip `[data-tip]::after`, `--dc-surface-2`, shadow, 12 px, max 280 px, appears on hover/focus after 300 ms,
+mirrored to `aria-label`/`aria-describedby`.
+
+## 6. Per-page layouts (collapsed default state)
+
+### 6.1 Home (sidebar, compact rows)
+```
+ravi-dev · Developer ▾                                  ⟳
+────────────────────────────────────────────────────────
+Waiting on you · 3
+[G3]  Approve AI plan: CE-13 Tier 2 routing          →
+      waiting on you · 1 d
+[G5]  Code review: CE-12 Agent escalates a Case      →
+      waiting on you · 5 h
+[!]   Take over CE-14: AI stopped after 3 attempts   →
+      needs a human · 3 h
+Show all 7
+
+Go to
+[beaker]  Testing                      2 running
+[plug]    Connections                  1 expiring
+[code]    Developer view
+
+Updated 10:42
+```
+Notices (setup needed, GitHub error) are one `DC.notice` line each (icon + text + one link), above the queue.
 
 ### 6.2 Persona view
 ```
-[symbol-structure] Architect view         [chip Architect ▾] [⟳]
-Signed in as pavan · acting as Architect
-▔Architect▔  Developer  Tester                (ink slides)
-WAITING ON YOU (2)      AI ACTIONS            FEATURES (3)          PULL REQUESTS (4)
-queue cards…            [sparkle Intake]…     feature cards (grid)  pr rows (list)
+Developer view                                     Developer ▾   ⟳
+Signed in as ravi-dev · acme-org/salesDemoOrg
+Developer   (Architect also sees: Architect · Developer · Tester tabs)
+─────────────────────────────────────────────────────────────────────
+Waiting on you · 3
+[G3] Approve AI plan: CE-13 Tier 2 routing     ● waiting on you · 1 d   [AI review plan]  ›
+[G5] Code review: CE-12 Agent escalates a Case ● waiting on you · 5 h   [AI review]       ›
+[!]  Take over CE-14: AI stopped after 3…      ● needs a human · 3 h    [Take over]       ›
+
+Features · 2
+[map] 001-case-escalation                       ● Build · G3 next, you  [Open]  ›
+      ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ 7/10
+[map] 002-entitlement-sla                       ● Clarify · 3 questions [Open]  ›
+      ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ 1/10
+
+Pull requests · 4                                       Start AI session ▾
+[pr] #44 CE-14 Notify the account owner…        ● 2 checks failing · 3 h [Take over]     ›
+[pr] #42 CE-12 Agent escalates a Case…          ● waiting on you · 5 h   [Approve (G5)]  ›
+[pr] #43 CE-13 Escalated Cases route to…        ● draft · 1 d            [AI review plan] ›
+[pr] #41 Spec: case escalation stories…         ● ready · 1 d            [Open]          ›
 ```
-Changes: tabs with ink + per-tab count; AI actions as ghost buttons with `sparkle`; features in `.grid` cards with
-stage bar/gate ring; PRs as `prRow`. Reactive: cards lift, PR check chips spin while pending, flash on review-signal
-change, counts in section headers update with flash.
+AI actions are not a section any more: they are the "Start AI session ▾" menu on the Pull requests section (one
+item per `aiActions` entry, disabled with reason when `!allowed`). When the viewer is an Architect looking at the
+Developer tab, every primary action is disabled with the reason tooltip "You act as Architect; switch persona to
+run Developer actions", and the status text reads `waiting on Developer`.
 
 ### 6.3 Feature detail
 ```
-[map] 001-case-escalation                             links… [⟳]
-Case escalation … · score 92 · 0 open questions · plan signed off
-▰▰▰▰▰▰▰◉▱▱  Build                     (◔ 6/9 gates)   Next: G3 AI plan approved — Developer (you)
-GATES ─ table: icon+id · label · owner chip · state chip (own rows 600, persona rail)
-OPEN QUESTIONS · STORIES (table: # · story · jira chip · tests (ui/unit/manual counters) · PR chip · file)
-SOURCES CITED · FILES (chips) · SPEC KIT ACTIONS (grouped by persona chip; inline reason)
+001-case-escalation                                       Developer ▾   ⟳
+Case escalation with reason and queue routing · score 92 · signed off
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ Build · 7/10 stages
+Next: G3 AI plan approved · Developer (you)                 [AI review plan]
+─────────────────────────────────────────────────────────────────────
+Gates · 6 of 9 done
+● G1 Plan signed off              Architect        done
+● G2 Testability confirmed        Tester           done
+● G3 AI plan approved             Developer (you)  waiting      [AI review plan] ›
+…
+Stories · 4
+[book] 00 Contract and data model        ● PR #41 merged     [Open]  ›
+[book] 01 Agent escalates a Case         ● PR #42 in review  [Open]  ›
+Sources · 2       Links · 4        (plain lists; links show logo + label)
 ```
-Reactive: gate row flash when a gate state changes; stage bar current pulse; story PR chip spins when checks pending.
+Gate rows are rows with status words; only the gate that waits on the viewer has a primary action. Spec Kit
+actions for other personas live in the gate row's menu, disabled with reason.
 
 ### 6.4 Connections
 ```
-[plug] Connections        pavan · owner/repo [admin] [personas…]   Act as [seg Architect|Developer|Tester] [⟳ Check all]
-PERSONAL (4)   connection rows …
-CLAUDE MCP (6) connection rows …
-PROJECT (admin) — Slack webhooks / CI secrets / Reminders: secret rows
-footer: 2 connections only other personas need are hidden · Checked 3 min ago
+Connections                                   Act as [Architect|Developer|Tester]   ⟳
+pavan · acme-org/salesDemoOrg · admin
+─────────────────────────────────────────────────────────────────────
+Personal · 5                                                        Check all
+[gh] GitHub                      ● Connected · pavansaikodanda   [Reconnect] ›
+[cl] Claude (subscription)       ● Expires in 19 days            [Reconnect] ›
+[sf] Salesforce dev org          ● Connected · demo.user@…       [Reconnect] ›
+[ji] Jira                        ● Connected · dev.user@example.com[Reconnect] ›
+[sl] Slack                       ● Not verified                  [Connect]   ›
+Claude MCP · 3
+[at] Atlassian MCP               ● Problem                       [Sign in]   ›
+[gh] GitHub MCP                  ● Not verified                  [Sign in]   ›
+[sf] Salesforce DX MCP           ● Deprecated                    [Open]      ›
+Review tools · 3
+[cr] CodeRabbit                  ● Not verified                  [Install app]›   (disabled: admin only)
+Project (admin) · secrets as secret rows, grouped by Slack webhooks / CI secrets / Reminders
+8 connections only other personas need are hidden · Checked 3 min ago
 ```
-Reactive: Check → spinner → flash in result colour + announce; Check all → header button loading, rows update as
-they arrive; expiring rows show a warn chip; signed-out state is an empty state with `sign-in` CTA.
 
 ### 6.5 Testing
 ```
-[beaker] Testing      runs as pavan · acting as tester        [export xlsx] [export pdf] [⚙] [⟳]
-┌ SUITES ─────────┐ ┌ ▔Cases▔ Results(1) Runs Generate ──────────────────────────────┐
-│ ▸ Smoke-Account │ │ Smoke - Account  [validate]                                      │
-│   2 cases ●2    │ │ Mode [manual|automation|both]  Org [dev|qa]  [▶ Run selected (2)] [Run all] │
-│   Lead convert  │ │ table: ☐ · ID · title · manual chip · automation chip · links     │
-└─────────────────┘ │ ┌ RUN  ◔ 1/2  SMOKE-ACC-001 manual (haiku)   ▰▰▰▰▰▱▱▱  [■ Cancel]┐ │
-                    │ │ [✓ ACC-002] [⟳ ACC-001]  live log …                             │ │
+Testing                                                       Tester ▾   …   ⟳
+Runs as maria-qa
+─────────────────────────────────────────────────────────────────────
+Suites                      │ Smoke - Account · 2 cases                  Validate
+[file] Smoke - Account  ●2  │ Mode [manual|automation|both]  Org [qa|dev]   [Run all]
+[file] Lead convert     ●1●1│ Cases   Results   Runs   Generate
+                            │ ☐ SMOKE-ACC-001 Create a Business Account…   ● passed · 4 h  ›
+                            │ ☐ SMOKE-ACC-002 The "GFS Customers" list…    ● passed · 4 h  ›
+                            │ ┌ Running · 1 of 2 · SMOKE-ACC-001 manual        [Cancel] ┐
+                            │ │ ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ │
+                            │ │ ● SMOKE-ACC-002 passed   ◌ SMOKE-ACC-001 running         │
+                            │ │ Log ˅  (collapsed; last line shown in meta)              │
+                            │ └──────────────────────────────────────────────────────────┘
 ```
-Reactive: selected suite rail + bg; run box has ring + stacked bar + per-case chips that flip with flash as events
-arrive; log streams; results tab counters; `details` expands 240 ms; Generate button loading with log streaming.
+Suite list is a narrow list (not a boxed sidebar); selected suite = primary-soft bg + 2 px rail. Case rows show
+one status (manual or automation, whichever ran last; the other in the expanded row). The run panel is the one box
+on the page: heading, 4 px progress, per-case dots, log collapsed by default with its last line as meta and a
+chevron to open. Results tab: route as status text (`● Pass · every case passed`), four counts as muted text, case
+rows expandable (steps table and evidence inside).
 
 ### 6.6 Setup wizard
 ```
-[tools] Project Setup   owner/repo · 4 of 13 phases done   [gh] [file] [file]
-▔Phases▔  build.config.yml
-┌ B0 ✓ Prereqs      ┐ ┌ B3 Secrets                       [chip PARTIAL] [Check all] ┐
-│ B1 ✓ …            │ │ progress bar of steps · status select → segmented · Save      │
-│ ▸ B3 ◐ Secrets    │ │ step cards: kind chip (icon) · title · detail · links         │
-│ B4 ○ …            │ │  checklist (custom checkbox) · secret chips · [Run] [Check]   │
-└───────────────────┘ │  result line flashes ok/err                                   │
+Project setup                                              B4 of 13 · Admin ▾   ⟳
+Phases                 │ B3 Secrets                           ● partial     [Check all]
+● B0 Prerequisites     │ ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ 3/5 steps
+● B1 Repo settings     │ [key] JIRA_API_TOKEN            ● set              [Replace] ›
+◐ B3 Secrets           │ [key] SLACK_WEBHOOK_QA          ● missing          [Set]     ›
+○ B4 Workflows         │ [person] Approve the GitHub App ● waiting for you  [Done]    ›
 ```
-Reactive: phase list selected rail; step "Working…" becomes button loading; result row flashes; phase status chip
-flashes on save; config form fields show inline error state (err border) and the Save button becomes primary only
-when dirty.
+Phase list = rows with status dot; step cards become rows (kind icon, title, status, one action; detail and
+checklist inside the expanded row). The config form (`build.config.yml`) is a second tab; Save becomes primary
+only when dirty.
 
-### 6.7 Session chat
+### 6.7 AI session
 ```
-[sparkle] Claude · /dev-review-plan 42                        [chip Developer] ● running
-notice (mcp issues) …
-┌ log (scroll) ───────────────────────────────────────────────┐
-│ You ▸ text                                                   │
-│ Claude ▸ text (streaming caret)                              │
-│   [tool] Read  src/…  ✓      ← tool rows compact, nested indent│
-└──────────────────────────────────────────────────────────────┘
-model · 3 turns · $0.0123                           [Send ⌘↵] [■ Stop]
+Claude · /dev-review-plan 42                                   Developer ▾   ● running
+┌──────────────────────────────────────────────────────────────────────┐
+│ You      Review the plan on PR 42                                      │
+│ Claude   Reading docs/plans/CE-13/PLAN.md …▍                           │
+│          ↳ Read  src/… ✓   ↳ Grep  Handler ✓     (tool rows, meta)     │
+└──────────────────────────────────────────────────────────────────────┘
+claude-sonnet · 3 turns · $0.012                       [Send]  Stop
 ```
-Reactive: streaming message shows a 1-character blinking caret (CSS steps); tool rows enter with stagger and their
-dot flips with a flash on completion; "Jump to latest" when not following; composer keeps focus/caret via reconcile.
+The log is the one box. Tool calls are meta rows indented under the message; a streaming message shows a 1-char
+caret. Composer: textarea + primary Send (`Ctrl+Enter` hint in tooltip) + ghost Stop.
 
-## 7. Data updates — keyed reconcile in `DC.mount`
+## 7. Keyed updates (`DC.mount`)
 
-Pages keep calling `DC.mount(render(state))`. New behaviour:
+Unchanged from the v1 reconcile, with three adjustments:
+1. `data-hash` of a row never includes UI-only state (`open`, checked, menu open); those live in the page's `ui`
+   object keyed by `data-key`, and `DC.row` re-applies `.is-open` from `ui.open[key]` after each mount.
+2. A changed row gets `.dc-changed` → background `--dc-primary-soft` fading out over 900 ms (reduced motion: 1 px
+   primary left border for 2 s). New rows enter with a 160 ms fade, no translate, no stagger beyond 4 rows.
+3. Expanded panels reconcile too: a review list inside an open PR row updates in place and flashes its own row.
 
-1. **Keys.** Any repeating element sets `data-key` (stable id: queue id, PR number, connection id, suite key, case id,
-   gate id, phase id, message index) and `data-hash` = `DC.hash(sourceObject)` (djb2 of `JSON.stringify`, with
-   volatile fields such as `age` included on purpose — age changes are visible changes). Helper:
-   `DC.keyed(key, obj, node)` sets both attributes.
-2. **Capture** before patch: `document.activeElement` (its `id` or nearest `data-key` + selection range),
-   `scrollTop` of `#app` and every `[data-scroll]` element.
-3. **Patch** `reconcile(oldEl, newEl)`:
-   - different tag or `data-key` → replace.
-   - copy attributes (add/remove/update) except `class` modifiers `dc-enter`/`dc-changed`.
-   - if `newEl` children have `data-key`: map old children by key; walk new children in order: known key with equal
-     hash → **reuse old node untouched**, move into place if needed; known key with different hash → recurse (so
-     nested keyed children get their own treatment) and add `.dc-changed` (flash; `--dc-flash` colour from
-     `data-state`); unknown key → insert new node with `.dc-enter` and `style="--i:n"` (n counts new nodes, capped 8);
-     old keys missing → remove (no leave animation, instant).
-   - no keys: if both have only text → update text if different; else recurse pairwise by index, replacing extras.
-4. **Restore** scroll positions and focus (+selection); if the focused element vanished, focus the nearest sibling
-   with the same `data-key` or `#app` without scrolling.
-5. **Class cleanup**: `animationend` removes `dc-enter`/`dc-changed`; reduced motion removes them immediately.
-6. First mount: whole page gets stagger enter (max 8 items), no flash.
-7. Incremental events (log lines, streaming text) still append in place via `DC.onEvent`; they never call `mount`.
-
-Hashes must not include DOM-only state (checked boxes, open details); page-local UI state stays in the page module,
-as today.
+Incremental events (log lines, streaming text, run progress) still append in place through `DC.onEvent`.
 
 ## 8. Accessibility
 
-- Contrast: all text ≥ 4.5:1 in both themes (persona colours listed are ≥ 4.9:1 on their surfaces; checked for
-  VS Code Dark Modern / Light Modern); chips never rely on colour alone (icon + word); HC drops tints and shadows and
-  uses `contrastBorder`.
-- Focus order: header → persona chip → actions → tabs → sections in reading order; cards are not focusable unless
-  they are the only control (nav rows, suite rows: `role="button"`/`option`, Enter/Space). Focus ring never removed;
-  `:focus-visible` only.
-- `main#app` loses `aria-live` (today every re-render is announced). A single `#dc-live` `role="status"
-  aria-live="polite"` region receives `DC.announce(text)` for: connection results, run start/finish, gate action
-  result, toast text, persona switch. Logs are `role="log" aria-live="off"`.
-- Reduced motion as in §4; tooltips readable by AT via `aria-label`; spinners carry `aria-label="…in progress"`;
-  progress bars expose `aria-valuenow/max/text`.
-- Keyboard: tabs arrows, segmented arrows, popover listbox, `Ctrl+Enter` send, `Esc` closes popover/toast, `/`
-  focuses search when present. Hints shown with `DC.kbd` next to the control.
+- Contrast (verified, §10): all text ≥ 4.5:1 on `--dc-surface-0` and `-1` in both themes; icons and dots ≥ 3:1;
+  status is never colour alone (dot + word). HC maps every brand token to a VS Code HC variable and drops soft
+  backgrounds and shadows.
+- Rows are `role="button" aria-expanded` when expandable; controls inside stop propagation. Lists use roving
+  tabindex (arrows, Home/End); Enter/Space expands; Esc collapses or closes a menu.
+- The action strip is reachable by keyboard (`:focus-within` reveals it); icon-only buttons have `aria-label`
+  and a tooltip; disabled buttons expose their reason via `aria-describedby`.
+- `main#app` has no `aria-live`; `#dc-live` (`role="status"`, polite) receives `DC.announce` for: connection check
+  results, run start/finish, gate action result, toast text, persona switch. Logs are `role="log" aria-live="off"`.
+- Focus is never hidden: 1 px primary outline inset on rows, 2 px offset on buttons; `prefers-reduced-motion`
+  respected everywhere (§2.6).
+- Tooltips appear on focus as well as hover and never contain the only copy of an action's label.
 
 ## 9. Build notes for the implementer
 
-- New devDependency: `@vscode/codicons` (copy `dist/codicon.css` + `codicon.ttf` to `media/shared/codicons/` in
-  `build.mjs`; add the folder to `.vscodeignore` exceptions).
-- `src/core/webview.ts`: remove `aria-live` from `main`, add `<div id="dc-live" role="status" aria-live="polite" class="sr-only">`
-  and `<div id="dc-toasts">`; pages set `document.body.dataset.persona` from state.
-- `preview/serve.mjs`: add `vscode-dark`/`vscode-light` body class; define `--vscode-charts-*`,
-  `--vscode-editorWidget-background`, `--vscode-testing-icon*`, `--vscode-list-activeSelection*` in `THEMES`.
-- ARCHITECTURE.md UI rules update: "animation beyond the built-in fade" → "motion only from the §4 system".
+- devDependencies: `@vscode/codicons` (as v1), `simple-icons@16.37.0` (build-time only; emits
+  `media/shared/brands/brands.js`, see §3.2). Add `media/shared/brands/` to `.gitignore` and to `.vscodeignore`
+  exceptions; `webview.ts` loads `brands.js` before `ui.js` with the same CSP nonce.
+- `base.css`: replace the v1 token block with §2; delete persona tint tokens and `body[data-persona]` colour rules;
+  delete uppercase section header styles, rails, card shadows and the status tint rules.
+- `ui.js`: add `DC.row`, `DC.status`, `DC.strip`, `DC.menu`, `DC.brand`, `DC.stageLine`; rewrite `queueCard` →
+  `queueRow`, `featureCard` → `featureRow`, `prRow`, `connectionRow` on top of `DC.row`; `actionButtons` returns
+  `{primary, rest}`; `reason()` is removed (reason is a tooltip). Keep `header`, `section`, `tabs`, `segmented`,
+  `button`, `toast`, `skeleton`, `empty`, `progress`, `log`, `chip`, `mount`, `announce` with the same signatures.
+- Pages: remove every inline links row, chips row, reason span and second button; each list item becomes one
+  `DC.*Row` call with `expanded` content. Home uses `compact: true`.
+- ARCHITECTURE.md UI rule 2 ("every card/row shows `DC.links`") becomes "every row exposes its links in the hover
+  strip (first three) and in its expanded panel (all)".
+
+## 10. Contrast verification (WCAG 2.x ratios, computed)
+
+| Token | Dark hex on `#1F1F1F` / `#181818` | Light hex on `#FFFFFF` / `#F8F8F8` |
+|---|---|---|
+| `--dc-primary` | `#818CF8` 5.53 / 5.95 | `#4F46E5` 6.29 / 5.92 |
+| white on `--dc-primary-strong` | `#5B5FEA` 4.92 | `#4F46E5` 6.29 |
+| `--dc-secondary` | `#2DD4BF` 8.85 / 9.54 | `#0F766E` 5.47 / 5.15 |
+| `--dc-fg` (fallback) | `#E2E8F0` 13.37 / 14.40 | `#1E293B` 14.63 / 13.77 |
+| `--dc-muted` | `#9AA4B2` 6.54 / 7.04 | `#475569` 7.58 / 7.14 |
+| `--dc-icon` (graphic, needs 3:1) | `#8B95A5` 5.45 / 5.87 | `#64748B` 4.76 / 4.48 |
+| `--dc-ok` | `#4ADE80` 9.46 / 10.19 | `#15803D` 5.02 / 4.72 |
+| `--dc-warn` | `#FBBF24` 9.87 / 10.64 | `#A16207` 4.92 / 4.64 |
+| `--dc-err` | `#F87171` 5.96 / 6.42 | `#B91C1C` 6.47 / 6.09 |
+
+Every text use ≥ 4.5:1; `--dc-icon` in light on the sidebar surface is 4.48:1, used for icons only (≥ 3:1 required).
+VS Code's own foregrounds (`#CCCCCC` dark 10.26, `#3B3B3B` light 11.20) are used when present.
