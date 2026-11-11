@@ -85,7 +85,7 @@ button.btn { font: inherit; border: 1px solid transparent; border-radius: 2px; p
 button.btn:hover { filter: brightness(1.08); }
 button.btn.secondary { background: var(--dc-btn2-bg); color: var(--dc-btn2-fg); }
 button.btn.ghost { background: transparent; color: var(--dc-accent); padding: 4px 6px; }
-button.btn:disabled { opacity: .45; cursor: not-allowed; filter: none; }
+button.btn:disabled { background: var(--dc-btn2-bg); color: var(--dc-muted); opacity: .6; cursor: not-allowed; filter: none; }
 input, select, textarea { font: inherit; color: var(--vscode-input-foreground, var(--dc-fg)); background: var(--vscode-input-background, transparent);
   border: 1px solid var(--vscode-input-border, var(--dc-border)); border-radius: 2px; padding: 4px 6px; }
 :focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--dc-accent)); outline-offset: 1px; }

@@ -66,6 +66,7 @@
     tabs(items, selected, onSelect) { // items: [{id,label,disabled}]
       return h("div.tabs", { role: "tablist" }, items.map((t) => h("button.tab", {
         role: "tab", "aria-selected": String(t.id === selected), disabled: !!t.disabled, title: t.title || null,
+        "aria-label": t.title ? `${t.label} (${t.title})` : null,
         onclick: () => onSelect(t.id) }, t.label)));
     },
     table(columns, rows) { // columns: [{key,label,render?}]
