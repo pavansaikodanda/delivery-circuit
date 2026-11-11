@@ -9,6 +9,11 @@ const common = {
   // Loaded from node_modules at runtime: the SDK ships the Claude Code binary, Playwright ships browsers.
   external: ["vscode", "@anthropic-ai/claude-agent-sdk", "playwright", "playwright-core", "@playwright/*", "exceljs", "libsodium-wrappers"],
 };
+import fs from "node:fs";
+// Bundle the sf-delivery-circuit plugin (templates, installer, skills) so the setup wizard works offline.
+fs.rmSync("plugin", { recursive: true, force: true });
+fs.cpSync("../sf-delivery-circuit", "plugin", { recursive: true, filter: (src) => !/[\/](node_modules|.git)([\/]|$)/.test(src) });
+
 const ctxs = await Promise.all([
   esbuild.context({ ...common, entryPoints: ["src/extension.ts"], outfile: "dist/extension.js" }),
   // Stand-alone stdio entry of the Circuit MCP server (used when Claude runs outside VS Code, e.g. CI).

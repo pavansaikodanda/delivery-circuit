@@ -7,6 +7,8 @@ import type { DeepLink } from "./contracts";
 export interface ModuleBase {
   ctx: vscode.ExtensionContext;
   root: string;
+  /** bundled sf-delivery-circuit plugin */
+  pluginRoot: string;
   log: (msg: string) => void;
 }
 

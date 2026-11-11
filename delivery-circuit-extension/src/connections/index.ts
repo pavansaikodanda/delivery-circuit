@@ -11,6 +11,8 @@ export function createIdentityAndConnections(base: ModuleBase): { identity: Iden
     connect: async (id) => ({ id, label: id, scope: "personal", state: "unknown", neededBy: [] }), disconnect: async () => {},
     onDidChange: cEv.event, githubToken: async () => { throw new Error("not implemented"); }, jira: async () => undefined,
     firefliesKey: async () => undefined, sfAlias: (r) => r,
+    githubRequest: async () => { throw new Error("not implemented"); }, githubGraphql: async () => { throw new Error("not implemented"); },
+    repoSecretNames: async () => [], setRepoSecret: async () => { throw new Error("not implemented"); },
   };
   void base; return { identity, connections };
 }

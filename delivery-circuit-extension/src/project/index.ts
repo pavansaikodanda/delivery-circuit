@@ -7,7 +7,7 @@ export function createProject(base: ModuleBase, deps: { identity: IdentityServic
   const ev = new vscode.EventEmitter<void>(); void base; void deps;
   return {
     features: async () => [], feature: async () => undefined, prs: async () => [], queue: async () => [], jiraMap: async () => ({}),
-    jiraBrowseUrl: () => undefined, sources: async () => [], addUpload: async () => { throw new Error("not implemented"); },
+    jiraBrowseUrl: () => undefined, sources: async () => [], firefliesRecent: async () => [], indexFireflies: async () => { throw new Error("not implemented"); }, addUpload: async () => { throw new Error("not implemented"); },
     transcript: async () => { throw new Error("not implemented"); }, refresh: async () => {}, onDidChange: ev.event,
   };
 }

@@ -82,6 +82,14 @@ export interface ConnectionsService {
   firefliesKey(): Promise<string | undefined>;
   /** sf CLI alias for an org role, e.g. "dev" / "qa". */
   sfAlias(role: "dev" | "qa"): string;
+  /** GitHub REST call as the signed-in person (path like "/repos/o/r/pulls"). Throws on non-2xx with the API message. */
+  githubRequest<T = any>(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<T>;
+  /** GitHub GraphQL call as the signed-in person. */
+  githubGraphql<T = any>(query: string, variables?: Record<string, unknown>): Promise<T>;
+  /** Names of the repo's Actions secrets (values are never readable). */
+  repoSecretNames(): Promise<string[]>;
+  /** Encrypt (libsodium sealed box, repo public key) and store an Actions secret; env = environment name for env secrets. */
+  setRepoSecret(name: string, value: string, env?: string): Promise<void>;
 }
 
 // ---------- project context (Spec Kit, GitHub, Jira, sources) ----------
@@ -203,6 +211,10 @@ export interface ProjectContextService {
   jiraMap(featureId: string): Promise<Record<string, string>>;
   jiraBrowseUrl(key: string): string | undefined;
   sources(): Promise<SourceRef[]>;
+  /** Recent Fireflies meetings (not necessarily indexed yet). Empty when Fireflies isn't connected. */
+  firefliesRecent(limit?: number): Promise<SourceRef[]>;
+  /** Add a Fireflies meeting to .circuit/sources.json (metadata only). */
+  indexFireflies(meetingId: string): Promise<SourceRef>;
   /** Store an uploaded transcript outside git (encrypted, local) and index it. */
   addUpload(fileUri: vscode.Uri, title?: string): Promise<SourceRef>;
   /** Full transcript text. Callers must enforce persona (Architect only). */
@@ -281,6 +293,8 @@ export interface CircuitServices {
   ctx: vscode.ExtensionContext;
   /** Absolute path of the workspace root (the client Salesforce DX repo). */
   root: string;
+  /** Absolute path of the bundled sf-delivery-circuit plugin (templates, installer, skills). */
+  pluginRoot: string;
   log: (msg: string) => void;
   identity: IdentityService;
   connections: ConnectionsService;

@@ -2,6 +2,7 @@
 //   connections+identity -> project -> mcp -> sessions -> actions -> testing -> UIs
 import * as vscode from "vscode";
 import type { CircuitServices } from "./core/contracts";
+import * as path from "path";
 import type { ModuleBase } from "./core/util";
 import { createIdentityAndConnections, registerConnectionsUI } from "./connections";
 import { createProject } from "./project";
@@ -22,7 +23,8 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<CircuitSer
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!root) { log("No workspace folder open; Delivery Circuit is idle."); return undefined; }
 
-  const base: ModuleBase = { ctx, root, log };
+  const pluginRoot = path.join(ctx.extensionPath, "plugin");
+  const base: ModuleBase = { ctx, root, pluginRoot, log };
   const { identity, connections } = createIdentityAndConnections(base);
   const project = createProject(base, { identity, connections });
   const mcp = createMcp(base, { identity, connections, project });
@@ -30,7 +32,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<CircuitSer
   const actions = createActions(base, { identity, connections, sessions, project });
   const testing = createTesting(base, { connections });
 
-  services = { ctx, root, log, identity, connections, project, mcp, testing, actions, sessions };
+  services = { ctx, root, pluginRoot, log, identity, connections, project, mcp, testing, actions, sessions };
 
   registerViews(services);
   registerConnectionsUI(services);
