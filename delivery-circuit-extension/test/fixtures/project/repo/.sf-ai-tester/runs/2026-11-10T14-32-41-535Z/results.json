@@ -1,0 +1,35 @@
+{
+  "suite": "Case Escalation - Story 01",
+  "org": "qa",
+  "results": [
+    {
+      "id": "S01-TC-01",
+      "title": "Agent escalates a Case with a reason",
+      "mode": "manual",
+      "status": "passed",
+      "summary": "Escalated with reason SLA breach",
+      "durationMs": 120000,
+      "costUsd": 0.3512345,
+      "trail": [
+        "browser:browser_snapshot {}"
+      ],
+      "defects": []
+    },
+    {
+      "id": "S01-TC-02",
+      "title": "Closed Case has no Escalate action",
+      "mode": "manual",
+      "status": "failed",
+      "summary": "Escalate is visible on a closed Case",
+      "trail": [
+        "long trail"
+      ],
+      "defects": [
+        {
+          "severity": "major",
+          "title": "Escalate shown on closed Case"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1350 @@
+{
+  "login": "pavansaikodanda",
+  "admin": true,
+  "repo": {
+    "owner": "acme-org",
+    "repo": "salesDemoOrg",
+    "url": "https://github.com/acme-org/salesDemoOrg"
+  },
+  "buildState": {
+    "exists": true,
+    "repaired": true,
+    "path": "build-state.md"
+  },
+  "selected": "B1",
+  "busy": null,
+  "phases": [
+    {
+      "id": "B0",
+      "name": "Preflight",
+      "summary": "Tools, GitHub CLI scopes, installer dry run, build.config.yml.",
+      "status": "PARTIAL",
+      "kind": "partial",
+      "verified": "tools: yes; gh admin: no",
+      "evidence": "versions below",
+      "notes": "gh token has repo,workflow but not admin:org; user is a plain member of acme-org",
+      "steps": [
+        {
+          "id": "b0.tools",
+          "kind": "check",
+          "title": "Tool versions",
+          "detail": "git, gh, node, npm, python, uv, sf (+ code-analyzer), claude, openssl, jq, actionlint, specify. Recorded in build-state.md.",
+          "action": "Record in build-state.md",
+          "verify": true,
+          "links": [],
+          "result": {
+            "state": "ok",
+            "text": "git 2.53.0, gh 2.73.0, node 22.23.3, npm 10.9.9, python 3.13.1, uv 0.13.0, sf 2.157.8 (code-analyzer 5.1.0), claude 2.1.318, openssl 3.5.5, jq 1.7.1, actionlint 1.7.7, specify 1.3.4",
+            "at": "2026-11-11T09:30:00Z"
+          }
+        },
+        {
+          "id": "b0.gh",
+          "kind": "check",
+          "title": "GitHub CLI and your access",
+          "detail": "gh auth status needs scopes repo, admin:org, workflow; you need to be an org owner or repo admin.",
+          "verify": true,
+          "links": [],
+          "result": {
+            "state": "warn",
+            "text": "gh token lacks admin:org: run gh auth refresh -s admin:org,workflow",
+            "at": "2026-11-11T09:30:00Z",
+            "lines": [
+              "gh: signed in; scopes repo, workflow",
+              "You: pavansaikodanda, admin of acme-org/salesDemoOrg"
+            ]
+          }
+        },
+        {
+          "id": "b0.dryrun",
+          "kind": "run",
+          "title": "Installer dry run",
+          "detail": "Shows what install.mjs would add, update or skip. Changes nothing.",
+          "action": "Run dry run",
+          "verify": false,
+          "links": [],
+          "result": {
+            "state": "ok",
+            "text": "Dry run: add 0, update 2, skip 41",
+            "at": "2026-11-11T09:30:00Z"
+          }
+        },
+        {
+          "id": "b0.config",
+          "kind": "form",
+          "title": "Fill build.config.yml",
+          "detail": "Org, repo, people per team, Jira, Confluence, Salesforce URLs, Slack. No secrets.",
+          "verify": true,
+          "links": [],
+          "result": {
+            "state": "warn",
+            "text": "Still empty: people.architects, people.developers, people.testers, jira.site",
+            "at": "2026-11-11T09:30:00Z"
+          }
+        },
+        {
+          "id": "b0.hc1",
+          "kind": "human",
+          "title": "Sign in to every service in your browser",
+          "detail": "Sign in once so the later screens open directly.",
+          "hc": "HC-1",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "Signed in to GitHub with an org owner account",
+              "done": false
+            },
+            {
+              "text": "Signed in to Atlassian (Jira and Confluence)",
+              "done": false
+            },
+            {
+              "text": "Signed in to the DEV and QA orgs",
+              "done": false
+            },
+            {
+              "text": "Signed in to Slack",
+              "done": false
+            }
+          ],
+          "links": [
+            {
+              "kind": "github",
+              "label": "GitHub",
+              "target": "https://github.com/login"
+            },
+            {
+              "kind": "jira",
+              "label": "Atlassian",
+              "target": "https://id.atlassian.com/login"
+            },
+            {
+              "kind": "salesforce",
+              "label": "DEV sandbox",
+              "target": "https://acme-demo.my.salesforce.com"
+            },
+            {
+              "kind": "salesforce",
+              "label": "QA sandbox",
+              "target": "https://acme-demo.my.salesforce.com"
+            },
+            {
+              "kind": "slack",
+              "label": "Slack",
+              "target": "https://slack.com/signin"
+            }
+          ]
+        }
+      ],
+      "ready": false
+    },
+    {
+      "id": "B1",
+      "name": "GitHub org and bot",
+      "summary": "Teams, labels, GitHub App, secrets, variables, production environment.",
+      "status": "TODO",
+      "kind": "todo",
+      "verified": "",
+      "evidence": "",
+      "notes": "",
+      "steps": [
+        {
+          "id": "b1.teams",
+          "kind": "run",
+          "title": "Persona teams",
+          "detail": "Creates architects, developers, testers (closed), adds the people from build.config.yml, gives each team push on the repo. Teams must be disjoint.",
+          "action": "Create teams and members",
+          "verify": true,
+          "links": [],
+          "result": {
+            "state": "warn",
+            "text": "Teams incomplete",
+            "at": "2026-11-11T09:30:00Z",
+            "lines": [
+              "architects: missing",
+              "developers: missing",
+              "testers: missing"
+            ]
+          }
+        },
+        {
+          "id": "b1.labels",
+          "kind": "run",
+          "title": "Labels",
+          "detail": "sdd, needs-clarification, plan-review, plan-approved, testplan-approved, ai-ready, ai-generated, ai-attempt-1..3, needs-human, needs-qa.",
+          "action": "Create missing labels",
+          "verify": true,
+          "links": [],
+          "result": {
+            "state": "warn",
+            "text": "Missing labels: plan-approved, testplan-approved, ai-ready, needs-human, needs-qa",
+            "at": "2026-11-11T09:30:00Z"
+          }
+        },
+        {
+          "id": "b1.hc2",
+          "kind": "human",
+          "title": "GitHub App for CI",
+          "detail": "Create the App in the browser, install it on this repo only, then store its id and private key below.",
+          "hc": "HC-2",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "No webhook",
+              "done": true
+            },
+            {
+              "text": "Repository permissions: Contents RW, Pull requests RW, Issues RW, Actions Read, Commit statuses RW, Metadata Read",
+              "done": true
+            },
+            {
+              "text": "Organization permissions: Members Read",
+              "done": false
+            },
+            {
+              "text": "Workflows: no access",
+              "done": false
+            },
+            {
+              "text": "Private key generated",
+              "done": false
+            },
+            {
+              "text": "Installed on this repository only",
+              "done": false
+            }
+          ],
+          "links": [
+            {
+              "kind": "github",
+              "label": "New GitHub App",
+              "target": "https://github.com/organizations/acme-org/settings/apps/new"
+            },
+            {
+              "kind": "github",
+              "label": "Org installed apps",
+              "target": "https://github.com/organizations/acme-org/settings/installations"
+            }
+          ]
+        },
+        {
+          "id": "b1.app",
+          "kind": "secret",
+          "title": "App secrets",
+          "detail": "APP_ID from the App page; APP_PRIVATE_KEY from the downloaded .pem (deleted afterwards if you agree).",
+          "verify": true,
+          "secrets": [
+            {
+              "name": "APP_ID",
+              "set": false
+            },
+            {
+              "name": "APP_PRIVATE_KEY",
+              "set": false
+            }
+          ],
+          "links": [],
+          "result": {
+            "state": "warn",
+            "text": "Missing repository secrets: APP_ID, APP_PRIVATE_KEY",
+            "at": "2026-11-11T09:30:00Z"
+          }
+        },
+        {
+          "id": "b1.hc3",
+          "kind": "human",
+          "title": "Claude token for CI (subscription seat)",
+          "detail": "On the dedicated CI seat run claude setup-token (1-year token), then store it as CLAUDE_CODE_OAUTH_TOKEN. Never ANTHROPIC_API_KEY.",
+          "hc": "HC-3",
+          "action": "Open terminal: claude setup-token",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "Signed in as the dedicated CI seat",
+              "done": false
+            },
+            {
+              "text": "Token copied from the terminal, not pasted anywhere else",
+              "done": false
+            }
+          ],
+          "secrets": [
+            {
+              "name": "CLAUDE_CODE_OAUTH_TOKEN",
+              "set": true
+            }
+          ],
+          "links": [
+            {
+              "kind": "url",
+              "label": "Claude Code authentication docs",
+              "target": "https://code.claude.com/docs/en/authentication"
+            }
+          ],
+          "result": {
+            "state": "ok",
+            "text": "CLAUDE_CODE_OAUTH_TOKEN set; no ANTHROPIC_API_KEY",
+            "at": "2026-11-11T09:30:00Z"
+          }
+        },
+        {
+          "id": "b1.vars",
+          "kind": "run",
+          "title": "Repository variables",
+          "detail": "MAX_AI_ATTEMPTS, SF_INSTANCE_URL_SANDBOX, SF_INSTANCE_URL_PROD, SF_AI_TESTER_IN_CI, SF_AI_TESTER_REF, SF_AI_TESTER_MODE from build.config.yml.",
+          "action": "Set variables",
+          "verify": true,
+          "links": []
+        },
+        {
+          "id": "b1.env",
+          "kind": "run",
+          "title": "Environment production",
+          "detail": "Creates the production environment (reviewers are added in B9).",
+          "action": "Create environment",
+          "verify": true,
+          "links": [],
+          "result": {
+            "state": "ok",
+            "text": "Environment production exists",
+            "at": "2026-11-11T09:30:00Z"
+          }
+        }
+      ],
+      "ready": false
+    },
+    {
+      "id": "B2",
+      "name": "Salesforce access",
+      "summary": "DEV and QA integration users with JWT; production by a person (HC-5).",
+      "status": "PARTIAL",
+      "kind": "partial",
+      "verified": "aliases only",
+      "evidence": "`sf alias list`",
+      "notes": "DEV and QA = SDO trial org salesOrgSDO (demo.user@example.com); CI JWT users not yet created",
+      "steps": [
+        {
+          "id": "b2.orgs",
+          "kind": "check",
+          "title": "Org aliases dev and qa",
+          "detail": "sf org display for both aliases (read-only).",
+          "verify": true,
+          "links": []
+        },
+        {
+          "id": "b2.keys",
+          "kind": "run",
+          "title": "Key pairs",
+          "detail": "Creates dev.key/dev.crt and qa.key/qa.crt in ~/.sfkeys with openssl (730 days). Existing keys are kept.",
+          "action": "Create keys",
+          "verify": false,
+          "links": []
+        },
+        {
+          "id": "b2.hc4",
+          "kind": "human",
+          "title": "Integration users and External Client Apps (DEV and QA)",
+          "detail": "Per sandbox: user ai-dev / ai-qa, permission set, External Client App with JWT and the .crt. You handle licence and MFA prompts.",
+          "hc": "HC-4",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "ai-dev: API, read, run tests, check-only deploys; nothing else",
+              "done": false
+            },
+            {
+              "text": "ai-qa: deploy, run tests, test-data DML",
+              "done": false
+            },
+            {
+              "text": "External Client App: OAuth, JWT bearer, .crt uploaded, admin-approved users pre-authorised",
+              "done": false
+            },
+            {
+              "text": "Consumer keys copied",
+              "done": false
+            }
+          ],
+          "links": [
+            {
+              "kind": "salesforce",
+              "label": "DEV users",
+              "target": "https://acme-demo.my.salesforce.com/lightning/setup/ManageUsers/home"
+            },
+            {
+              "kind": "salesforce",
+              "label": "DEV External Client Apps",
+              "target": "https://acme-demo.my.salesforce.com/lightning/setup/ManageExternalClientApplication/home"
+            },
+            {
+              "kind": "salesforce",
+              "label": "QA users",
+              "target": "https://acme-demo.my.salesforce.com/lightning/setup/ManageUsers/home"
+            },
+            {
+              "kind": "salesforce",
+              "label": "QA External Client Apps",
+              "target": "https://acme-demo.my.salesforce.com/lightning/setup/ManageExternalClientApplication/home"
+            }
+          ]
+        },
+        {
+          "id": "b2.secrets",
+          "kind": "secret",
+          "title": "DEV and QA secrets",
+          "detail": "Client ids and usernames typed; JWT keys picked from ~/.sfkeys (deleted afterwards if you agree; keep the .crt).",
+          "verify": true,
+          "secrets": [
+            {
+              "name": "SF_CLIENT_ID_DEV",
+              "set": false
+            },
+            {
+              "name": "SF_USERNAME_DEV",
+              "set": false
+            },
+            {
+              "name": "SF_JWT_KEY_DEV",
+              "set": false
+            },
+            {
+              "name": "SF_CLIENT_ID_QA",
+              "set": false
+            },
+            {
+              "name": "SF_USERNAME_QA",
+              "set": false
+            },
+            {
+              "name": "SF_JWT_KEY_QA",
+              "set": false
+            }
+          ],
+          "links": []
+        },
+        {
+          "id": "b2.hc5",
+          "kind": "human",
+          "title": "Production access (a person only)",
+          "detail": "The person with production rights follows docs/prod-access-steps.md and stores the three PROD secrets on the production environment. This extension never logs in to production.",
+          "hc": "HC-5",
+          "env": "production",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "Release user with deploy rights only",
+              "done": false
+            },
+            {
+              "text": "External Client App with its own certificate",
+              "done": false
+            },
+            {
+              "text": "Secrets stored on the production environment, not the repo",
+              "done": false
+            }
+          ],
+          "secrets": [
+            {
+              "name": "SF_CLIENT_ID_PROD",
+              "set": null
+            },
+            {
+              "name": "SF_USERNAME_PROD",
+              "set": null
+            },
+            {
+              "name": "SF_JWT_KEY_PROD",
+              "set": null
+            }
+          ],
+          "links": [
+            {
+              "kind": "github",
+              "label": "Environment secrets",
+              "target": "https://github.com/acme-org/salesDemoOrg/settings/environments"
+            }
+          ]
+        }
+      ],
+      "ready": false
+    },
+    {
+      "id": "B3",
+      "name": "Repo foundation",
+      "summary": "Installer on pipeline/foundation; persona MCP URLs; PR merged by a person.",
+      "status": "DONE (local)",
+      "kind": "done",
+      "verified": "guard checks run in repo",
+      "evidence": "commit 55be182 on pipeline/foundation",
+      "notes": "not pushed: no GitHub repo yet; workflows held for B8; MCP URLs still VERIFY",
+      "steps": [
+        {
+          "id": "b3.branch",
+          "kind": "run",
+          "title": "Branch pipeline/foundation",
+          "detail": "git switch -c pipeline/foundation (or switch to it).",
+          "action": "Switch branch",
+          "verify": true,
+          "links": []
+        },
+        {
+          "id": "b3.install",
+          "kind": "run",
+          "title": "Run the installer",
+          "detail": "install.mjs for real: CLAUDE.md, .claude/, CODEOWNERS, PR template, scripts/ci, .coderabbit.yaml, sf-config, workflows. Existing files are skipped.",
+          "action": "Install",
+          "verify": true,
+          "links": []
+        },
+        {
+          "id": "b3.mcp",
+          "kind": "run",
+          "title": "Persona MCP URLs",
+          "detail": "Replaces VERIFY placeholders in .claude/personas/*.mcp.json with the verified vendor URLs (Atlassian v2, Lucid, Fireflies, GitHub, Slack).",
+          "action": "Fill URLs",
+          "verify": true,
+          "links": []
+        },
+        {
+          "id": "b3.pr",
+          "kind": "human",
+          "title": "Commit, push and merge the foundation PR",
+          "detail": "Commit everything except .github/workflows/, push pipeline/foundation, open the PR. A person merges it.",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "Committed without .github/workflows/",
+              "done": false
+            },
+            {
+              "text": "PR opened",
+              "done": false
+            },
+            {
+              "text": "PR merged by a person",
+              "done": false
+            }
+          ],
+          "links": [
+            {
+              "kind": "github",
+              "label": "Pull requests",
+              "target": "https://github.com/acme-org/salesDemoOrg/pulls"
+            }
+          ]
+        }
+      ],
+      "ready": false
+    },
+    {
+      "id": "B4",
+      "name": "Spec Kit",
+      "summary": "specify init + spec-kit-sf v2.0.1; deploy skills removed; constitution.",
+      "status": "PARTIAL",
+      "kind": "partial",
+      "verified": "`specify extension list` shows sf 2.0.1",
+      "evidence": "commit 876212c on pipeline/speckit",
+      "notes": "deploy/hotfix/pr skills removed; constitution not yet generated",
+      "steps": [
+        {
+          "id": "b4.init",
+          "kind": "terminal",
+          "title": "specify init",
+          "detail": "specify init --here --integration claude --integration-options=--no-model-invocation",
+          "action": "Open terminal: specify init",
+          "verify": false,
+          "links": []
+        },
+        {
+          "id": "b4.ext",
+          "kind": "terminal",
+          "title": "spec-kit-sf extension",
+          "detail": "specify extension add sf --from the v2.0.1 release archive (confirm the URL in the terminal).",
+          "action": "Open terminal: add extension",
+          "verify": false,
+          "links": []
+        },
+        {
+          "id": "b4.skills",
+          "kind": "run",
+          "title": "Remove deploy skills",
+          "detail": "Deletes .claude/skills/speckit-sf-deploy, -hotfix and -pr (the guard blocks them anyway).",
+          "action": "Remove",
+          "verify": true,
+          "links": []
+        },
+        {
+          "id": "b4.check",
+          "kind": "check",
+          "title": "Spec Kit state",
+          "detail": ".specify/, extension sf, sf-config prod: \"none\", constitution present.",
+          "verify": true,
+          "links": []
+        },
+        {
+          "id": "b4.constitution",
+          "kind": "human",
+          "title": "Constitution",
+          "detail": "An Architect runs /speckit-sf-constitution against dev and appends the house rules as Article X; the Architect reviews and merges the PR.",
+          "action": "Start Architect session",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "Constitution generated",
+              "done": false
+            },
+            {
+              "text": "Article X added",
+              "done": false
+            },
+            {
+              "text": "PR merged by the Architect",
+              "done": false
+            }
+          ],
+          "links": []
+        }
+      ],
+      "ready": false
+    },
+    {
+      "id": "B5",
+      "name": "Jira",
+      "summary": "Service account, groups, fields, workflow, automation rules, GitHub for Jira.",
+      "status": "TODO",
+      "kind": "todo",
+      "verified": "",
+      "evidence": "",
+      "notes": "",
+      "steps": [
+        {
+          "id": "b5.hc6",
+          "kind": "human",
+          "title": "Jira service account token",
+          "detail": "Create the API token for delivery-bot and store it with the site URL and the bot email.",
+          "hc": "HC-6",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "Token created while signed in as the service account",
+              "done": false
+            },
+            {
+              "text": "Service account has project access",
+              "done": false
+            }
+          ],
+          "secrets": [
+            {
+              "name": "JIRA_API_TOKEN",
+              "set": false
+            },
+            {
+              "name": "JIRA_BASE_URL",
+              "set": false
+            },
+            {
+              "name": "JIRA_EMAIL",
+              "set": false
+            }
+          ],
+          "links": [
+            {
+              "kind": "jira",
+              "label": "Atlassian API tokens",
+              "target": "https://id.atlassian.com/manage-profile/security/api-tokens"
+            }
+          ]
+        },
+        {
+          "id": "b5.setup",
+          "kind": "human",
+          "title": "Groups, project, fields, workflow",
+          "detail": "Groups architects/developers/testers; company-managed project; custom fields; workflow with restricted transitions (Design Approved: architects; Ready for Dev: testers + Testability confirmed).",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "Fields: Spec file, Feature, Story type, Schema change, Persona, Test level, AC id, Testability confirmed, Acceptance criteria",
+              "done": false
+            },
+            {
+              "text": "Statuses Backlog to Done in order",
+              "done": false
+            },
+            {
+              "text": "Design Review to Design Approved: architects only",
+              "done": false
+            },
+            {
+              "text": "Design Approved to Ready for Dev: testers only",
+              "done": false
+            }
+          ],
+          "links": [
+            {
+              "kind": "jira",
+              "label": "Groups",
+              "target": "https://admin.atlassian.com/"
+            }
+          ]
+        },
+        {
+          "id": "b5.hc7",
+          "kind": "human",
+          "title": "Automation rules A and B",
+          "detail": "Rule A posts repository_dispatch with the key only; the fine-grained PAT goes into its header, typed by you. Rule B syncs statuses from the bot's comments.",
+          "hc": "HC-7",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "Rule A: trigger Ready for Dev, conditions ai-ready + Testability + blockers Done",
+              "done": false
+            },
+            {
+              "text": "Rule A: POST /repos/<org>/<repo>/dispatches with {event_type: jira-ready, client_payload: {key}}",
+              "done": false
+            },
+            {
+              "text": "Rule A: then transition to Plan Review",
+              "done": false
+            },
+            {
+              "text": "Rule B rows for every bot comment",
+              "done": false
+            }
+          ],
+          "links": [
+            {
+              "kind": "github",
+              "label": "New fine-grained PAT",
+              "target": "https://github.com/settings/personal-access-tokens/new"
+            }
+          ]
+        },
+        {
+          "id": "b5.app",
+          "kind": "human",
+          "title": "GitHub for Jira",
+          "detail": "Install the GitHub for Jira app and connect the organisation.",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "App installed on the org",
+              "done": false
+            },
+            {
+              "text": "Org connected in Jira",
+              "done": false
+            }
+          ],
+          "links": [
+            {
+              "kind": "github",
+              "label": "GitHub for Jira",
+              "target": "https://github.com/apps/jira"
+            }
+          ]
+        },
+        {
+          "id": "b5.discover",
+          "kind": "terminal",
+          "title": "Discover Jira ids",
+          "detail": "jira-sync.mjs discover writes .specify/extensions/jira/jira-config.json (your Jira credentials are passed through the environment).",
+          "action": "Open terminal: discover",
+          "verify": false,
+          "links": []
+        }
+      ],
+      "ready": false
+    },
+    {
+      "id": "B6",
+      "name": "Confluence, Lucid, Fireflies",
+      "summary": "Design space, Lucid for Confluence, Architect MCP sign-ins.",
+      "status": "TODO",
+      "kind": "todo",
+      "verified": "",
+      "evidence": "",
+      "notes": "",
+      "steps": [
+        {
+          "id": "b6.space",
+          "kind": "check",
+          "title": "Confluence space",
+          "detail": "The space from build.config.yml exists (REST with your Atlassian token).",
+          "verify": true,
+          "links": []
+        },
+        {
+          "id": "b6.hc",
+          "kind": "human",
+          "title": "Lucid and Fireflies for the Architect",
+          "detail": "Install Lucid for Confluence; the Architect signs in to the Lucid and Fireflies MCP servers once with /mcp.",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "Only architects can set pages to Approved",
+              "done": false
+            },
+            {
+              "text": "Lucid for Confluence installed",
+              "done": false
+            },
+            {
+              "text": "Architect signed in to Lucid and Fireflies MCP",
+              "done": false
+            }
+          ],
+          "links": [
+            {
+              "kind": "jira",
+              "label": "Lucid for Confluence",
+              "target": "https://marketplace.atlassian.com/search?query=lucid"
+            },
+            {
+              "kind": "lucid",
+              "label": "Lucid MCP",
+              "target": "https://help.lucid.co/hc/en-us/articles/42578801807508"
+            },
+            {
+              "kind": "fireflies",
+              "label": "Fireflies MCP",
+              "target": "https://docs.fireflies.ai/getting-started/mcp-configuration"
+            }
+          ]
+        }
+      ],
+      "ready": false
+    },
+    {
+      "id": "B7",
+      "name": "Slack",
+      "summary": "Gate channels and one incoming webhook per channel.",
+      "status": "TODO",
+      "kind": "todo",
+      "verified": "",
+      "evidence": "",
+      "notes": "",
+      "steps": [
+        {
+          "id": "b7.hc",
+          "kind": "human",
+          "title": "Slack app Delivery Gates",
+          "detail": "Channels #arch-gate, #dev-gate, #qa-gate; one Slack app with an incoming webhook per channel. Paste each URL into the password box; it goes straight to GitHub.",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "Three channels created",
+              "done": false
+            },
+            {
+              "text": "App Delivery Gates created",
+              "done": false
+            },
+            {
+              "text": "Incoming webhooks on, one per channel",
+              "done": false
+            }
+          ],
+          "secrets": [
+            {
+              "name": "SLACK_WEBHOOK_ARCH",
+              "set": false
+            },
+            {
+              "name": "SLACK_WEBHOOK_DEV",
+              "set": false
+            },
+            {
+              "name": "SLACK_WEBHOOK_QA",
+              "set": false
+            }
+          ],
+          "links": [
+            {
+              "kind": "slack",
+              "label": "Slack apps",
+              "target": "https://api.slack.com/apps"
+            }
+          ]
+        }
+      ],
+      "ready": false
+    },
+    {
+      "id": "B8",
+      "name": "Workflows and CodeRabbit",
+      "summary": "Workflows on pipeline/workflows, actionlint clean, CodeRabbit on this repo.",
+      "status": "TODO",
+      "kind": "todo",
+      "verified": "",
+      "evidence": "",
+      "notes": "",
+      "steps": [
+        {
+          "id": "b8.branch",
+          "kind": "run",
+          "title": "Branch pipeline/workflows",
+          "detail": "git switch -c pipeline/workflows (or switch to it).",
+          "action": "Switch branch",
+          "verify": true,
+          "links": []
+        },
+        {
+          "id": "b8.lint",
+          "kind": "check",
+          "title": "actionlint",
+          "detail": "actionlint on .github/workflows/*.yml must be clean.",
+          "verify": true,
+          "links": []
+        },
+        {
+          "id": "b8.coderabbit",
+          "kind": "human",
+          "title": "Install CodeRabbit",
+          "detail": "Install the CodeRabbit GitHub App on this repository only. Its reviews appear as review signals on every PR.",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "Installed on this repository only",
+              "done": false
+            }
+          ],
+          "links": [
+            {
+              "kind": "github",
+              "label": "Install CodeRabbit",
+              "target": "https://github.com/apps/coderabbitai/installations/new"
+            }
+          ]
+        },
+        {
+          "id": "b8.pr",
+          "kind": "human",
+          "title": "Workflows PR",
+          "detail": "Push pipeline/workflows and open the PR; the Architect merges it (CODEOWNERS covers .github/).",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "All workflows visible in Actions",
+              "done": false
+            },
+            {
+              "text": "CodeRabbit commented on the PR",
+              "done": false
+            },
+            {
+              "text": "Merged by the Architect",
+              "done": false
+            }
+          ],
+          "links": [
+            {
+              "kind": "github",
+              "label": "Actions",
+              "target": "https://github.com/acme-org/salesDemoOrg/actions"
+            },
+            {
+              "kind": "github",
+              "label": "Pull requests",
+              "target": "https://github.com/acme-org/salesDemoOrg/pulls"
+            }
+          ]
+        }
+      ],
+      "ready": false
+    },
+    {
+      "id": "B9",
+      "name": "Protect main and production",
+      "summary": "Rulesets (HC-8), production reviewers, tag ruleset.",
+      "status": "TODO",
+      "kind": "todo",
+      "verified": "",
+      "evidence": "",
+      "notes": "",
+      "steps": [
+        {
+          "id": "b9.rulesets",
+          "kind": "run",
+          "title": "Rulesets for main",
+          "detail": "circuit-main-gates (PRs, code owners, required checks guard static qa spec-gate gate/*) and circuit-merge-architects-only. You review both payloads before they are created.",
+          "hc": "HC-8",
+          "action": "Review and create",
+          "verify": true,
+          "links": []
+        },
+        {
+          "id": "b9.env",
+          "kind": "run",
+          "title": "Production reviewers",
+          "detail": "Environment production: required reviewers = team architects, prevent self-review, deployments from main only.",
+          "action": "Protect environment",
+          "verify": true,
+          "links": []
+        },
+        {
+          "id": "b9.tag",
+          "kind": "human",
+          "title": "Tag ruleset prod-deployed",
+          "detail": "A tag ruleset for prod-deployed with the GitHub App as the only bypass actor.",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "Target: tags matching prod-deployed",
+              "done": false
+            },
+            {
+              "text": "Bypass: the circuit GitHub App only",
+              "done": false
+            }
+          ],
+          "links": [
+            {
+              "kind": "github",
+              "label": "New tag ruleset",
+              "target": "https://github.com/acme-org/salesDemoOrg/settings/rules/new?target=tag"
+            }
+          ]
+        }
+      ],
+      "ready": false
+    },
+    {
+      "id": "B10",
+      "name": "Persona workstations",
+      "summary": "Every person: this extension, their connections, MCP sign-ins.",
+      "status": "TODO",
+      "kind": "todo",
+      "verified": "",
+      "evidence": "",
+      "notes": "",
+      "steps": [
+        {
+          "id": "b10.people",
+          "kind": "human",
+          "title": "Each person connects",
+          "detail": "Each person opens Delivery Circuit, connects GitHub, Claude and their tools on the Connections page, and signs in to the MCP servers once with /mcp in a persona terminal.",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "Architects connected",
+              "done": false
+            },
+            {
+              "text": "Developers connected",
+              "done": false
+            },
+            {
+              "text": "Testers connected",
+              "done": false
+            },
+            {
+              "text": "Each ran a first command",
+              "done": false
+            }
+          ],
+          "links": [
+            {
+              "kind": "github",
+              "label": "Team members",
+              "target": "https://github.com/organizations/acme-org/teams"
+            }
+          ]
+        }
+      ],
+      "ready": false
+    },
+    {
+      "id": "B11",
+      "name": "Dry run",
+      "summary": "Whole circuit on a made-up feature with people at every gate (HC-9).",
+      "status": "TODO",
+      "kind": "todo",
+      "verified": "",
+      "evidence": "",
+      "notes": "",
+      "steps": [
+        {
+          "id": "b11.vars",
+          "kind": "run",
+          "title": "Dry-run settings",
+          "detail": "DEPLOY_ENVIRONMENT=production-dryrun (environment holding QA secrets under the PROD names) and AI_LOOP_DRY_RUN=false.",
+          "action": "Set dry-run variables",
+          "verify": true,
+          "links": []
+        },
+        {
+          "id": "b11.hc9",
+          "kind": "human",
+          "title": "Run the circuit end to end",
+          "detail": "Push inputs/transcripts/000-sample-case-escalation.md on intake/sample and take it through every gate.",
+          "hc": "HC-9",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "spec-gate red until G1 by an architect",
+              "done": false
+            },
+            {
+              "text": "Jira epic, Story 00, stories; second push creates nothing",
+              "done": false
+            },
+            {
+              "text": "Test cases per AC linked in Jira",
+              "done": false
+            },
+            {
+              "text": "Rule A fires only after Story 00 Done and G2",
+              "done": false
+            },
+            {
+              "text": "Draft PR has only PLAN.md and TESTPLAN.md",
+              "done": false
+            },
+            {
+              "text": "Build starts only after both labels by the right teams",
+              "done": false
+            },
+            {
+              "text": "Removing a TC reference fails static",
+              "done": false
+            },
+            {
+              "text": "Forced failure: 3 attempts then needs-human",
+              "done": false
+            },
+            {
+              "text": "Blocked AI-tester case gives needs-qa",
+              "done": false
+            },
+            {
+              "text": "Merge is architect-only; deploy waits for approval",
+              "done": false
+            }
+          ],
+          "links": [
+            {
+              "kind": "github",
+              "label": "Pull requests",
+              "target": "https://github.com/acme-org/salesDemoOrg/pulls?q=is%3Apr+head%3Aintake%2Fsample"
+            },
+            {
+              "kind": "github",
+              "label": "Actions",
+              "target": "https://github.com/acme-org/salesDemoOrg/actions"
+            }
+          ]
+        },
+        {
+          "id": "b11.cleanup",
+          "kind": "run",
+          "title": "Clean up",
+          "detail": "Sets DEPLOY_ENVIRONMENT back (removes the variable). Close dry-run issues and delete branches yourself; keep the PRs.",
+          "action": "Reset variables",
+          "verify": true,
+          "links": []
+        }
+      ],
+      "ready": false
+    },
+    {
+      "id": "B12",
+      "name": "Go live",
+      "summary": "One small real feature; retro per persona; mark the bootstrap COMPLETE.",
+      "status": "TODO",
+      "kind": "todo",
+      "verified": "",
+      "evidence": "",
+      "notes": "",
+      "steps": [
+        {
+          "id": "b12.live",
+          "kind": "human",
+          "title": "First real feature",
+          "detail": "One small feature with transcripts.source: file. People act at every gate. Then a retro per persona.",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "Feature delivered through every gate",
+              "done": false
+            },
+            {
+              "text": "Retro notes folded into constitution, CLAUDE.md, .coderabbit.yaml",
+              "done": false
+            }
+          ],
+          "links": []
+        }
+      ],
+      "ready": false
+    }
+  ],
+  "config": {
+    "exists": true,
+    "fields": [
+      {
+        "key": "github.org",
+        "label": "GitHub organisation",
+        "type": "text"
+      },
+      {
+        "key": "github.repo",
+        "label": "Repository",
+        "type": "text"
+      },
+      {
+        "key": "github.default_branch",
+        "label": "Default branch",
+        "type": "text"
+      },
+      {
+        "key": "people.architects",
+        "label": "Architects",
+        "type": "people",
+        "hint": "One per line: GitHub login, Atlassian email, Slack handle"
+      },
+      {
+        "key": "people.developers",
+        "label": "Developers",
+        "type": "people",
+        "hint": "One per line: GitHub login, Atlassian email, Slack handle"
+      },
+      {
+        "key": "people.testers",
+        "label": "Testers",
+        "type": "people",
+        "hint": "One per line: GitHub login, Atlassian email, Slack handle"
+      },
+      {
+        "key": "jira.site",
+        "label": "Jira site",
+        "type": "url",
+        "hint": "https://<site>.atlassian.net"
+      },
+      {
+        "key": "jira.project_key",
+        "label": "Jira project key",
+        "type": "text"
+      },
+      {
+        "key": "jira.test_tool",
+        "label": "Jira test tool",
+        "type": "select",
+        "options": [
+          "none",
+          "xray",
+          "zephyr"
+        ]
+      },
+      {
+        "key": "confluence.space_key",
+        "label": "Confluence space key",
+        "type": "text"
+      },
+      {
+        "key": "salesforce.dev_sandbox_url",
+        "label": "DEV sandbox URL",
+        "type": "url"
+      },
+      {
+        "key": "salesforce.qa_sandbox_url",
+        "label": "QA sandbox URL",
+        "type": "url"
+      },
+      {
+        "key": "salesforce.prod_url",
+        "label": "Production URL",
+        "type": "text",
+        "hint": "URL, or none"
+      },
+      {
+        "key": "salesforce.api_version",
+        "label": "API version",
+        "type": "text"
+      },
+      {
+        "key": "slack.workspace",
+        "label": "Slack workspace",
+        "type": "text"
+      },
+      {
+        "key": "slack.channels.arch",
+        "label": "Architect channel",
+        "type": "text"
+      },
+      {
+        "key": "slack.channels.dev",
+        "label": "Developer channel",
+        "type": "text"
+      },
+      {
+        "key": "slack.channels.qa",
+        "label": "Tester channel",
+        "type": "text"
+      },
+      {
+        "key": "transcripts.source",
+        "label": "Transcript source",
+        "type": "select",
+        "options": [
+          "file",
+          "fireflies",
+          "both"
+        ]
+      },
+      {
+        "key": "ai.max_attempts",
+        "label": "Max AI attempts",
+        "type": "number"
+      },
+      {
+        "key": "ai.sf_ai_tester_in_ci",
+        "label": "SF AI Tester in CI",
+        "type": "bool"
+      },
+      {
+        "key": "ai.sf_ai_tester_ref",
+        "label": "SF AI Tester commit",
+        "type": "text"
+      },
+      {
+        "key": "ai.sf_ai_tester_mode",
+        "label": "SF AI Tester mode",
+        "type": "select",
+        "options": [
+          "manual",
+          "automation",
+          "both"
+        ]
+      }
+    ],
+    "values": {
+      "github.org": "acme-org",
+      "github.repo": "salesDemoOrg",
+      "github.default_branch": "main",
+      "people.architects": "",
+      "people.developers": "",
+      "people.testers": "",
+      "jira.site": "https://<site>.atlassian.net",
+      "jira.project_key": "ABC",
+      "jira.test_tool": "none",
+      "confluence.space_key": "SD",
+      "salesforce.dev_sandbox_url": "https://acme-demo.my.salesforce.com",
+      "salesforce.qa_sandbox_url": "https://acme-demo.my.salesforce.com",
+      "salesforce.prod_url": "none",
+      "salesforce.api_version": "66.0",
+      "slack.workspace": "<name>",
+      "slack.channels.arch": "arch-gate",
+      "slack.channels.dev": "dev-gate",
+      "slack.channels.qa": "qa-gate",
+      "transcripts.source": "file",
+      "ai.max_attempts": "3",
+      "ai.sf_ai_tester_in_ci": "false",
+      "ai.sf_ai_tester_ref": "8a5b5c276901e1d6bf3a764015da0d3bf1cf0b78",
+      "ai.sf_ai_tester_mode": "manual"
+    },
+    "errors": []
+  }
+}

@@ -73,6 +73,7 @@ AI attempts.
 | Path | What it is |
 |---|---|
 | [`sf-delivery-circuit/`](sf-delivery-circuit/) | **The plugin**: personas, skills, guard hook, templates ([details](sf-delivery-circuit/README.md)) |
+| [`delivery-circuit-extension/`](delivery-circuit-extension/) | **The VS Code extension**: persona views, connections (including the review tools), Circuit MCP, AI testing and the setup wizard in one place ([details](delivery-circuit-extension/README.md)) |
 | [`AgenticImplementation.md`](AgenticImplementation.md) | The build runbook: phases B0–B12 and human checkpoints HC-1…HC-9 |
 | [`CredentialsSetup.md`](CredentialsSetup.md) | Step-by-step screens for every credential (GitHub App, Salesforce JWT, Jira, Slack, Claude token) |
 | [`AgenticImplementation.v1.md`](AgenticImplementation.v1.md) | The original pipeline design (history) |
@@ -97,8 +98,10 @@ For local development, run `claude --plugin-dir ./sf-delivery-circuit`.
    records progress in `build-state.md`.
 2. **Each person, once:** `./scripts/setup-persona.sh architect|developer|tester`. This adds the `cc-arch`, `cc-dev`
    and `cc-qa` commands and signs in to the sandboxes. It never signs in to production.
-3. **Start a feature:** drop a transcript in `inputs/transcripts/` on an `intake/<name>` branch, or run
-   `/circuit-intake <file>` as the Architect.
+3. **Start a feature:** as the Architect, add the call in the Delivery Circuit extension (a Fireflies meeting, or a
+   file upload stored encrypted on your machine), then run `/circuit-intake <sourceId>`. Claude reads the transcript
+   through the Circuit MCP (`transcript_get`, Architect only); transcripts never enter git, and the spec cites
+   `source: fireflies:<id>` or `source: upload:<id>`.
 4. **Anytime:** `/circuit` shows the map and tells you where any feature or Jira story stands and who acts next.
 
 ## Skills
@@ -127,7 +130,6 @@ disabled because CI and the no-AI release workflow handle those.
 
 | Workflow | Trigger | Does |
 |---|---|---|
-| `spec-from-transcript` | push to `intake/**` | AI drafts the spec and opens a draft spec PR; pings `#arch-gate` |
 | `spec-gate` | every PR | Enforces G1: no open questions, sign-off ticked **by an architects member**, Story 00 present |
 | `claude-plan` | Jira Rule A (`jira-ready`) | AI writes PLAN.md + TESTPLAN.md; checks every test case is planned at its level |
 | `persona-gates` | label / review | Only `developers` can set `plan-approved`, only `testers` can set `testplan-approved`; approvals become `gate/*` statuses |
@@ -154,7 +156,7 @@ disabled because CI and the no-AI release workflow handle those.
 The plugin, its templates and its tests are built and checked locally:
 
 - guard policy tests: 52/52 pass (`node sf-delivery-circuit/tests/guard.test.mjs`);
-- all 8 workflows pass `actionlint`; the CI scripts pass `shellcheck`;
+- all 7 workflows pass `actionlint`; the CI scripts pass `shellcheck`;
 - the installer was tested on a scratch repo, including re-runs (idempotent, merges existing settings).
 
 Not yet run end to end against live systems: that is runbook phase B11 (dry run). Items marked **VERIFY** (action

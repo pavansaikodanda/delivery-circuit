@@ -21,6 +21,8 @@ export interface Identity {
   repo: string;
   /** True when the repo is owned by an organisation (teams exist), false for a personal account. */
   orgOwned: boolean;
+  /** Why personas are missing or incomplete (not in a persona team, personal repo without personaOverride, ...). */
+  notice?: string;
 }
 
 /** Architect sees every persona view; Developer and Tester see only their own. */
@@ -90,6 +92,20 @@ export interface ConnectionsService {
   repoSecretNames(): Promise<string[]>;
   /** Encrypt (libsodium sealed box, repo public key) and store an Actions secret; env = environment name for env secrets. */
   setRepoSecret(name: string, value: string, env?: string): Promise<void>;
+  /** Secrets the circuit's workflows need (CI secrets, Slack webhooks, environment secrets) and whether each exists.
+   *  present is undefined when the person can't list secrets (needs repo admin). */
+  projectSecrets(): Promise<ProjectSecret[]>;
+}
+
+export interface ProjectSecret {
+  name: string;
+  /** "ci" | "webhook" | ... (what the secret is for) */
+  kind: string;
+  present?: boolean;
+  /** GitHub environment, for environment secrets */
+  env?: string;
+  /** True when a build-state.md reminder says it expires within 30 days */
+  expiring?: boolean;
 }
 
 // ---------- project context (Spec Kit, GitHub, Jira, sources) ----------
@@ -183,6 +199,8 @@ export interface PrRef {
   featureId?: string;
   aiAttempt?: number;
   updatedAt: string;
+  state?: "open" | "merged" | "closed";
+  mergedAt?: string;
 }
 
 export interface QueueItem {
@@ -246,6 +264,8 @@ export interface SuiteSummary {
   cases: number;
   last?: Partial<Record<TestStatus, number>>;
   storyKey?: string;
+  /** Set when the suite file fails to load or validate. */
+  error?: string;
 }
 
 export interface RunRequest { suite: string; caseIds?: string[]; mode: TestMode; orgRole: "dev" | "qa" }
@@ -257,6 +277,8 @@ export interface RunSummary {
   counts: Record<TestStatus, number>;
   route: "pass" | "dev" | "qa" | "infra";
   reportPath: string;        // workspace-relative report.html
+  startedAt?: string;        // ISO
+  org?: string;              // sf alias the run used
 }
 
 export interface TestingService {
@@ -269,12 +291,19 @@ export interface TestingService {
 
 // ---------- actions and sessions ----------
 export interface ActionRef {
-  id: string;                // e.g. "ai:/dev-review-plan", "gate:label:plan-approved", "nav:open"
+  /** Grammar (src/actions/grammar.ts): "ai:<skill command>" (e.g. "ai:/dev-review-plan"), "gate:label" or
+   *  "gate:label:<label>", "gate:review", "gate:merge", "gate:signoff", "gate:deploy", "nav:feature", "nav:testing". */
+  id: string;
   label: string;
   persona: Persona;
   kind: "ai" | "gate" | "nav";
+  /** AI actions: {command, argKind?: "feature"|"pr"|"source", arg?, intent?}. nav:feature: {featureId}. nav:testing: {suite?}. */
   args?: Record<string, string | number>;
 }
+
+/** Argument shapes of the cross-module commands. */
+export interface OpenPersonaOptions { featureId?: string }
+export interface OpenTestingOptions { suite?: string }
 
 export interface ActionsService {
   /** Runs an action as the current identity. Gate actions confirm first and use the person's own GitHub token. */

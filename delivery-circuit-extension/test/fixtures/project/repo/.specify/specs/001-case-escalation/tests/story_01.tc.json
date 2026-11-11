@@ -1,0 +1,33 @@
+{
+  "feature": "001-case-escalation",
+  "story": "01",
+  "cases": [
+    {
+      "id": "S01-TC-01",
+      "ac": "AC-01.1",
+      "title": "Agent escalates a Case with a reason",
+      "level": "ui",
+      "persona": "Support Agent",
+      "type": "positive",
+      "automated": true
+    },
+    {
+      "id": "S01-TC-02",
+      "ac": "AC-01.3",
+      "title": "Closed Case has no Escalate action",
+      "level": "ui",
+      "persona": "Support Agent",
+      "type": "negative",
+      "automated": true
+    },
+    {
+      "id": "S01-TC-03",
+      "ac": "AC-01.1",
+      "title": "Escalation service bulk-updates 201 Cases",
+      "level": "unit",
+      "persona": "System",
+      "type": "boundary",
+      "automated": true
+    }
+  ]
+}

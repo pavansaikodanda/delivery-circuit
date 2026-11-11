@@ -1,0 +1,13 @@
+{
+  "suite": "Smoke - Account",
+  "org": "qa",
+  "results": [
+    {
+      "id": "SMOKE-ACC-001",
+      "title": "Create a Business Account",
+      "mode": "manual",
+      "status": "blocked",
+      "summary": "No permission"
+    }
+  ]
+}

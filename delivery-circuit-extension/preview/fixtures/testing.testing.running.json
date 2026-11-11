@@ -1,0 +1,411 @@
+{
+ "persona": {
+  "login": "maria-qa",
+  "active": "tester",
+  "canSee": true,
+  "canRun": true
+ },
+ "busy": "run",
+ "settings": {
+  "headless": true,
+  "models": [
+   "claude-haiku-4-5",
+   "claude-sonnet-5-5"
+  ],
+  "workers": 2,
+  "maxTurns": 80
+ },
+ "orgs": [
+  {
+   "role": "qa",
+   "alias": "qa",
+   "links": [
+    {
+     "kind": "salesforce",
+     "label": "Org",
+     "target": "https://acme-demo.lightning.force.com/lightning/page/home"
+    }
+   ]
+  },
+  {
+   "role": "dev",
+   "alias": "dev",
+   "links": [
+    {
+     "kind": "salesforce",
+     "label": "Org",
+     "target": "https://acme-demo.lightning.force.com/lightning/page/home"
+    }
+   ]
+  }
+ ],
+ "suites": [
+  {
+   "key": "test-cases/smoke-account.sf-tests.yaml",
+   "name": "Smoke - Account",
+   "cases": 2,
+   "last": {
+    "passed": 2
+   },
+   "notRun": 0,
+   "storyKey": "SDO-12",
+   "links": [
+    {
+     "kind": "file",
+     "label": "Suite file",
+     "target": "test-cases/smoke-account.sf-tests.yaml"
+    },
+    {
+     "kind": "jira",
+     "label": "SDO-12",
+     "target": "https://acme.atlassian.net/browse/SDO-12"
+    }
+   ]
+  }
+ ],
+ "selected": "test-cases/smoke-account.sf-tests.yaml",
+ "detail": {
+  "key": "test-cases/smoke-account.sf-tests.yaml",
+  "name": "Smoke - Account",
+  "context": "Acme Shipping SDO trial org (Enterprise Edition, Lightning Experience), used as both DEV and QA for the\ndelivery circuit. Tests run as the connected admin user (demo.user@example.com).\nAccount record types: Business Account (default) and Person Account. No validation rules or record-triggered flows\non Account. The \"Standard Account Duplicate Rule\" is active, so created names carry a unique suffix.\nPurpose: proves the SF AI Tester CLI runs end to end from the circuit (login through the sf CLI, browser, verdict).\n",
+  "storyKey": "SDO-12",
+  "links": [
+   {
+    "kind": "file",
+    "label": "Suite file",
+    "target": "test-cases/smoke-account.sf-tests.yaml"
+   },
+   {
+    "kind": "jira",
+    "label": "SDO-12",
+    "target": "https://acme.atlassian.net/browse/SDO-12"
+   }
+  ],
+  "cases": [
+   {
+    "id": "SMOKE-ACC-001",
+    "title": "Create a Business Account with a name and type",
+    "section": "Smoke",
+    "target": "salesforce",
+    "steps": 6,
+    "jiraKey": "SDO-31",
+    "manual": {
+     "status": "passed",
+     "summary": "Replayed 11 recorded actions in 45s; AI checked the results: SMOKE-ACC-001 replayed successfully. Account \"AI-TEST Smoke 002\" was created with Type \"Prospect\" and detail page displays correctly.",
+     "at": "2026-11-11T07:28:00.349Z",
+     "model": "claude-haiku-4-5",
+     "defects": 0,
+     "stale": false,
+     "specFile": "SMOKE-ACC-001: Create a Business Account with a name and type"
+    },
+    "links": [
+     {
+      "kind": "jira",
+      "label": "SDO-31",
+      "target": "https://acme.atlassian.net/browse/SDO-31"
+     }
+    ]
+   },
+   {
+    "id": "SMOKE-ACC-002",
+    "title": "The \"GFS Customers\" list view opens on the Accounts tab",
+    "section": "Smoke",
+    "target": "salesforce",
+    "steps": 2,
+    "jiraKey": "SDO-32",
+    "manual": {
+     "status": "passed",
+     "summary": "Test case SMOKE-ACC-002 passed successfully. The GFS Customers list view opened correctly with proper header display and 13 account records shown with no errors.",
+     "at": "2026-11-11T07:28:45.556Z",
+     "model": "claude-haiku-4-5",
+     "defects": 0,
+     "stale": false,
+     "specFile": "SMOKE-ACC-002"
+    },
+    "links": [
+     {
+      "kind": "jira",
+      "label": "SDO-32",
+      "target": "https://acme.atlassian.net/browse/SDO-32"
+     }
+    ]
+   }
+  ]
+ },
+ "live": {
+  "running": true,
+  "done": 1,
+  "results": [
+   {
+    "caseId": "SMOKE-ACC-002",
+    "mode": "manual",
+    "status": "passed",
+    "summary": "List view header shows GFS Customers; table rendered."
+   }
+  ],
+  "log": [
+   "Run 11/11/2026, 10:02:11 - Smoke - Account: 2 case(s), manual, org qa",
+   "Org metadata: reading Account (cached for 24h)...",
+   "Org metadata ready: 1 object(s), 0 active validation rule(s).",
+   "Reusing saved session for qa (https://acme-demo.lightning.force.com)",
+   "Running 2 case(s) on 2 parallel workers (2 chain(s)).",
+   "[W2] === SMOKE-ACC-002 [manual] The \"GFS Customers\" list view opens on the Accounts tab (model: claude-haiku-4-5)",
+   "[W2]   -> browser:browser_navigate {\"url\":\"https://acme-demo.lightning.force.com/lightning/o/Account/list\"}",
+   "[W1]   -> browser:browser_click {\"target\":\"getByRole('button', { name: 'New' })\"}",
+   "[W1]   -> browser:browser_fill_form {\"fields\":[{\"name\":\"Account Name\",\"value\":\"AI-TEST Smoke 1762855331\"}]}"
+  ],
+  "suite": "test-cases/smoke-account.sf-tests.yaml",
+  "mode": "manual",
+  "orgRole": "qa",
+  "total": 2,
+  "startedAt": "2026-11-11T07:32:07.447Z",
+  "current": {
+   "caseId": "SMOKE-ACC-001",
+   "mode": "manual",
+   "model": "claude-haiku-4-5"
+  }
+ },
+ "result": {
+  "id": "2026-11-11T07-26-29-202Z",
+  "suite": "Smoke - Account",
+  "startedAt": "2026-11-11T07:26:29.202Z",
+  "org": "qa",
+  "total": 2,
+  "counts": {
+   "passed": 2,
+   "failed": 0,
+   "blocked": 0,
+   "error": 0
+  },
+  "route": "pass",
+  "links": [
+   {
+    "kind": "report",
+    "label": "Report",
+    "target": ".sf-ai-tester/runs/2026-11-11T07-26-29-202Z/report.html"
+   },
+   {
+    "kind": "file",
+    "label": "results.json",
+    "target": ".sf-ai-tester/runs/2026-11-11T07-26-29-202Z/results.json"
+   },
+   {
+    "kind": "salesforce",
+    "label": "Org",
+    "target": "https://acme-demo.lightning.force.com/lightning/page/home"
+   }
+  ],
+  "cases": [
+   {
+    "id": "SMOKE-ACC-001",
+    "title": "Create a Business Account with a name and type",
+    "mode": "manual",
+    "status": "passed",
+    "summary": "Replayed 11 recorded actions in 45s; AI checked the results: SMOKE-ACC-001 replayed successfully. Account \"AI-TEST Smoke 002\" was created with Type \"Prospect\" and detail page displays correctly.",
+    "model": "claude-haiku-4-5",
+    "durationSec": 90,
+    "costUsd": 0.06,
+    "steps": [
+     {
+      "step": "1. Open the Accounts tab",
+      "status": "passed",
+      "actual": "Replayed from recording: Accounts tab opened"
+     },
+     {
+      "step": "2. Click \"New\"",
+      "status": "passed",
+      "actual": "Replayed from recording: New Account button clicked"
+     },
+     {
+      "step": "3. If a record type choice appears, select \"Business Account\" and click \"Next\"",
+      "status": "passed",
+      "actual": "Replayed from recording: Business Account record type selected and Next clicked"
+     },
+     {
+      "step": "4. Enter \"AI-TEST Smoke <unique suffix>\" in \"Account Name\"",
+      "status": "passed",
+      "actual": "Replayed from recording: Account Name \"AI-TEST Smoke 002\" entered"
+     },
+     {
+      "step": "5. Select \"Prospect\" in \"Type\"",
+      "status": "passed",
+      "actual": "Replayed from recording: Type \"Prospect\" selected"
+     },
+     {
+      "step": "6. Click \"Save\"",
+      "status": "passed",
+      "actual": "Replayed from recording: Save button clicked, detail page opened"
+     }
+    ],
+    "attempts": [
+     {
+      "model": "replay + claude-haiku-4-5",
+      "status": "passed"
+     }
+    ],
+    "defects": [],
+    "evidence": [
+     {
+      "name": "SMOKE-ACC-001-final.png",
+      "uri": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22160%22%20height%3D%2296%22%3E%3Crect%20width%3D%22160%22%20height%3D%2296%22%20fill%3D%22%232a2d2e%22%2F%3E%3Crect%20x%3D%228%22%20y%3D%228%22%20width%3D%22144%22%20height%3D%2212%22%20fill%3D%22%233c3c3c%22%2F%3E%3Crect%20x%3D%228%22%20y%3D%2228%22%20width%3D%2290%22%20height%3D%228%22%20fill%3D%22%233c3c3c%22%2F%3E%3Crect%20x%3D%228%22%20y%3D%2242%22%20width%3D%22120%22%20height%3D%228%22%20fill%3D%22%233c3c3c%22%2F%3E%3C%2Fsvg%3E",
+      "link": {
+       "kind": "file",
+       "label": "SMOKE-ACC-001-final.png",
+       "target": ".sf-ai-tester/runs/2026-11-11T07-26-29-202Z/evidence/SMOKE-ACC-001-manual/SMOKE-ACC-001-final.png"
+      }
+     }
+    ],
+    "links": [
+     {
+      "kind": "jira",
+      "label": "SDO-31",
+      "target": "https://acme.atlassian.net/browse/SDO-31"
+     }
+    ]
+   },
+   {
+    "id": "SMOKE-ACC-002",
+    "title": "The \"GFS Customers\" list view opens on the Accounts tab",
+    "mode": "manual",
+    "status": "passed",
+    "summary": "Test case SMOKE-ACC-002 passed successfully. The GFS Customers list view opened correctly with proper header display and 13 account records shown with no errors.",
+    "model": "claude-haiku-4-5",
+    "durationSec": 135,
+    "costUsd": 0.21,
+    "steps": [
+     {
+      "step": "Open the Accounts tab",
+      "status": "passed",
+      "actual": "Accounts tab opened successfully at /lightning/o/Account/list displaying the Recently Viewed list view with 5 items"
+     },
+     {
+      "step": "Select the \"GFS Customers\" list view",
+      "status": "passed",
+      "actual": "GFS Customers list view opened successfully. Header displays 'Accounts GFS Customers'. Table shows 13 customer accounts (Atlas Maritime Lines, Cedar Forwarders, CMA CGM Mediterranean, Cosco Shipping Lines UAE, DSV Air & Sea UAE, Emirates Shipping Lines, Falcon Lines LLC, Hapag-Lloyd Middle East, Kuehne+Nagel UAE, Maersk Line UAE, MSC Gulf, ONE Network UAE, Sahara Logistics) with no error messages"
+     }
+    ],
+    "attempts": [
+     {
+      "model": "claude-haiku-4-5",
+      "status": "passed"
+     }
+    ],
+    "defects": [],
+    "evidence": [
+     {
+      "name": "SMOKE-ACC-002-step2.png",
+      "uri": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22160%22%20height%3D%2296%22%3E%3Crect%20width%3D%22160%22%20height%3D%2296%22%20fill%3D%22%232a2d2e%22%2F%3E%3Crect%20x%3D%228%22%20y%3D%228%22%20width%3D%22144%22%20height%3D%2212%22%20fill%3D%22%233c3c3c%22%2F%3E%3Crect%20x%3D%228%22%20y%3D%2228%22%20width%3D%2290%22%20height%3D%228%22%20fill%3D%22%233c3c3c%22%2F%3E%3Crect%20x%3D%228%22%20y%3D%2242%22%20width%3D%22120%22%20height%3D%228%22%20fill%3D%22%233c3c3c%22%2F%3E%3C%2Fsvg%3E",
+      "link": {
+       "kind": "file",
+       "label": "SMOKE-ACC-002-step2.png",
+       "target": ".sf-ai-tester/runs/2026-11-11T07-26-29-202Z/evidence/SMOKE-ACC-002-manual/SMOKE-ACC-002-step2.png"
+      }
+     }
+    ],
+    "links": [
+     {
+      "kind": "jira",
+      "label": "SDO-32",
+      "target": "https://acme.atlassian.net/browse/SDO-32"
+     }
+    ]
+   }
+  ],
+  "routeText": "Pass: every case passed"
+ },
+ "runs": [
+  {
+   "id": "2026-11-11T07-26-29-202Z",
+   "suite": "Smoke - Account",
+   "startedAt": "2026-11-11T07:26:29.202Z",
+   "org": "qa",
+   "total": 2,
+   "counts": {
+    "passed": 2,
+    "failed": 0,
+    "blocked": 0,
+    "error": 0
+   },
+   "route": "pass",
+   "links": [
+    {
+     "kind": "report",
+     "label": "Report",
+     "target": ".sf-ai-tester/runs/2026-11-11T07-26-29-202Z/report.html"
+    },
+    {
+     "kind": "file",
+     "label": "results.json",
+     "target": ".sf-ai-tester/runs/2026-11-11T07-26-29-202Z/results.json"
+    },
+    {
+     "kind": "salesforce",
+     "label": "Org",
+     "target": "https://acme-demo.lightning.force.com/lightning/page/home"
+    }
+   ]
+  },
+  {
+   "id": "2026-11-10T14-32-41-535Z",
+   "suite": "Smoke - Account",
+   "startedAt": "2026-11-10T14:32:41.535Z",
+   "org": "qa",
+   "total": 2,
+   "counts": {
+    "passed": 2,
+    "failed": 0,
+    "blocked": 0,
+    "error": 0
+   },
+   "route": "pass",
+   "links": [
+    {
+     "kind": "report",
+     "label": "Report",
+     "target": ".sf-ai-tester/runs/2026-11-10T14-32-41-535Z/report.html"
+    },
+    {
+     "kind": "file",
+     "label": "results.json",
+     "target": ".sf-ai-tester/runs/2026-11-10T14-32-41-535Z/results.json"
+    },
+    {
+     "kind": "salesforce",
+     "label": "Org",
+     "target": "https://acme-demo.lightning.force.com/lightning/page/home"
+    }
+   ]
+  },
+  {
+   "id": "2026-11-10T14-21-05-188Z",
+   "suite": "Smoke - Account",
+   "startedAt": "2026-11-10T14:21:05.188Z",
+   "org": "qa",
+   "total": 2,
+   "counts": {
+    "passed": 1,
+    "failed": 0,
+    "blocked": 1,
+    "error": 0
+   },
+   "route": "qa",
+   "links": [
+    {
+     "kind": "report",
+     "label": "Report",
+     "target": ".sf-ai-tester/runs/2026-11-10T14-21-05-188Z/report.html"
+    },
+    {
+     "kind": "file",
+     "label": "results.json",
+     "target": ".sf-ai-tester/runs/2026-11-10T14-21-05-188Z/results.json"
+    },
+    {
+     "kind": "salesforce",
+     "label": "Org",
+     "target": "https://acme-demo.lightning.force.com/lightning/page/home"
+    }
+   ]
+  }
+ ]
+}

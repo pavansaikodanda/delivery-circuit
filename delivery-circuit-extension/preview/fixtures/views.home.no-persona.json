@@ -1,0 +1,31 @@
+{
+  "mode": "no-persona",
+  "waiting": [],
+  "waitingTotal": 0,
+  "nav": [
+    {
+      "target": "connections",
+      "label": "Connections",
+      "detail": "tools, review tools and MCP servers"
+    }
+  ],
+  "setupNeeded": true,
+  "teams": {
+    "architect": "architects",
+    "developer": "developers",
+    "tester": "testers"
+  },
+  "attention": 0,
+  "updated": "2026-11-11T15:00:00.000Z",
+  "identity": {
+    "login": "ravi-dev",
+    "active": null,
+    "activeLabel": "no persona",
+    "personas": [],
+    "canSwitch": false,
+    "owner": "acme-org",
+    "repo": "salesDemoOrg",
+    "orgOwned": true,
+    "isAdmin": false
+  }
+}

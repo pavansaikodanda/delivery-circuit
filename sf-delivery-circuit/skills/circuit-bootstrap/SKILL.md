@@ -89,7 +89,7 @@ Verify: JWT login works for DEV and QA; `ai-dev` can `sf project deploy validate
 ## B3 Repo foundation
 1. `git switch -c pipeline/foundation`; run the installer for real: `node .../install.mjs --repo . --org <org> --project-name "<client>"`.
    It adds CLAUDE.md, `.claude/` (agents, personas, hooks, merged settings, sf-ai-tester-suites skill), CODEOWNERS,
-   PR template, DoR/DoD, `scripts/ci/*`, `scripts/setup-persona.sh`, `inputs/transcripts/README.md`,
+   PR template, DoR/DoD, `scripts/ci/*`, `scripts/setup-persona.sh`, `inputs/transcripts/README.md` (a pointer: transcripts never enter git),
    `.coderabbit.yaml`, `.specify/extensions/sf/sf-config.yml` and the workflows (the workflows are committed in B8).
 2. Fill the MCP URLs in `.claude/personas/*.mcp.json` from official docs (VERIFY placeholders).
 3. Commit everything **except** `.github/workflows/` (B8 adds those), push, open the PR. The person merges.
@@ -168,11 +168,12 @@ Each person runs `./scripts/setup-persona.sh architect|developer|tester`, opens 
 person: `/plugin marketplace add <org>/<plugin-repo>` then `/plugin install sf-delivery-circuit@conscendo-delivery`.
 
 ## B11 Dry run (all acceptance tests)
-1. Write `inputs/transcripts/000-sample-case-escalation.md`: a short made-up call with one new field, one Flow or
-   trigger, one LWC, two personas with different access, clear answers.
+1. Write a short made-up call (one new field, one Flow or trigger, one LWC, two personas with different access, clear
+   answers) **outside the repo** and upload it as the Architect in the Delivery Circuit extension (Sources). It gets
+   an `upload:<id>`; transcripts never enter git.
 2. Set `DEPLOY_ENVIRONMENT=production-dryrun` (an environment holding QA secrets under the PROD names) and
    `AI_LOOP_DRY_RUN=false`. Use Jira label `dryrun`.
-3. Push it on `intake/sample`, then run the whole circuit with people at every gate (**HC-9**). Tick in build-state.md:
+3. Start an Architect session and run `/circuit-intake <upload id>`, then run the whole circuit with people at every gate (**HC-9**). Tick in build-state.md:
    spec PR + spec-gate red until G1 by an architect; Jira epic/Story 00/stories with blocks links, second push creates
    nothing; test cases per AC and persona, linked in Jira; Rule A fires only after Story 00 is Done and G2; draft PR has
    only PLAN.md and TESTPLAN.md with matching TC ids; build starts only after both labels by the right teams; removing
@@ -185,5 +186,5 @@ One small real feature, `transcripts.source: file`. Claude only watches and repo
 Retro per persona → constitution, CLAUDE.md, `.coderabbit.yaml`, test conventions. Mark build-state.md COMPLETE.
 
 ## Emergency stop
-`gh workflow disable` for `spec-from-transcript`, `claude-plan`, `claude-build`, `ai-fix-loop`; disable Jira Rule A.
+`gh workflow disable` for `claude-plan`, `claude-build`, `ai-fix-loop`; disable Jira Rule A.
 Merges and deploys already need people.

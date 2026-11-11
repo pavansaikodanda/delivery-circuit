@@ -1,0 +1,14 @@
+{
+  "mode": "no-remote",
+  "waiting": [],
+  "waitingTotal": 0,
+  "nav": [],
+  "setupNeeded": false,
+  "teams": {
+    "architect": "architects",
+    "developer": "developers",
+    "tester": "testers"
+  },
+  "attention": 4,
+  "updated": "2026-11-11T15:00:00.000Z"
+}

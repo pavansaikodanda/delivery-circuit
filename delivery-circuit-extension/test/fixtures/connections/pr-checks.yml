@@ -1,0 +1,186 @@
+name: pr-checks
+# Required checks: guard, static, qa. Reviewer runs on AI PRs. No path filters: every job always reports,
+# and decides inside whether it has work (a skipped job counts as success for required checks).
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0, persist-credentials: false }
+      - name: Protected paths on AI PRs
+        env:
+          IS_AI: ${{ contains(github.event.pull_request.labels.*.name, 'ai-generated') }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git diff --name-only "$BASE...$HEAD" > changed.txt
+          if [ "$IS_AI" != "true" ]; then echo "Human PR: protected-path guard not applied"; exit 0; fi
+          bash scripts/ci/check-protected-paths.sh changed.txt
+
+  static:
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0, persist-credentials: false }
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - run: npm i -g @salesforce/cli && sf plugins install @salesforce/plugin-code-analyzer && npm ci
+      - run: npm run lint --if-present && npx jest --ci --passWithNoTests
+      - name: Test-case design and coverage
+        env:
+          BRANCH: ${{ github.head_ref }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          for d in $(git diff --name-only "$BASE...HEAD" -- .specify/specs test-cases | grep -oE '^\.specify/specs/[0-9]{3}-[^/]+' | sort -u); do
+            [ -d "$d/tests" ] && node scripts/ci/check-tc-coverage.mjs --design-only "$d"
+          done
+          for f in test-cases/*.sf-tests.yaml; do
+            [ -f "$f" ] && python3 .claude/skills/sf-ai-tester-suites/scripts/validate_suite.py "$f"
+          done
+          KEY=$(printf '%s' "$BRANCH" | grep -oE '^feature/[A-Z][A-Z0-9]+-[0-9]+' | cut -d/ -f2 || true)
+          if [ -n "$KEY" ] && git diff --name-only "$BASE...HEAD" | grep -q '^force-app/'; then
+            eval "$(bash scripts/ci/resolve-story.sh "$KEY")"
+            node scripts/ci/check-tc-coverage.mjs --code "$(dirname "$STORY_FILE")" --story "$STORY"
+          fi
+      - name: Code Analyzer
+        id: ca
+        uses: forcedotcom/run-code-analyzer@v2     # VERIFY inputs/outputs
+        with:
+          run-arguments: --workspace force-app --rule-selector Recommended --output-file ca-results.html --output-file ca-results.json
+          results-artifact-name: code-analyzer-results
+      - name: Quality gate (0 sev 1, 0 sev 2)
+        env:
+          SEV1: ${{ steps.ca.outputs.num-sev1-violations }}
+          SEV2: ${{ steps.ca.outputs.num-sev2-violations }}
+        run: |
+          if [ "${SEV1:-0}" -gt 0 ] || [ "${SEV2:-0}" -gt 0 ]; then echo "Gate failed: sev1=$SEV1 sev2=$SEV2"; exit 1; fi
+
+  reviewer:
+    needs: guard
+    if: contains(github.event.pull_request.labels.*.name, 'ai-generated') && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    env:
+      CIRCUIT_PERSONA: developer
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0, persist-credentials: false }
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - run: npm i -g @anthropic-ai/claude-code
+      - name: Reviewer persona (read-only)
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p .ai && git diff "$BASE...$HEAD" > .ai/pr.diff
+          claude -p "Review the PR diff in .ai/pr.diff against the story, plan.md, data-model.md, the constitution and CLAUDE.md." \
+            --agent reviewer --max-turns 30 --allowedTools "Read,Glob,Grep" --output-format json > .ai/review.json
+          jq -r '.result // "VERDICT: BLOCK (no output)"' .ai/review.json > .ai/review.md
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with: { app-id: "${{ secrets.APP_ID }}", private-key: "${{ secrets.APP_PRIVATE_KEY }}" }
+      - name: Post review and gate
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file .ai/review.md
+          tail -n 5 .ai/review.md | grep -q '^VERDICT: PASS' || { echo "Reviewer found blockers"; exit 1; }
+
+  qa:
+    needs: static
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    concurrency: { group: qa-sandbox, cancel-in-progress: false }
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0, persist-credentials: false }
+      - name: Anything to deploy?
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if git diff --name-only "$BASE...HEAD" | grep -q '^force-app/'; then echo "RUN=1" >> "$GITHUB_ENV"; else echo "No force-app changes; nothing to test in QA."; fi
+      - if: env.RUN == '1'
+        uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - if: env.RUN == '1'
+        run: npm i -g @salesforce/cli
+      - name: Login QA sandbox
+        if: env.RUN == '1'
+        env:
+          SF_JWT_KEY: ${{ secrets.SF_JWT_KEY_QA }}
+          SF_CLIENT_ID: ${{ secrets.SF_CLIENT_ID_QA }}
+          SF_USERNAME: ${{ secrets.SF_USERNAME_QA }}
+          SF_URL: ${{ vars.SF_INSTANCE_URL_SANDBOX }}
+        run: bash scripts/ci/sf-login.sh qa --set-default
+      - name: Deploy branch to QA sandbox
+        if: env.RUN == '1'
+        run: sf project deploy start --source-dir force-app --target-org qa --test-level NoTestRun --wait 60
+      - name: Apex tests
+        if: env.RUN == '1'
+        run: |
+          sf apex run test --target-org qa --test-level RunLocalTests --code-coverage \
+            --result-format json --output-dir test-results/apex --wait 60
+      - name: Acceptance tests (SF AI Tester)
+        if: env.RUN == '1' && vars.SF_AI_TESTER_IN_CI == 'true'
+        env:
+          SF_ALIAS: qa
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          BRANCH: ${{ github.head_ref }}
+          SF_AI_TESTER_REPO: ${{ vars.SF_AI_TESTER_REPO || 'pavansaikodanda/sf-ai-tester' }}
+          SF_AI_TESTER_REF: ${{ vars.SF_AI_TESTER_REF }}
+          SF_AI_TESTER_MODE: ${{ vars.SF_AI_TESTER_MODE || 'manual' }}
+          SF_AI_TESTER_WITH_DEPS: '1'
+        run: |
+          [[ "$SF_AI_TESTER_MODE" =~ ^(manual|automation|both)$ ]] || { echo "SF_AI_TESTER_MODE must be manual, automation or both"; exit 1; }
+          KEY=$(printf '%s' "$BRANCH" | grep -oE '^feature/[A-Z][A-Z0-9]+-[0-9]+' | cut -d/ -f2 || true)
+          SUITES=()
+          if [ -n "$KEY" ]; then eval "$(bash scripts/ci/resolve-story.sh "$KEY")"; [ -f "$SUITE" ] && SUITES+=("$SUITE"); fi
+          for f in test-cases/regression-*.sf-tests.yaml; do [ -f "$f" ] && SUITES+=("$f"); done
+          if [ ${#SUITES[@]} -eq 0 ]; then echo '{"route":"pass","total":0,"note":"no suites"}' > verdict.json; exit 0; fi
+          TOOL=$(bash scripts/ci/install-sf-ai-tester.sh "$RUNNER_TEMP/sf-ai-tester" | tail -1)
+          # SF_ALIAS=qa: the CLI opens the org through the sf CLI session from the JWT login above (no password).
+          # Exit code 1 means "not all passed"; the verdict below decides the route, so keep going.
+          for s in "${SUITES[@]}"; do
+            node "$TOOL/dist/cli.js" run "$s" --mode "$SF_AI_TESTER_MODE" --login headless --workers 2 || true
+          done
+          node scripts/ci/ai-tester-verdict.mjs .sf-ai-tester/runs --expect "${#SUITES[@]}" > verdict.json
+          cat verdict.json
+          [ "$(jq -r .route verdict.json)" = "pass" ]
+      - if: always() && env.RUN == '1'
+        uses: actions/upload-artifact@v4              # VERIFY current major
+        with:
+          name: test-evidence
+          path: |
+            verdict.json
+            test-results/
+            .sf-ai-tester/runs/
+          if-no-files-found: ignore
+
+  evidence:
+    needs: [guard, static, qa, reviewer]
+    if: >
+      always() && needs.guard.result == 'success' && needs.static.result == 'success' && needs.qa.result == 'success' &&
+      (needs.reviewer.result == 'success' || needs.reviewer.result == 'skipped') && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: { persist-credentials: false, sparse-checkout: scripts/ci }
+      - name: Evidence pack to #qa-gate
+        env:
+          HOOK: ${{ secrets.SLACK_WEBHOOK_QA }}
+          TITLE: ${{ github.event.pull_request.title }}
+          URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          bash scripts/ci/slack.sh "Checks green for: $TITLE $URL
+          Guard, lint/Jest, TC coverage, Code Analyzer, Reviewer, QA deploy, Apex tests passed.
+          Tester: run /qa-explore and approve (G6). Developer: /dev-review-pr (G5). Architect: /arch-review-pr (G7)."

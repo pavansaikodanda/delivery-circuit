@@ -1,0 +1,423 @@
+{
+  "found": true,
+  "featureId": "001",
+  "viewer": "architect",
+  "viewerLabel": "Architect",
+  "stages": [
+    {
+      "id": "intake",
+      "label": "Intake",
+      "state": "done",
+      "title": "Intake: done"
+    },
+    {
+      "id": "clarify",
+      "label": "Clarify",
+      "state": "done",
+      "title": "Clarify: done"
+    },
+    {
+      "id": "plan",
+      "label": "Plan",
+      "state": "done",
+      "title": "Plan: done"
+    },
+    {
+      "id": "signoff",
+      "label": "Sign-off",
+      "state": "done",
+      "title": "Sign-off: done"
+    },
+    {
+      "id": "stories",
+      "label": "Stories",
+      "state": "done",
+      "title": "Stories: done"
+    },
+    {
+      "id": "tests",
+      "label": "Tests",
+      "state": "done",
+      "title": "Tests: done"
+    },
+    {
+      "id": "jira",
+      "label": "Jira",
+      "state": "done",
+      "title": "Jira: done"
+    },
+    {
+      "id": "build",
+      "label": "Build",
+      "state": "active",
+      "title": "Build: active"
+    },
+    {
+      "id": "qa",
+      "label": "QA",
+      "state": "todo",
+      "title": "QA: todo"
+    },
+    {
+      "id": "release",
+      "label": "Release",
+      "state": "todo",
+      "title": "Release: todo"
+    }
+  ],
+  "gates": [
+    {
+      "id": "G1",
+      "label": "Plan signed off",
+      "owner": "architect",
+      "ownerLabel": "Architect",
+      "state": "done",
+      "own": true,
+      "cls": "ok"
+    },
+    {
+      "id": "G2",
+      "label": "Testability confirmed (ai-ready)",
+      "owner": "tester",
+      "ownerLabel": "Tester",
+      "state": "done",
+      "own": false,
+      "cls": "ok"
+    },
+    {
+      "id": "G3",
+      "label": "AI plan approved",
+      "owner": "developer",
+      "ownerLabel": "Developer",
+      "state": "waiting",
+      "own": false,
+      "cls": "info"
+    },
+    {
+      "id": "G4",
+      "label": "AI test plan approved",
+      "owner": "tester",
+      "ownerLabel": "Tester",
+      "state": "waiting",
+      "own": false,
+      "cls": "info"
+    },
+    {
+      "id": "G5",
+      "label": "Code review",
+      "owner": "developer",
+      "ownerLabel": "Developer",
+      "state": "waiting",
+      "own": false,
+      "cls": "info"
+    },
+    {
+      "id": "G6",
+      "label": "QA on sandbox",
+      "owner": "tester",
+      "ownerLabel": "Tester",
+      "state": "waiting",
+      "own": false,
+      "cls": "info"
+    },
+    {
+      "id": "G7",
+      "label": "Schema and design review",
+      "owner": "architect",
+      "ownerLabel": "Architect",
+      "state": "waiting",
+      "own": true,
+      "cls": "info"
+    },
+    {
+      "id": "G8",
+      "label": "Merge",
+      "owner": "architect",
+      "ownerLabel": "Architect",
+      "state": "not-started",
+      "own": true,
+      "cls": ""
+    },
+    {
+      "id": "G9",
+      "label": "Production approval",
+      "owner": "architect",
+      "ownerLabel": "Architect",
+      "state": "not-started",
+      "own": true,
+      "cls": ""
+    }
+  ],
+  "stories": [
+    {
+      "num": "00",
+      "title": "Escalation data model and permissions (Story 00)",
+      "file": ".specify/specs/001-case-escalation/task_story_00.md",
+      "jiraKey": "CE-11",
+      "counts": {
+        "ui": 0,
+        "unit": 2,
+        "manual": 0
+      },
+      "total": 2,
+      "prNumber": 41,
+      "links": [
+        {
+          "kind": "file",
+          "label": "Story",
+          "target": ".specify/specs/001-case-escalation/task_story_00.md"
+        },
+        {
+          "kind": "jira",
+          "label": "CE-11",
+          "target": "https://acme.atlassian.net/browse/CE-11"
+        },
+        {
+          "kind": "github",
+          "label": "PR #41",
+          "target": "https://github.com/acme-org/salesDemoOrg/pull/41"
+        }
+      ]
+    },
+    {
+      "num": "01",
+      "title": "Agent escalates a Case with a reason",
+      "file": ".specify/specs/001-case-escalation/task_story_01.md",
+      "jiraKey": "CE-12",
+      "counts": {
+        "ui": 1,
+        "unit": 1,
+        "manual": 1
+      },
+      "total": 3,
+      "prNumber": 42,
+      "links": [
+        {
+          "kind": "file",
+          "label": "Story",
+          "target": ".specify/specs/001-case-escalation/task_story_01.md"
+        },
+        {
+          "kind": "jira",
+          "label": "CE-12",
+          "target": "https://acme.atlassian.net/browse/CE-12"
+        },
+        {
+          "kind": "github",
+          "label": "PR #42",
+          "target": "https://github.com/acme-org/salesDemoOrg/pull/42"
+        }
+      ]
+    },
+    {
+      "num": "02",
+      "title": "Escalated Cases route to the Tier 2 queue",
+      "file": ".specify/specs/001-case-escalation/task_story_02.md",
+      "jiraKey": "CE-13",
+      "counts": {
+        "ui": 1,
+        "unit": 1,
+        "manual": 0
+      },
+      "total": 2,
+      "prNumber": 43,
+      "links": [
+        {
+          "kind": "file",
+          "label": "Story",
+          "target": ".specify/specs/001-case-escalation/task_story_02.md"
+        },
+        {
+          "kind": "jira",
+          "label": "CE-13",
+          "target": "https://acme.atlassian.net/browse/CE-13"
+        },
+        {
+          "kind": "github",
+          "label": "PR #43",
+          "target": "https://github.com/acme-org/salesDemoOrg/pull/43"
+        }
+      ]
+    },
+    {
+      "num": "03",
+      "title": "Notify the account owner on escalation",
+      "file": ".specify/specs/001-case-escalation/task_story_03.md",
+      "jiraKey": "CE-14",
+      "counts": {
+        "ui": 1,
+        "unit": 2,
+        "manual": 1
+      },
+      "total": 4,
+      "prNumber": 44,
+      "links": [
+        {
+          "kind": "file",
+          "label": "Story",
+          "target": ".specify/specs/001-case-escalation/task_story_03.md"
+        },
+        {
+          "kind": "jira",
+          "label": "CE-14",
+          "target": "https://acme.atlassian.net/browse/CE-14"
+        },
+        {
+          "kind": "github",
+          "label": "PR #44",
+          "target": "https://github.com/acme-org/salesDemoOrg/pull/44"
+        }
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "id": "fireflies:01JD8Q2KX7",
+      "kind": "fireflies",
+      "title": "Acme support: escalation workshop",
+      "date": "2026-10-28",
+      "links": [
+        {
+          "kind": "fireflies",
+          "label": "Fireflies",
+          "target": "https://app.fireflies.ai/view/01JD8Q2KX7"
+        }
+      ],
+      "canOpen": true
+    },
+    {
+      "id": "upload:3f9a1c2b7d4e",
+      "kind": "upload",
+      "title": "Tier 2 routing notes (Teams recording)",
+      "date": "2026-10-30",
+      "links": [],
+      "canOpen": true
+    }
+  ],
+  "files": [
+    {
+      "kind": "file",
+      "label": "spec.md",
+      "target": ".specify/specs/001-case-escalation/spec.md"
+    },
+    {
+      "kind": "file",
+      "label": "plan.md",
+      "target": ".specify/specs/001-case-escalation/plan.md"
+    },
+    {
+      "kind": "file",
+      "label": "data-model.md",
+      "target": ".specify/specs/001-case-escalation/data-model.md"
+    },
+    {
+      "kind": "file",
+      "label": "jira-map.json",
+      "target": ".specify/specs/001-case-escalation/jira-map.json"
+    }
+  ],
+  "actions": [
+    {
+      "id": "ai:/arch-design",
+      "label": "Design",
+      "persona": "architect",
+      "kind": "ai",
+      "args": {
+        "command": "/arch-design",
+        "argKind": "feature",
+        "arg": "001-case-escalation"
+      },
+      "allowed": true
+    },
+    {
+      "id": "ai:/arch-jira-push",
+      "label": "Push to Jira",
+      "persona": "architect",
+      "kind": "ai",
+      "args": {
+        "command": "/arch-jira-push",
+        "argKind": "feature",
+        "arg": "001-case-escalation"
+      },
+      "allowed": true
+    },
+    {
+      "id": "ai:/dev-review-stories",
+      "label": "Review stories",
+      "persona": "developer",
+      "kind": "ai",
+      "args": {
+        "command": "/dev-review-stories",
+        "argKind": "feature",
+        "arg": "001-case-escalation"
+      },
+      "allowed": false,
+      "reason": "Only a Developer can run this"
+    },
+    {
+      "id": "ai:/qa-design-tests",
+      "label": "Design tests",
+      "persona": "tester",
+      "kind": "ai",
+      "args": {
+        "command": "/qa-design-tests",
+        "argKind": "feature",
+        "arg": "001-case-escalation"
+      },
+      "allowed": false,
+      "reason": "Only a Tester can run this"
+    },
+    {
+      "id": "ai:/qa-push-tests",
+      "label": "Push tests",
+      "persona": "tester",
+      "kind": "ai",
+      "args": {
+        "command": "/qa-push-tests",
+        "argKind": "feature",
+        "arg": "001-case-escalation"
+      },
+      "allowed": false,
+      "reason": "Only a Tester can run this"
+    }
+  ],
+  "updated": "2026-11-11T15:00:00.000Z",
+  "feature": {
+    "id": "001",
+    "slug": "001-case-escalation",
+    "title": "Case escalation with reason and queue routing",
+    "score": 92,
+    "openQuestions": 0,
+    "signedOff": true,
+    "dir": ".specify/specs/001-case-escalation",
+    "links": [
+      {
+        "kind": "file",
+        "label": "spec.md",
+        "target": ".specify/specs/001-case-escalation/spec.md"
+      },
+      {
+        "kind": "jira",
+        "label": "Epic CE-10",
+        "target": "https://acme.atlassian.net/browse/CE-10"
+      },
+      {
+        "kind": "confluence",
+        "label": "Design",
+        "target": "https://acme.atlassian.net/wiki/spaces/CE/pages/2211843/Case+escalation"
+      },
+      {
+        "kind": "lucid",
+        "label": "Diagram",
+        "target": "https://lucid.app/lucidchart/7c1e2b9a-case-escalation/edit"
+      }
+    ]
+  },
+  "next": {
+    "id": "G3",
+    "label": "AI plan approved",
+    "owner": "developer",
+    "ownerLabel": "Developer",
+    "state": "waiting"
+  }
+}

@@ -10,7 +10,11 @@ export const Uri = { file: (p: string) => ({ fsPath: p, path: p, scheme: "file" 
 export const window = { showInformationMessage: async () => undefined, showWarningMessage: async () => undefined,
   showErrorMessage: async () => undefined, showInputBox: async () => undefined, showQuickPick: async () => undefined,
   createOutputChannel: () => ({ appendLine() {}, dispose() {} }) };
-export const workspace = { getConfiguration: () => ({ get: (_k: string, d?: unknown) => d }), workspaceFolders: [] };
+export class RelativePattern { constructor(public base: unknown, public pattern: string) {} }
+const noopEvent = () => ({ dispose() {} });
+export const workspace = { getConfiguration: () => ({ get: (_k: string, d?: unknown) => d }), workspaceFolders: [],
+  onDidChangeConfiguration: noopEvent,
+  createFileSystemWatcher: () => ({ onDidChange: noopEvent, onDidCreate: noopEvent, onDidDelete: noopEvent, dispose() {} }) };
 export const env = { openExternal: async () => true };
 export const commands = { registerCommand: () => ({ dispose() {} }), executeCommand: async () => undefined };
 export const authentication = { getSession: async () => undefined };

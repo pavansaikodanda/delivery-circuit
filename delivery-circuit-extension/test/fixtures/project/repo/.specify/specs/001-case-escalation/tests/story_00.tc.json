@@ -1,0 +1,15 @@
+{
+  "feature": "001-case-escalation",
+  "story": "00",
+  "cases": [
+    {
+      "id": "S00-TC-01",
+      "ac": "AC-00.1",
+      "title": "Fields deploy with FLS for Support Agent",
+      "level": "unit",
+      "persona": "System",
+      "type": "positive",
+      "automated": true
+    }
+  ]
+}

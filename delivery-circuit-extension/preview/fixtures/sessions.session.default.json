@@ -1,0 +1,76 @@
+{
+  "persona": "developer",
+  "title": "Claude · Developer · Review AI plan",
+  "items": [
+    {
+      "id": "u1",
+      "kind": "user",
+      "text": "/dev-review-plan 42"
+    },
+    {
+      "id": "a2",
+      "kind": "assistant",
+      "text": "I'll review the AI plan on PR #42 against Story 02 and its test cases."
+    },
+    {
+      "id": "t1",
+      "kind": "tool",
+      "tool": "circuit · pr_status",
+      "text": "{\"pr\":42}",
+      "status": "ok",
+      "nested": false
+    },
+    {
+      "id": "t2",
+      "kind": "tool",
+      "tool": "Read",
+      "text": "D:/repo/docs/plans/ABC-12/PLAN.md",
+      "status": "ok",
+      "nested": false,
+      "file": "D:/repo/docs/plans/ABC-12/PLAN.md",
+      "link": {
+        "kind": "file",
+        "label": "Open",
+        "target": "docs/plans/ABC-12/PLAN.md"
+      }
+    },
+    {
+      "id": "t3",
+      "kind": "tool",
+      "tool": "Read",
+      "text": "D:/repo/.specify/specs/001-case-escalation/task_story_02.md",
+      "status": "ok",
+      "nested": false,
+      "file": "D:/repo/.specify/specs/001-case-escalation/task_story_02.md",
+      "link": {
+        "kind": "file",
+        "label": "Open",
+        "target": ".specify/specs/001-case-escalation/task_story_02.md"
+      }
+    },
+    {
+      "id": "t4",
+      "kind": "tool",
+      "tool": "Bash",
+      "text": "sf sobject describe --sobject Case --target-org dev --json",
+      "status": "error",
+      "nested": false
+    },
+    {
+      "id": "a3",
+      "kind": "assistant",
+      "text": "The plan covers AC-02.1 and AC-02.2, but:\n\n1. S02-TC-02 (bulk update of 201 Cases) has no Apex test in TESTPLAN.md.\n2. The handler queries Case inside a loop (step 4); move the query out.\n3. Escalation_Reason__c is created here, but Story 00 already owns schema changes.\n\nRecommendation: request changes. I have not added plan-approved; that is yours to decide."
+    }
+  ],
+  "running": false,
+  "costUsd": 0.0841,
+  "turns": 6,
+  "mcpIssues": [
+    {
+      "name": "atlassian",
+      "status": "needs-auth"
+    }
+  ],
+  "sessionId": "s-1",
+  "model": "claude-sonnet-5-5"
+}

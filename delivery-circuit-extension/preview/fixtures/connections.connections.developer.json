@@ -1,0 +1,451 @@
+{
+  "identity": {
+    "login": "dev-one",
+    "personas": [
+      "developer"
+    ],
+    "active": "developer",
+    "isAdmin": false,
+    "owner": "acme-org",
+    "repo": "salesDemoOrg",
+    "orgOwned": true
+  },
+  "signedIn": true,
+  "isArchitect": false,
+  "groups": [
+    {
+      "id": "personal",
+      "title": "Personal",
+      "rows": [
+        {
+          "id": "github",
+          "label": "GitHub",
+          "scope": "personal",
+          "state": "connected",
+          "neededBy": [
+            "architect",
+            "developer",
+            "tester"
+          ],
+          "manageUrl": "https://github.com/settings/applications",
+          "account": "pavansaikodanda",
+          "detail": "Signed in · acme-org/salesDemoOrg · admin",
+          "group": "personal",
+          "actionable": true,
+          "canDisconnect": false,
+          "connectLabel": "Reconnect",
+          "links": [
+            {
+              "kind": "github",
+              "label": "Repo",
+              "target": "https://github.com/acme-org/salesDemoOrg"
+            }
+          ]
+        },
+        {
+          "id": "claude",
+          "label": "Claude (subscription)",
+          "scope": "personal",
+          "state": "expiring",
+          "neededBy": [
+            "architect",
+            "developer",
+            "tester"
+          ],
+          "manageUrl": "https://claude.ai/settings/account",
+          "account": "maintainer@example.com",
+          "expiresAt": "2026-11-30T08:39:17.723Z",
+          "detail": "Max plan · Conscendo",
+          "group": "personal",
+          "actionable": true,
+          "canDisconnect": true,
+          "connectLabel": "Reconnect",
+          "expiryText": "expires in 19 days (2026-11-30)",
+          "links": [
+            {
+              "kind": "url",
+              "label": "Manage",
+              "target": "https://claude.ai/settings/account"
+            }
+          ]
+        },
+        {
+          "id": "sf-dev",
+          "label": "Salesforce dev org",
+          "scope": "personal",
+          "state": "connected",
+          "neededBy": [
+            "architect",
+            "developer",
+            "tester"
+          ],
+          "account": "demo.user@example.com",
+          "detail": "alias dev · acme-demo.my.salesforce.com · trial org (per build.config.yml)",
+          "group": "personal",
+          "actionable": true,
+          "canDisconnect": true,
+          "connectLabel": "Reconnect",
+          "links": [
+            {
+              "kind": "salesforce",
+              "label": "Org",
+              "target": "https://acme-demo.my.salesforce.com"
+            },
+            {
+              "kind": "salesforce",
+              "label": "Setup",
+              "target": "https://acme-demo.my.salesforce.com/lightning/setup/SetupOneHome/home"
+            }
+          ]
+        },
+        {
+          "id": "jira",
+          "label": "Jira",
+          "scope": "personal",
+          "state": "connected",
+          "neededBy": [
+            "architect",
+            "developer",
+            "tester"
+          ],
+          "manageUrl": "https://id.atlassian.com/manage-profile/security/api-tokens",
+          "account": "dev.user@example.com",
+          "detail": "Pavan Sai · acme.atlassian.net",
+          "group": "personal",
+          "actionable": true,
+          "canDisconnect": true,
+          "connectLabel": "Reconnect",
+          "links": [
+            {
+              "kind": "jira",
+              "label": "Jira ABC",
+              "target": "https://acme.atlassian.net/browse/ABC"
+            }
+          ]
+        },
+        {
+          "id": "slack",
+          "label": "Slack",
+          "scope": "personal",
+          "state": "unknown",
+          "neededBy": [
+            "architect",
+            "developer",
+            "tester"
+          ],
+          "manageUrl": "https://slack.com/signin",
+          "detail": "Slack workspace is not set in build.config.yml (slack.workspace).",
+          "group": "personal",
+          "actionable": true,
+          "canDisconnect": false,
+          "connectLabel": "Connect",
+          "links": [
+            {
+              "kind": "url",
+              "label": "Manage",
+              "target": "https://slack.com/signin"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mcp",
+      "title": "Claude MCP",
+      "rows": [
+        {
+          "id": "mcp-atlassian",
+          "label": "Atlassian MCP",
+          "scope": "personal",
+          "state": "error",
+          "neededBy": [
+            "architect",
+            "developer",
+            "tester"
+          ],
+          "manageUrl": "https://support.atlassian.com/atlassian-rovo-mcp-server/docs/getting-started-with-the-atlassian-remote-mcp-server/",
+          "detail": "URL in .claude/personas/architect.mcp.json is a placeholder; documented URL is https://mcp.atlassian.com/v2/mcp. Connect can fix it.",
+          "group": "mcp",
+          "actionable": true,
+          "canDisconnect": false,
+          "connectLabel": "Sign in",
+          "links": [
+            {
+              "kind": "url",
+              "label": "Docs",
+              "target": "https://support.atlassian.com/atlassian-rovo-mcp-server/docs/getting-started-with-the-atlassian-remote-mcp-server/"
+            },
+            {
+              "kind": "file",
+              "label": "architect.mcp.json",
+              "target": ".claude/personas/architect.mcp.json"
+            }
+          ]
+        },
+        {
+          "id": "mcp-github",
+          "label": "GitHub MCP",
+          "scope": "personal",
+          "state": "unknown",
+          "neededBy": [
+            "architect",
+            "developer",
+            "tester"
+          ],
+          "manageUrl": "https://github.com/github/github-mcp-server",
+          "detail": "Configured (architect, developer, tester) (api.githubcopilot.com); sign-in state shows in Claude's /mcp.",
+          "group": "mcp",
+          "actionable": true,
+          "canDisconnect": false,
+          "connectLabel": "Sign in",
+          "links": [
+            {
+              "kind": "url",
+              "label": "Manage",
+              "target": "https://github.com/github/github-mcp-server"
+            }
+          ]
+        },
+        {
+          "id": "mcp-salesforce",
+          "label": "Salesforce DX MCP",
+          "scope": "personal",
+          "state": "expiring",
+          "neededBy": [
+            "architect",
+            "developer",
+            "tester"
+          ],
+          "manageUrl": "https://github.com/forcedotcom/sf-skills",
+          "detail": "Local server (npx @salesforce/mcp --orgs dev) (architect, developer, tester). @salesforce/mcp reached end of life on 2026-11-02; plan the move to forcedotcom/sf-skills.",
+          "group": "mcp",
+          "actionable": true,
+          "canDisconnect": false,
+          "connectLabel": "Open",
+          "links": [
+            {
+              "kind": "url",
+              "label": "Manage",
+              "target": "https://github.com/forcedotcom/sf-skills"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "review",
+      "title": "Review tools",
+      "rows": [
+        {
+          "id": "coderabbit",
+          "label": "CodeRabbit",
+          "scope": "project",
+          "state": "unknown",
+          "neededBy": [
+            "architect",
+            "developer",
+            "tester"
+          ],
+          "manageUrl": "https://app.coderabbit.ai/",
+          "detail": "Config present · no CodeRabbit review seen yet · no pull requests yet. Install the app on the repo if it is not.",
+          "group": "review",
+          "actionable": false,
+          "reason": "Project connections are managed by a repo or org admin.",
+          "canDisconnect": false,
+          "connectLabel": "Install app",
+          "links": [
+            {
+              "kind": "coderabbit",
+              "label": "CodeRabbit",
+              "target": "https://app.coderabbit.ai/"
+            },
+            {
+              "kind": "github",
+              "label": "GitHub App",
+              "target": "https://github.com/apps/coderabbitai"
+            },
+            {
+              "kind": "file",
+              "label": ".coderabbit.yaml",
+              "target": ".coderabbit.yaml"
+            }
+          ]
+        },
+        {
+          "id": "code-analyzer",
+          "label": "Salesforce Code Analyzer",
+          "scope": "project",
+          "state": "connected",
+          "neededBy": [
+            "architect",
+            "developer",
+            "tester"
+          ],
+          "manageUrl": "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/code-analyzer.html",
+          "detail": "plugin-code-analyzer 5.1.0 locally · runs in CI (pr-checks)",
+          "group": "review",
+          "actionable": false,
+          "reason": "Project connections are managed by a repo or org admin.",
+          "canDisconnect": false,
+          "connectLabel": "Install",
+          "links": [
+            {
+              "kind": "file",
+              "label": "pr-checks.yml",
+              "target": ".github/workflows/pr-checks.yml"
+            }
+          ]
+        },
+        {
+          "id": "ai-reviewer",
+          "label": "AI Reviewer (CI)",
+          "scope": "project",
+          "state": "disconnected",
+          "neededBy": [
+            "architect",
+            "developer",
+            "tester"
+          ],
+          "manageUrl": "https://github.com/acme-org/salesDemoOrg/settings/secrets/actions",
+          "detail": "reviewer.md present · repo secret CLAUDE_CODE_OAUTH_TOKEN is missing.",
+          "group": "review",
+          "actionable": false,
+          "reason": "Project connections are managed by a repo or org admin.",
+          "canDisconnect": false,
+          "connectLabel": "Set token",
+          "links": [
+            {
+              "kind": "file",
+              "label": "reviewer.md",
+              "target": ".claude/agents/reviewer.md"
+            },
+            {
+              "kind": "github",
+              "label": "Secrets",
+              "target": "https://github.com/acme-org/salesDemoOrg/settings/secrets/actions"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "project": {
+    "secrets": [
+      {
+        "name": "APP_ID",
+        "present": false,
+        "unknown": true,
+        "kind": "github-app",
+        "expiring": false
+      },
+      {
+        "name": "APP_PRIVATE_KEY",
+        "present": false,
+        "unknown": true,
+        "kind": "github-app",
+        "expiring": false
+      },
+      {
+        "name": "CLAUDE_CODE_OAUTH_TOKEN",
+        "present": false,
+        "unknown": true,
+        "kind": "claude",
+        "expiring": false
+      },
+      {
+        "name": "JIRA_API_TOKEN",
+        "present": false,
+        "unknown": true,
+        "kind": "jira",
+        "expiring": false
+      },
+      {
+        "name": "JIRA_BASE_URL",
+        "present": false,
+        "unknown": true,
+        "kind": "jira",
+        "expiring": false
+      },
+      {
+        "name": "JIRA_EMAIL",
+        "present": false,
+        "unknown": true,
+        "kind": "jira",
+        "expiring": false
+      },
+      {
+        "name": "SF_CLIENT_ID_DEV",
+        "present": false,
+        "unknown": true,
+        "kind": "salesforce",
+        "expiring": false
+      },
+      {
+        "name": "SF_JWT_KEY_DEV",
+        "present": false,
+        "unknown": true,
+        "kind": "salesforce",
+        "expiring": false
+      },
+      {
+        "name": "SF_USERNAME_DEV",
+        "present": false,
+        "unknown": true,
+        "kind": "salesforce",
+        "expiring": false
+      },
+      {
+        "name": "SF_JWT_KEY_PROD",
+        "present": false,
+        "unknown": true,
+        "env": "production",
+        "kind": "salesforce",
+        "expiring": false
+      }
+    ],
+    "webhooks": [
+      {
+        "name": "SLACK_WEBHOOK_ARCH",
+        "present": false,
+        "unknown": true,
+        "kind": "slack-webhook",
+        "expiring": false
+      },
+      {
+        "name": "SLACK_WEBHOOK_DEV",
+        "present": false,
+        "unknown": true,
+        "kind": "slack-webhook",
+        "expiring": false
+      },
+      {
+        "name": "SLACK_WEBHOOK_QA",
+        "present": false,
+        "unknown": true,
+        "kind": "slack-webhook",
+        "expiring": false
+      }
+    ],
+    "environments": [
+      "production"
+    ],
+    "repoUrl": "https://github.com/acme-org/salesDemoOrg",
+    "error": "Only repo admins can see which Actions secrets exist.",
+    "reminders": [
+      {
+        "label": "Jira PAT for Rule A",
+        "date": "2026-11-25",
+        "state": "expiring",
+        "text": "expires in 14 days (2026-11-25)"
+      },
+      {
+        "label": "Salesforce JWT certificates",
+        "date": "2027-06-01",
+        "state": "ok",
+        "text": "expires 2027-06-01"
+      }
+    ]
+  },
+  "hiddenCount": 8,
+  "checkedAt": "2026-11-11T10:00:00.000Z"
+}

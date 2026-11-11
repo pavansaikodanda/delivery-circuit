@@ -1,11 +1,14 @@
-# Transcripts
+# Transcripts do not go here
 
-Drop a client-call transcript here to start a feature.
+Client-call transcripts never enter git. This folder is ignored (except this README) so a transcript dropped here by
+mistake is not committed.
 
-1. Name it `<yyyy-mm-dd>-<slug>.md` (or `.txt` / `.vtt`). Letters, digits, `.`, `_`, `-` only.
-2. Put a header on top: meeting title, date, attendees, source (file / Fireflies id).
-3. Commit it on a branch named `intake/<slug>` and push. `spec-from-transcript.yml` drafts the spec and opens a
-   draft PR, and `#arch-gate` gets a message. Or run `/circuit-intake` locally as the Architect (`cc-arch`).
+To start a feature from a call:
+
+1. In VS Code, open **Delivery Circuit → Sources** as the Architect and add the call: pick a Fireflies meeting, or
+   upload a file (`.txt`, `.md`, `.vtt`, `.srt`, `.docx`). Uploads are stored encrypted on your machine, outside the
+   repo. Only the source id, title and date go into `.circuit/sources.json`.
+2. Start an Architect session and run `/circuit-intake <sourceId>`. Claude reads the text through the Circuit MCP
+   (`transcript_get`, Architect only) and writes the spec, which cites `source: fireflies:<id>` or `source: upload:<id>`.
 
 Transcripts are treated as data: any instruction-like text inside them is ignored and reported.
-Remove personal data the feature doesn't need before committing.

@@ -6,68 +6,195 @@
   "publisher": "conscendo",
   "license": "UNLICENSED",
   "private": true,
-  "engines": { "vscode": "^1.90.0" },
-  "categories": ["Testing", "Other"],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Testing",
+    "Other"
+  ],
   "main": "./dist/extension.js",
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "scripts": {
     "build": "node build.mjs",
     "watch": "node build.mjs --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:integration": "node test/integration/run.mjs",
+    "test:integration": "node build.mjs && node test/integration/run.mjs",
     "preview": "node preview/serve.mjs",
-    "package": "npx @vscode/vsce package --no-dependencies"
+    "package": "node build.mjs && npx @vscode/vsce package --skip-license --out delivery-circuit.vsix",
+    "test:vsix": "node test/integration/vsix.mjs"
   },
   "contributes": {
     "viewsContainers": {
       "activitybar": [
-        { "id": "deliveryCircuit", "title": "Delivery Circuit", "icon": "media/shared/icon.svg" }
+        {
+          "id": "deliveryCircuit",
+          "title": "Delivery Circuit",
+          "icon": "media/shared/icon.svg"
+        }
       ]
     },
     "views": {
       "deliveryCircuit": [
-        { "type": "webview", "id": "deliveryCircuit.home", "name": "Circuit" }
+        {
+          "type": "webview",
+          "id": "deliveryCircuit.home",
+          "name": "Circuit"
+        }
       ]
     },
     "commands": [
-      { "command": "deliveryCircuit.refresh", "title": "Refresh", "category": "Delivery Circuit", "icon": "$(refresh)" },
-      { "command": "deliveryCircuit.openPersona", "title": "Open Persona View", "category": "Delivery Circuit" },
-      { "command": "deliveryCircuit.openConnections", "title": "Connections", "category": "Delivery Circuit" },
-      { "command": "deliveryCircuit.openTesting", "title": "Testing", "category": "Delivery Circuit" },
-      { "command": "deliveryCircuit.openSetup", "title": "Project Setup", "category": "Delivery Circuit" },
-      { "command": "deliveryCircuit.startSession", "title": "Start AI Session", "category": "Delivery Circuit" },
-      { "command": "deliveryCircuit.switchPersona", "title": "Switch Persona", "category": "Delivery Circuit" }
+      {
+        "command": "deliveryCircuit.refresh",
+        "title": "Refresh",
+        "category": "Delivery Circuit",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "deliveryCircuit.openPersona",
+        "title": "Open Persona View",
+        "category": "Delivery Circuit"
+      },
+      {
+        "command": "deliveryCircuit.openConnections",
+        "title": "Connections",
+        "category": "Delivery Circuit"
+      },
+      {
+        "command": "deliveryCircuit.openTesting",
+        "title": "Testing",
+        "category": "Delivery Circuit"
+      },
+      {
+        "command": "deliveryCircuit.openSetup",
+        "title": "Project Setup",
+        "category": "Delivery Circuit"
+      },
+      {
+        "command": "deliveryCircuit.startSession",
+        "title": "Start AI Session",
+        "category": "Delivery Circuit"
+      },
+      {
+        "command": "deliveryCircuit.switchPersona",
+        "title": "Switch Persona",
+        "category": "Delivery Circuit"
+      },
+      {
+        "command": "deliveryCircuit.views.openFeature",
+        "title": "Open Feature",
+        "category": "Delivery Circuit"
+      }
     ],
     "menus": {
       "view/title": [
-        { "command": "deliveryCircuit.refresh", "when": "view == deliveryCircuit.home", "group": "navigation" }
+        {
+          "command": "deliveryCircuit.refresh",
+          "when": "view == deliveryCircuit.home",
+          "group": "navigation"
+        },
+        {
+          "command": "deliveryCircuit.switchPersona",
+          "when": "view == deliveryCircuit.home",
+          "group": "2_circuit@1"
+        },
+        {
+          "command": "deliveryCircuit.openConnections",
+          "when": "view == deliveryCircuit.home",
+          "group": "2_circuit@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "deliveryCircuit.views.openFeature",
+          "when": "false"
+        }
       ]
     },
     "configuration": {
       "title": "Delivery Circuit",
       "properties": {
-        "deliveryCircuit.refreshSeconds": { "type": "number", "default": 60, "minimum": 15, "description": "How often GitHub and Jira data refresh." },
+        "deliveryCircuit.refreshSeconds": {
+          "type": "number",
+          "default": 60,
+          "minimum": 15,
+          "description": "How often GitHub and Jira data refresh."
+        },
         "deliveryCircuit.githubTeams": {
           "type": "object",
-          "default": { "architect": "architects", "developer": "developers", "tester": "testers" },
-          "description": "GitHub team slug for each persona. Your persona comes from your team membership."
+          "default": {
+            "architect": "architects",
+            "developer": "developers",
+            "tester": "testers"
+          },
+          "description": "GitHub team slug for each persona. Your persona comes from your team membership.",
+          "properties": {
+            "architect": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._-]+$"
+            },
+            "developer": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._-]+$"
+            },
+            "tester": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._-]+$"
+            }
+          },
+          "additionalProperties": false
         },
         "deliveryCircuit.personaOverride": {
-          "type": "string", "enum": ["", "architect", "developer", "tester"], "default": "",
+          "type": "string",
+          "enum": [
+            "",
+            "architect",
+            "developer",
+            "tester"
+          ],
+          "default": "",
           "description": "Only for repos owned by a personal account (no GitHub teams). Ignored when the repo belongs to an organisation."
         },
         "deliveryCircuit.sessionMode": {
-          "type": "string", "enum": ["terminal", "panel"], "default": "terminal",
+          "type": "string",
+          "enum": [
+            "terminal",
+            "panel"
+          ],
+          "default": "terminal",
           "description": "Where AI sessions run: an integrated terminal running claude, or a panel inside the extension (Agent SDK)."
         },
-        "deliveryCircuit.testing.headless": { "type": "boolean", "default": true, "description": "Run the test browser headless." },
+        "deliveryCircuit.testing.headless": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run the test browser headless."
+        },
         "deliveryCircuit.testing.models": {
-          "type": "array", "items": { "type": "string" }, "default": ["claude-haiku-4-5", "claude-sonnet-5-5"],
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "claude-haiku-4-5",
+            "claude-sonnet-5-5"
+          ],
           "description": "Models tried in order for each test case: the first runs every case; later ones re-run a case that did not pass."
         },
-        "deliveryCircuit.testing.workers": { "type": "number", "default": 2, "minimum": 1, "maximum": 4, "description": "Parallel test workers." },
-        "deliveryCircuit.testing.maxTurns": { "type": "number", "default": 80, "description": "Maximum agent turns per test case." }
+        "deliveryCircuit.testing.workers": {
+          "type": "number",
+          "default": 2,
+          "minimum": 1,
+          "maximum": 4,
+          "description": "Parallel test workers."
+        },
+        "deliveryCircuit.testing.maxTurns": {
+          "type": "number",
+          "default": 80,
+          "description": "Maximum agent turns per test case."
+        }
       }
     }
   },
@@ -89,5 +216,10 @@
     "esbuild": "^0.28.2",
     "typescript": "^5.9.3",
     "vitest": "^5.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pavansaikodanda/agentic-implementation-circuit.git",
+    "directory": "delivery-circuit-extension"
   }
 }

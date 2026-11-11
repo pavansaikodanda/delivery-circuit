@@ -14,8 +14,11 @@ export interface ModuleBase {
 
 export interface ExecResult { code: number; stdout: string; stderr: string }
 
-/** Run a program without a shell (no injection). Never pass secrets in args; use env. */
-export function run(cmd: string, args: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number; input?: string } = {}): Promise<ExecResult> {
+/** Run a program. Never pass secrets in args; use env.
+ *  On Windows the default is shell:true so .cmd shims (sf, gh, claude, npx) resolve; cmd.exe then joins the arguments
+ *  with spaces, so callers must quote arguments themselves (testing's shellArg, setup's shellArg) or send user text
+ *  through `input`. Pass `shell: false` to run a real executable (git, node, an .exe) with arguments passed verbatim. */
+export function run(cmd: string, args: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number; input?: string; shell?: boolean } = {}): Promise<ExecResult> {
   return new Promise((resolve) => {
     const child = execFile(cmd, args, {
       cwd: opts.cwd,
@@ -24,7 +27,7 @@ export function run(cmd: string, args: string[], opts: { cwd?: string; env?: Nod
       maxBuffer: 32 * 1024 * 1024,
       windowsHide: true,
       // sf, gh, claude are .cmd shims on Windows
-      shell: process.platform === "win32",
+      shell: opts.shell ?? process.platform === "win32",
     }, (err, stdout, stderr) => {
       const code = err ? (typeof (err as any).code === "number" ? (err as any).code : 1) : 0;
       resolve({ code, stdout: String(stdout), stderr: String(stderr) });
@@ -40,13 +43,13 @@ export function parseJson<T = any>(text: string): T | undefined {
 
 /** owner/repo from the workspace's git remote "origin" (https or ssh form). */
 export async function gitRemote(root: string): Promise<{ owner: string; repo: string } | undefined> {
-  const r = await run("git", ["remote", "get-url", "origin"], { cwd: root, timeoutMs: 10_000 });
+  const r = await run("git", ["remote", "get-url", "origin"], { cwd: root, timeoutMs: 10_000, shell: false });
   const m = r.stdout.trim().match(/github\.com[:/]([^/]+)\/([^/.\s]+?)(?:\.git)?$/);
   return m ? { owner: m[1], repo: m[2] } : undefined;
 }
 
 export async function gitBranch(root: string): Promise<string> {
-  const r = await run("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: root, timeoutMs: 10_000 });
+  const r = await run("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: root, timeoutMs: 10_000, shell: false });
   return r.stdout.trim();
 }
 

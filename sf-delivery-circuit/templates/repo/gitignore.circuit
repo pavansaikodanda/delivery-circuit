@@ -11,3 +11,8 @@ build.config.local.yml
 .specify/extensions/sf/sf-config.local.yml
 *.key
 *.pem
+# transcripts never enter git (the Delivery Circuit keeps them in Fireflies or encrypted on the Architect's machine)
+inputs/transcripts/*
+!inputs/transcripts/README.md
+# per-session Circuit MCP config with a local bearer token
+.claude/personas/*.local.mcp.json

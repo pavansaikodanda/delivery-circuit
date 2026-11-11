@@ -1,0 +1,32 @@
+/* Views module additions to the shared kit. Same rules: theme colours, one accent, thin borders, nothing loud. */
+.dc-section { margin-top: 20px; }
+.dc-section > h2 { margin-top: 0; display: flex; align-items: baseline; gap: 8px; }
+.dc-section > h2 .count { font-weight: 400; color: var(--dc-muted); font-size: .85em; }
+.dc-meta { color: var(--dc-muted); font-size: .9em; }
+.dc-reason { color: var(--dc-muted); font-size: .85em; }
+.dc-id { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid var(--dc-border); }
+.dc-id .who { font-weight: 600; }
+
+/* own gates read first; the others step back */
+.step.dc-own { font-weight: 600; }
+.step.dc-other { opacity: .55; }
+
+/* navigation rows */
+.dc-nav .item { cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dc-nav .item:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--dc-accent)); outline-offset: -1px; }
+
+/* feature cards */
+.dc-card-title { font-weight: 600; }
+.dc-strip { margin-top: 6px; }
+.dc-strip .k { color: var(--dc-muted); font-size: .82em; display: inline-block; min-width: 44px; }
+
+/* pull requests */
+.dc-pr .head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.dc-signals { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin-top: 6px; font-size: .92em; }
+.dc-signals .src { color: var(--dc-muted); }
+.dc-signal { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dc-signal + .dc-signal { margin-top: 2px; }
+
+/* tables */
+tr.dc-own td { font-weight: 600; }
+td .dot { margin-right: 6px; vertical-align: middle; }

@@ -1,0 +1,166 @@
+{
+  "mode": "ready",
+  "waiting": [
+    {
+      "id": "a-clarify-002",
+      "kind": "clarify",
+      "title": "Answer 3 open questions: 002-entitlement-sla",
+      "detail": "Clarification report has OPEN items",
+      "age": "5 d",
+      "since": "2026-11-07T01:00:00.000Z",
+      "featureId": "002",
+      "links": [
+        {
+          "kind": "file",
+          "label": "spec.md",
+          "target": ".specify/specs/002-entitlement-sla/spec.md"
+        }
+      ],
+      "actions": [
+        {
+          "id": "ai:/arch-design",
+          "label": "Design",
+          "persona": "architect",
+          "kind": "ai",
+          "args": {
+            "command": "/arch-design",
+            "argKind": "feature",
+            "arg": "002-entitlement-sla"
+          },
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "id": "a-g7-42",
+      "kind": "review-pr",
+      "title": "Schema review: CE-12 Agent escalates a Case",
+      "detail": "Developer and Tester gates pending",
+      "gate": "G7",
+      "gateLabel": "G7 Schema and design review",
+      "age": "5 h",
+      "since": "2026-11-11T10:00:00.000Z",
+      "featureId": "001",
+      "prNumber": 42,
+      "storyKey": "CE-12",
+      "links": [
+        {
+          "kind": "github",
+          "label": "PR #42",
+          "target": "https://github.com/acme-org/salesDemoOrg/pull/42"
+        },
+        {
+          "kind": "jira",
+          "label": "CE-12",
+          "target": "https://acme.atlassian.net/browse/CE-12"
+        }
+      ],
+      "actions": [
+        {
+          "id": "ai:/arch-review-pr",
+          "label": "AI review",
+          "persona": "architect",
+          "kind": "ai",
+          "args": {
+            "command": "/arch-review-pr",
+            "argKind": "pr",
+            "arg": 42
+          },
+          "allowed": true
+        },
+        {
+          "id": "gate:approve",
+          "label": "Approve (G7)",
+          "persona": "architect",
+          "kind": "gate",
+          "args": {
+            "pr": 42
+          },
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "id": "a-human-44",
+      "kind": "needs-human",
+      "title": "AI stopped on CE-14 after 3 attempts",
+      "detail": "Developer notified in Slack",
+      "age": "3 h",
+      "since": "2026-11-11T12:00:00.000Z",
+      "featureId": "001",
+      "prNumber": 44,
+      "storyKey": "CE-14",
+      "links": [
+        {
+          "kind": "github",
+          "label": "PR #44",
+          "target": "https://github.com/acme-org/salesDemoOrg/pull/44"
+        },
+        {
+          "kind": "jira",
+          "label": "CE-14",
+          "target": "https://acme.atlassian.net/browse/CE-14"
+        },
+        {
+          "kind": "slack",
+          "label": "Slack",
+          "target": "https://acme.slack.com/archives/C07CIRCUIT/p1731333000"
+        }
+      ],
+      "actions": []
+    }
+  ],
+  "waitingTotal": 3,
+  "nav": [
+    {
+      "target": "persona:architect",
+      "label": "Architect view"
+    },
+    {
+      "target": "persona:developer",
+      "label": "Developer view",
+      "detail": "view only"
+    },
+    {
+      "target": "persona:tester",
+      "label": "Tester view",
+      "detail": "view only"
+    },
+    {
+      "target": "testing",
+      "label": "Testing"
+    },
+    {
+      "target": "connections",
+      "label": "Connections",
+      "count": 2,
+      "cls": "warn",
+      "detail": "2 need attention"
+    },
+    {
+      "target": "setup",
+      "label": "Project setup"
+    }
+  ],
+  "setupNeeded": false,
+  "teams": {
+    "architect": "architects",
+    "developer": "developers",
+    "tester": "testers"
+  },
+  "attention": 2,
+  "updated": "2026-11-11T15:00:00.000Z",
+  "identity": {
+    "login": "maya-arch",
+    "active": "architect",
+    "activeLabel": "Architect",
+    "personas": [
+      "architect"
+    ],
+    "canSwitch": false,
+    "owner": "acme-org",
+    "repo": "salesDemoOrg",
+    "orgOwned": true,
+    "isAdmin": true
+  }
+}

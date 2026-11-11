@@ -26,7 +26,7 @@ See the [repository README](../README.md) for the full picture: what each stage 
 | `skills/qa-*` | `qa-design-tests`, `qa-push-tests` (G2), `qa-review-testplan` (G4), `qa-explore` (G6) |
 | `hooks/hooks.json` | Registers circuit-guard for every session |
 | `templates/repo/` | Installed into a client repo: CLAUDE.md, `.claude/` (settings, guard, persona MCP configs), CODEOWNERS, PR template, DoR/DoD, sf-config, `.coderabbit.yaml`, `scripts/ci/*`, `scripts/setup-persona.sh` |
-| `templates/workflows/` | 8 GitHub Actions workflows |
+| `templates/workflows/` | 7 GitHub Actions workflows |
 | `templates/github/` | Rulesets: main-branch gates; architects-only merge |
 | `templates/bootstrap/` | `build.config.yml` and `build-state.md` |
 | `tests/` | `guard.test.mjs`, 52 policy cases |

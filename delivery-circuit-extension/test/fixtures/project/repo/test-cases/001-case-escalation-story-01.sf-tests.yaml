@@ -1,0 +1,9 @@
+name: Case Escalation - Story 01
+context: |
+  Fixture suite.
+cases:
+  - id: S01-TC-01
+    title: Agent escalates a Case with a reason
+    mode: manual
+    steps:
+      - Open a Case

@@ -1,0 +1,186 @@
+{
+  "mode": "ready",
+  "waiting": [
+    {
+      "id": "d-g3-43",
+      "kind": "approve-plan",
+      "title": "Approve AI plan: CE-13 Tier 2 routing",
+      "detail": "docs/plans/CE-13/PLAN.md on draft PR",
+      "gate": "G3",
+      "gateLabel": "G3 AI plan approved",
+      "age": "1 d",
+      "since": "2026-11-10T13:00:00.000Z",
+      "featureId": "001",
+      "prNumber": 43,
+      "storyKey": "CE-13",
+      "links": [
+        {
+          "kind": "github",
+          "label": "PR #43",
+          "target": "https://github.com/acme-org/salesDemoOrg/pull/43"
+        },
+        {
+          "kind": "jira",
+          "label": "CE-13",
+          "target": "https://acme.atlassian.net/browse/CE-13"
+        },
+        {
+          "kind": "file",
+          "label": "PLAN.md",
+          "target": "docs/plans/CE-13/PLAN.md"
+        }
+      ],
+      "actions": [
+        {
+          "id": "ai:/dev-review-plan",
+          "label": "AI review plan",
+          "persona": "developer",
+          "kind": "ai",
+          "args": {
+            "command": "/dev-review-plan",
+            "argKind": "pr",
+            "arg": 43
+          },
+          "allowed": true
+        },
+        {
+          "id": "gate:label:plan-approved",
+          "label": "Add plan-approved",
+          "persona": "developer",
+          "kind": "gate",
+          "args": {
+            "pr": 43
+          },
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "id": "d-g5-42",
+      "kind": "review-pr",
+      "title": "Code review: CE-12 Agent escalates a Case",
+      "detail": "All checks green; CodeRabbit 1 nitpick",
+      "gate": "G5",
+      "gateLabel": "G5 Code review",
+      "age": "5 h",
+      "since": "2026-11-11T10:00:00.000Z",
+      "featureId": "001",
+      "prNumber": 42,
+      "storyKey": "CE-12",
+      "links": [
+        {
+          "kind": "github",
+          "label": "PR #42",
+          "target": "https://github.com/acme-org/salesDemoOrg/pull/42"
+        },
+        {
+          "kind": "jira",
+          "label": "CE-12",
+          "target": "https://acme.atlassian.net/browse/CE-12"
+        },
+        {
+          "kind": "coderabbit",
+          "label": "CodeRabbit",
+          "target": "https://github.com/acme-org/salesDemoOrg/pull/42#pullrequestreview-2417"
+        }
+      ],
+      "actions": [
+        {
+          "id": "ai:/dev-review-pr",
+          "label": "AI review",
+          "persona": "developer",
+          "kind": "ai",
+          "args": {
+            "command": "/dev-review-pr",
+            "argKind": "pr",
+            "arg": 42
+          },
+          "allowed": true
+        },
+        {
+          "id": "gate:approve",
+          "label": "Approve (G5)",
+          "persona": "developer",
+          "kind": "gate",
+          "args": {
+            "pr": 42
+          },
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "id": "d-human-44",
+      "kind": "needs-human",
+      "title": "Take over CE-14: AI stopped after 3 attempts",
+      "detail": "static and qa failing; route dev",
+      "age": "3 h",
+      "since": "2026-11-11T12:00:00.000Z",
+      "featureId": "001",
+      "prNumber": 44,
+      "storyKey": "CE-14",
+      "links": [
+        {
+          "kind": "github",
+          "label": "PR #44",
+          "target": "https://github.com/acme-org/salesDemoOrg/pull/44"
+        },
+        {
+          "kind": "jira",
+          "label": "CE-14",
+          "target": "https://acme.atlassian.net/browse/CE-14"
+        }
+      ],
+      "actions": [
+        {
+          "id": "ai:/dev-review-pr",
+          "label": "Take over",
+          "persona": "developer",
+          "kind": "ai",
+          "args": {
+            "command": "/dev-review-pr",
+            "argKind": "pr",
+            "arg": 44,
+            "intent": "takeover"
+          },
+          "allowed": true
+        }
+      ]
+    }
+  ],
+  "waitingTotal": 3,
+  "nav": [
+    {
+      "target": "persona:developer",
+      "label": "Developer view"
+    },
+    {
+      "target": "connections",
+      "label": "Connections",
+      "count": 1,
+      "cls": "warn",
+      "detail": "1 needs attention"
+    }
+  ],
+  "setupNeeded": false,
+  "teams": {
+    "architect": "architects",
+    "developer": "developers",
+    "tester": "testers"
+  },
+  "attention": 1,
+  "updated": "2026-11-11T15:00:00.000Z",
+  "identity": {
+    "login": "ravi-dev",
+    "active": "developer",
+    "activeLabel": "Developer",
+    "personas": [
+      "developer"
+    ],
+    "canSwitch": false,
+    "owner": "acme-org",
+    "repo": "salesDemoOrg",
+    "orgOwned": true,
+    "isAdmin": false
+  }
+}
