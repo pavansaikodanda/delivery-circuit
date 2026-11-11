@@ -4,7 +4,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { describe, expect, it } from "vitest";
-import type { Identity } from "../../src/core/contracts";
+import type { Identity, QueueItem } from "../../src/core/contracts";
 import * as M from "../../src/views/model";
 import {
   ARCHITECT, CONNECTIONS, DEVELOPER, EXISTING_FILES, FEATURES, NOW, OWNER, PRS, QUEUE, REPO, SOURCES, TEAMS, TESTER, allowedFor, jiraUrl,
@@ -22,10 +22,18 @@ const persona = (id: Identity, requested?: Identity["active"]) => M.buildPersona
   identity: id, requested, queue: QUEUE, features: FEATURES, prs: PRS, allowed: allowedFor(id), jiraUrl, now: NOW,
 });
 
+/** The item buildQueue adds when GitHub can't be read: a notice with a way to fix it, not waiting work. */
+const GITHUB_ERROR: QueueItem = {
+  id: "developer:connect:github", persona: "developer", kind: "connect", title: "Connect GitHub to see pull requests and gates",
+  detail: "API rate limit exceeded", links: [{ kind: "github", label: `${OWNER}/${REPO}`, target: `https://github.com/${OWNER}/${REPO}/pulls` }],
+  actions: [{ id: "nav:connections", label: "Open Connections", persona: "developer", kind: "nav" }],
+};
+
 const FIXTURES: Record<string, unknown> = {
   "views.home.architect": home(ARCHITECT),
   "views.home.developer": home(DEVELOPER),
   "views.home.tester": home(TESTER),
+  "views.home.github-error": home(DEVELOPER, { queue: [GITHUB_ERROR, ...QUEUE.filter((q) => q.persona === "developer")] }),
   "views.home.onboarding": home(null, { githubConnected: false }),
   "views.home.no-remote": home(null, { hasRemote: false }),
   "views.home.no-persona": home({ ...DEVELOPER, personas: [], active: null }, { circuitInstalled: false }),

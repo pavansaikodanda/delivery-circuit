@@ -8,7 +8,8 @@ import { caseHash } from "../../src/testing/engine/hash";
 import { resolveTarget, isSalesforceUrl } from "../../src/testing/engine/target";
 import { planChains, sharedPrefix, isSafeSpecPath } from "../../src/testing/engine/runner";
 import { routeOf, verdictFor } from "../../src/testing/engine/verdict";
-import { listRuns, readRun, runStartedAt, countStatuses } from "../../src/testing/engine/runs";
+import { ensureToolDir, listRuns, readRun, runStartedAt, countStatuses } from "../../src/testing/engine/runs";
+import { TestingEngine } from "../../src/testing/engine/core";
 import { readStatus, recordResult } from "../../src/testing/engine/status";
 import { catalog, mergeStatus, newSuitePath, statusFromRuns, storyRefOf, suiteRecord } from "../../src/testing/engine/catalog";
 import { esc, writeReport } from "../../src/testing/engine/report";
@@ -279,5 +280,46 @@ describe("process and agent safety", () => {
     expect(text).toContain("required on create: Account Name (Name)");
     expect(text).toContain("picklist Type (Type): Prospect | Customer");
     expect(text).toContain('validation rule VR1 on Phone: "Need a phone"');
+  });
+});
+
+describe("org safety and workspace hygiene", () => {
+  const engineWith = (guard: { allowed: boolean; reason?: string }, calls: string[] = []) =>
+    new TestingEngine({
+      workspaceDir: dir,
+      toolRoot: dir,
+      settings: () => ({ headless: true, models: [], workers: 1, maxTurns: 1 }),
+      sfAlias: (r) => r,
+      guardOrg: async (r) => {
+        calls.push(r);
+        return guard;
+      },
+    });
+
+  it("refuses to run in a production-looking org before any login, and frees the engine", async () => {
+    write("test-cases/a.sf-tests.yaml", SUITE);
+    const calls: string[] = [];
+    const engine = engineWith({ allowed: false, reason: 'The sf CLI alias "qa" points at a production-looking org' }, calls);
+    await expect(engine.run({ suite: "test-cases/a.sf-tests.yaml", mode: "manual", orgRole: "qa" })).rejects.toThrow(/production-looking/);
+    expect(calls).toEqual(["qa"]);
+    expect(engine.busy).toBeUndefined();
+    expect(fs.existsSync(path.join(dir, ".sf-ai-tester", "auth"))).toBe(false);
+    expect(fs.readFileSync(path.join(dir, ".sf-ai-tester", ".gitignore"), "utf8").trim()).toBe("*");
+  });
+
+  it("refuses generate (with or without explore) in a production-looking org", async () => {
+    const calls: string[] = [];
+    const engine = engineWith({ allowed: false, reason: "production-looking org" }, calls);
+    await expect(engine.generate({ requirement: "As a rep I can create an Account with a region.", count: 2, orgRole: "dev", explore: true })).rejects.toThrow(/production-looking/);
+    expect(calls).toEqual(["dev"]);
+    expect(engine.busy).toBeUndefined();
+    expect(fs.existsSync(path.join(dir, ".sf-ai-tester", "auth"))).toBe(false);
+    expect(fs.readFileSync(path.join(dir, ".sf-ai-tester", ".gitignore"), "utf8").trim()).toBe("*");
+  });
+
+  it("ensureToolDir writes a catch-all .gitignore and repairs a weaker one", () => {
+    write(".sf-ai-tester/.gitignore", "runs/\n");
+    expect(ensureToolDir(dir)).toBe(path.join(dir, ".sf-ai-tester"));
+    expect(fs.readFileSync(path.join(dir, ".sf-ai-tester", ".gitignore"), "utf8")).toBe("*\n");
   });
 });

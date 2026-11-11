@@ -200,3 +200,43 @@ export function deployInfo(runs: DeployRun[], prodDeployedAt?: string, prodDeplo
   if (prodDeployedSha) d.prodDeployedSha = prodDeployedSha;
   return d;
 }
+
+// ---- story PRs older than the merged window ----
+// PRS_QUERY only sees the 30 most recently updated merged PRs. A story whose PR merged before that window would read
+// as "no PR" and pull a shipped feature's gates back to waiting, so those keys are looked up by branch.
+
+const STORY_KEY_RE = /^[A-Z][A-Z0-9]+-\d+$/;
+export const STORY_SEARCH_BATCH = 20;
+
+/** Story keys that the features reference but that have no open or merged PR in `prs`. */
+export function missingStoryKeys(keys: Iterable<string>, prs: PrInfo[]): string[] {
+  const covered = new Set(prs.filter((p) => p.storyKey && p.state !== "closed").map((p) => p.storyKey!));
+  return [...new Set(keys)].filter((k) => STORY_KEY_RE.test(k) && !covered.has(k)).sort();
+}
+
+/** One GraphQL query with an aliased search per key: merged PRs whose head branch starts with feature/<KEY>. */
+export function storyPrsQuery(owner: string, repo: string, keys: string[]): { query: string; variables: Record<string, string> } {
+  const safe = keys.filter((k) => STORY_KEY_RE.test(k)).slice(0, STORY_SEARCH_BATCH);
+  if (!/^[\w.-]+$/.test(owner) || !/^[\w.-]+$/.test(repo)) throw new Error(`Unexpected repository name ${owner}/${repo}`);
+  const variables: Record<string, string> = {};
+  const fields = safe.map((k, i) => {
+    variables[`q${i}`] = `repo:${owner}/${repo} is:pr is:merged head:feature/${k}`;
+    return `s${i}: search(query: $q${i}, type: ISSUE, first: 10) { nodes { ... on PullRequest { ${PR_FIELDS} } } }`;
+  });
+  const params = safe.map((_k, i) => `$q${i}: String!`).join(", ");
+  return { query: `query CircuitStoryPrs(${params}) {\n${fields.join("\n")}\n}`, variables };
+}
+
+/** Maps a storyPrsQuery response: merged PRs whose branch is exactly that story (head: is a prefix match). */
+export function mapStoryPrsResponse(resp: any, keys: string[]): PrInfo[] {
+  const data = resp?.data ?? resp;
+  const out: PrInfo[] = [];
+  keys.slice(0, STORY_SEARCH_BATCH).forEach((k, i) => {
+    for (const n of data?.[`s${i}`]?.nodes ?? []) {
+      if (!n?.number) continue;
+      const pr = mapPr(n);
+      if (pr.state === "merged" && pr.storyKey === k && !out.some((o) => o.number === pr.number)) out.push(pr);
+    }
+  });
+  return out;
+}

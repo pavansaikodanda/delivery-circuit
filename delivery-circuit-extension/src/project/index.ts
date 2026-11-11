@@ -9,7 +9,7 @@ import type {
 } from "../core/contracts";
 import { gitRemote, type ModuleBase } from "../core/util";
 import { enrichFeatures, linkPrs } from "./gates";
-import { deployInfo, mapDeployRuns, mapPrsResponse, PRS_QUERY } from "./github";
+import { deployInfo, mapDeployRuns, mapPrsResponse, mapStoryPrsResponse, missingStoryKeys, PRS_QUERY, STORY_SEARCH_BATCH, storyPrsQuery } from "./github";
 import type { DeployInfo, JiraLabels, ParsedFeature, PrInfo, RepoRef } from "./model";
 import { loadFeatures } from "./parse";
 import { buildQueue } from "./queue";
@@ -21,6 +21,10 @@ import {
 const KEY_SECRET = "deliveryCircuit.sourcesKey";
 const JIRA_TTL = 5 * 60_000;
 const FIREFLIES_TTL = 2 * 60_000;
+/** Merged story PRs found outside the recent-PR window. Merged is final, so they are kept across sessions. */
+const MERGED_STORY_KEY = "deliveryCircuit.mergedStoryPrs";
+/** How long a story key with no merged PR is not searched again. */
+const STORY_MISS_TTL = 15 * 60_000;
 
 interface GhState { prs: PrInfo[]; deploy?: DeployInfo; at: number; error?: string }
 
@@ -33,6 +37,10 @@ export function createProject(base: ModuleBase, deps: { identity: IdentityServic
   let parsed: Promise<ParsedFeature[]> | undefined;
   let gh: GhState | undefined;
   let ghInflight: Promise<GhState> | undefined;
+  let ghNext: Promise<GhState> | undefined;
+  const mergedStories = new Map<number, PrInfo>(
+    Object.entries(ctx.workspaceState?.get<Record<string, PrInfo>>(MERGED_STORY_KEY) ?? {}).map(([n, pr]) => [Number(n), pr]));
+  const storyMissAt = new Map<string, number>();
   let jira: { keys: string; labels: JiraLabels; at: number } | undefined;
   let ff: { limit: number; list: SourceRef[]; at: number } | undefined;
   let jiraSite: string | undefined;
@@ -59,28 +67,79 @@ export function createProject(base: ModuleBase, deps: { identity: IdentityServic
 
   const getParsed = () => (parsed ??= loadFeatures(root).catch((e) => { logOnce(`project: reading specs failed: ${e?.message ?? e}`); return []; }));
 
+  /** Remembers merged story PRs (their state can no longer change). */
+  function rememberMerged(prs: PrInfo[]): void {
+    let added = false;
+    for (const pr of prs) {
+      if (pr.state !== "merged" || !pr.storyKey || mergedStories.has(pr.number)) continue;
+      mergedStories.set(pr.number, pr);
+      added = true;
+    }
+    if (added) void ctx.workspaceState?.update(MERGED_STORY_KEY, Object.fromEntries(mergedStories));
+  }
+
+  /** Merged PRs of stories the features reference that fell out of PRS_QUERY's recent-merged window. */
+  async function olderStoryPrs(r: RepoRef, recent: PrInfo[]): Promise<PrInfo[]> {
+    rememberMerged(recent);
+    const keys = new Set((await getParsed()).flatMap((x) => x.feature.stories.map((st) => st.jiraKey).filter((k): k is string => !!k)));
+    const now = Date.now();
+    const todo = missingStoryKeys(keys, [...recent, ...mergedStories.values()])
+      .filter((k) => now - (storyMissAt.get(k) ?? 0) >= STORY_MISS_TTL).slice(0, 2 * STORY_SEARCH_BATCH);
+    for (let i = 0; i < todo.length; i += STORY_SEARCH_BATCH) {
+      const batch = todo.slice(i, i + STORY_SEARCH_BATCH);
+      try {
+        const q = storyPrsQuery(r.owner, r.repo, batch);
+        const found = mapStoryPrsResponse(await connections.githubGraphql(q.query, q.variables), batch);
+        rememberMerged(found);
+        for (const k of batch) if (!found.some((p) => p.storyKey === k)) storyMissAt.set(k, now);
+      } catch (e: any) {
+        logOnce(`project: looking up older story PRs failed: ${String(e?.message ?? e).slice(0, 200)}`);
+        break;
+      }
+    }
+    const seen = new Set(recent.map((p) => p.number));
+    return [...mergedStories.values()].filter((p) => !seen.has(p.number) && keys.has(p.storyKey!)).map((p) => ({ ...p }));
+  }
+
+  async function fetchGithub(): Promise<GhState> {
+    const r = await repo();
+    if (!r) return { prs: [], at: Date.now(), error: "No GitHub remote \"origin\" in this workspace" };
+    try {
+      const resp = await connections.githubGraphql(PRS_QUERY, { owner: r.owner, name: r.repo });
+      const mapped = mapPrsResponse(resp);
+      const older = await olderStoryPrs(r, mapped.prs);
+      let runs: ReturnType<typeof mapDeployRuns> = [];
+      try {
+        runs = mapDeployRuns(await connections.githubRequest("GET",
+          `/repos/${encodeURIComponent(r.owner)}/${encodeURIComponent(r.repo)}/actions/workflows/deploy-prod.yml/runs?per_page=10`));
+      } catch { /* workflow not installed yet */ }
+      return { prs: [...mapped.prs, ...older], deploy: deployInfo(runs, mapped.prodDeployedAt, mapped.prodDeployedSha), at: Date.now() };
+    } catch (e: any) {
+      const msg = String(e?.message ?? e).slice(0, 200);
+      logOnce(`project: GitHub read failed: ${msg}`);
+      return { prs: gh?.prs ?? [], deploy: gh?.deploy, at: Date.now(), error: msg };
+    }
+  }
+
+  function startFetch(): Promise<GhState> {
+    const p: Promise<GhState> = fetchGithub()
+      .then((state) => { gh = state; return state; })
+      .finally(() => { if (ghInflight === p) ghInflight = undefined; });
+    ghInflight = p;
+    return p;
+  }
+
+  /**
+   * GitHub state, cached for refreshSeconds. force = the caller needs data read after this moment (a gate action just
+   * changed something): a request already in flight may have started before that change, so one fresh request is
+   * queued behind it instead of reusing its answer.
+   */
   async function loadGithub(force = false): Promise<GhState> {
     if (!force && gh && Date.now() - gh.at < refreshMs()) return gh;
-    if (ghInflight) return ghInflight;
-    ghInflight = (async (): Promise<GhState> => {
-      const r = await repo();
-      if (!r) return { prs: [], at: Date.now(), error: "No GitHub remote \"origin\" in this workspace" };
-      try {
-        const resp = await connections.githubGraphql(PRS_QUERY, { owner: r.owner, name: r.repo });
-        const mapped = mapPrsResponse(resp);
-        let runs: ReturnType<typeof mapDeployRuns> = [];
-        try {
-          runs = mapDeployRuns(await connections.githubRequest("GET",
-            `/repos/${encodeURIComponent(r.owner)}/${encodeURIComponent(r.repo)}/actions/workflows/deploy-prod.yml/runs?per_page=10`));
-        } catch { /* workflow not installed yet */ }
-        return { prs: mapped.prs, deploy: deployInfo(runs, mapped.prodDeployedAt, mapped.prodDeployedSha), at: Date.now() };
-      } catch (e: any) {
-        const msg = String(e?.message ?? e).slice(0, 200);
-        logOnce(`project: GitHub read failed: ${msg}`);
-        return { prs: gh?.prs ?? [], deploy: gh?.deploy, at: Date.now(), error: msg };
-      }
-    })();
-    try { gh = await ghInflight; return gh; } finally { ghInflight = undefined; }
+    if (!ghInflight) return startFetch();
+    if (!force) return ghInflight;
+    ghNext ??= ghInflight.catch(() => undefined).then(() => { ghNext = undefined; return startFetch(); });
+    return ghNext;
   }
 
   async function loadJira(p: ParsedFeature[]): Promise<JiraLabels> {
@@ -107,13 +166,13 @@ export function createProject(base: ModuleBase, deps: { identity: IdentityServic
     return site ? `${site}/browse/${key}` : undefined;
   };
 
-  async function snapshot(): Promise<{ features: Feature[]; gh: GhState; jiraConnected: boolean; repo?: RepoRef }> {
+  async function snapshot(): Promise<{ features: Feature[]; gh: GhState; jiraConnected: boolean; jiraLabels: JiraLabels; repo?: RepoRef }> {
     const [p, g] = await Promise.all([getParsed(), loadGithub()]);
     const labels = await loadJira(p);
     const r = await repo();
     const prs = g.prs.map((x) => ({ ...x }));
     const features = enrichFeatures(p, prs, labels, g.deploy, { repo: r, jiraBrowseUrl });
-    return { features, gh: { ...g, prs }, jiraConnected: labels !== undefined, repo: r };
+    return { features, gh: { ...g, prs }, jiraConnected: labels !== undefined, jiraLabels: labels, repo: r };
   }
 
   async function keyBuffer(): Promise<Buffer> {
@@ -195,7 +254,7 @@ export function createProject(base: ModuleBase, deps: { identity: IdentityServic
       const who = id ?? syntheticIdentity(persona);
       return buildQueue(persona, {
         features: s.features, prs: s.gh.prs, deploy: s.gh.deploy,
-        env: { login: who.login || undefined, repo: s.repo, jiraConnected: s.jiraConnected, jiraBrowseUrl, githubError: s.gh.error },
+        env: { login: who.login || undefined, repo: s.repo, jiraConnected: s.jiraConnected, jiraLabels: s.jiraLabels, jiraBrowseUrl, githubError: s.gh.error },
       });
     },
     async jiraMap(featureId) {

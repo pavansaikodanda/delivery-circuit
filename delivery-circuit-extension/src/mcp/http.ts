@@ -15,6 +15,8 @@ export interface CircuitHttpOptions {
   /** persona -> bearer token */
   tokens: Record<Persona, string>;
   makeServer(persona: Persona): McpServer;
+  /** Re-checked on every request: false answers 403 even for a valid token (persona no longer held). */
+  authorize?(persona: Persona): boolean;
   log?: (msg: string) => void;
   /** default 0 = random free port */
   port?: number;
@@ -80,6 +82,7 @@ export async function startCircuitHttp(opts: CircuitHttpOptions): Promise<Circui
       const auth = String(req.headers.authorization ?? "");
       const persona = personaForToken(/^Bearer\s+(.+)$/i.exec(auth)?.[1]?.trim(), opts.tokens);
       if (!persona) return send(res, 401, "Unauthorized", { "WWW-Authenticate": 'Bearer realm="circuit"' });
+      if (opts.authorize && !opts.authorize(persona)) return send(res, 403, "Forbidden: this persona is no longer yours");
       if (req.method !== "POST") return send(res, 405, "Method not allowed", { Allow: "POST" });
       let body: unknown;
       try { body = await readBody(req); } catch (e: any) { return send(res, e?.message === "too large" ? 413 : 400, e?.message === "too large" ? "Request too large" : "Parse error"); }

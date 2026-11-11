@@ -20,7 +20,7 @@ const enrich = (prs = freshPrs(), jira?: Record<string, string[]>, deploy?: Depl
 const env = (over: Partial<QueueEnv> = {}): QueueEnv => ({ repo, jiraConnected: false, jiraBrowseUrl, ...over });
 const queue = (persona: "architect" | "developer" | "tester", prs = freshPrs(), deploy?: DeployInfo, e: Partial<QueueEnv> = {}, jira?: Record<string, string[]>) => {
   const features = enrichFeatures(parsed, prs, jira, deploy, { repo, jiraBrowseUrl });
-  return buildQueue(persona, { features, prs, deploy, env: env(e) });
+  return buildQueue(persona, { features, prs, deploy, env: env({ ...(jira ? { jiraLabels: jira } : {}), ...e }) });
 };
 const kinds = (q: QueueItem[]) => q.map((i) => `${i.kind}:${i.prNumber ?? i.featureId ?? ""}`).sort();
 
@@ -267,7 +267,13 @@ describe("Tester queue", () => {
     expect(item).toMatchObject({ gate: "G2", featureId: "001", detail: "Jira not connected: status unknown, check in Jira" });
     expect(item.links.filter((l) => l.kind === "jira").map((l) => l.label)).toEqual(["ABC-11", "ABC-12", "ABC-13", "Epic ABC-10"]);
     const connected = queue("tester", [], undefined, { jiraConnected: true }, { "ABC-11": ["ai-ready"], "ABC-12": [], "ABC-13": [] });
-    expect(connected.find((i) => i.kind === "testability")!.detail).toBe("3 stories without ai-ready");
+    // Counts and links only the stories G2 is waiting on (ABC-11 is already ai-ready).
+    const t = connected.find((i) => i.kind === "testability")!;
+    expect(t.detail).toBe("2 stories without ai-ready: ABC-12, ABC-13");
+    expect(t.links.filter((l) => l.kind === "jira").map((l) => l.label)).toEqual(["ABC-12", "ABC-13", "Epic ABC-10"]);
+    // A story already in progress still counts when it lacks ai-ready, because G2 counts it.
+    const started = queue("tester", freshPrs(), undefined, { jiraConnected: true }, { "ABC-11": ["ai-ready"], "ABC-12": ["ai-ready"], "ABC-13": [] });
+    expect(started.find((i) => i.kind === "testability")!.detail).toBe("1 story without ai-ready: ABC-13");
     const done = queue("tester", [], undefined, { jiraConnected: true }, { "ABC-11": ["ai-ready"], "ABC-12": ["ai-ready"], "ABC-13": ["ai-ready"] });
     expect(done.some((i) => i.kind === "testability")).toBe(false);
   });
@@ -278,7 +284,21 @@ describe("GitHub not readable", () => {
     for (const p of ["architect", "developer", "tester"] as const) {
       const q = queue(p, [], undefined, { githubError: "Not signed in" });
       expect(q[0]).toMatchObject({ kind: "connect", id: `${p}:connect:github`, detail: "Not signed in" });
+      // It links to the repo on GitHub and offers a way to fix it.
+      expect(q[0].links).toEqual([{ kind: "github", label: "acme/sales", target: "https://github.com/acme/sales/pulls" }]);
+      expect(q[0].actions).toEqual([{ id: "nav:connections", label: "Open Connections", persona: p, kind: "nav" }]);
     }
+  });
+  it("pins review and merge buttons to the PR head commit", () => {
+    const sha = "c".repeat(40);
+    const prs = freshPrs().map((p) => ({ ...p, headSha: sha }));
+    const dev = queue("architect", prs).flatMap((i) => i.actions).filter((a) => a.id === "gate:review");
+    expect(dev.length).toBeGreaterThan(0);
+    expect(dev.every((a) => a.args!.sha === sha)).toBe(true);
+    const green = prs.map((p) => (p.number === 44 ? { ...p, checks: Object.fromEntries(Object.keys(p.checks).map((k) => [k, "success" as const])) } : p));
+    const merges = queue("architect", green).flatMap((i) => i.actions).filter((a) => a.id === "gate:merge");
+    expect(merges.map((m) => m.args)).toContainEqual({ pr: 44, sha });
+    expect(merges.every((m) => m.args!.sha === sha)).toBe(true);
   });
   it("item ids are unique per persona", () => {
     for (const p of ["architect", "developer", "tester"] as const) {

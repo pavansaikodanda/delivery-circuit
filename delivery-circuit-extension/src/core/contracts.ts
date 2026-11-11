@@ -71,6 +71,14 @@ export interface ConnectionStatus {
 
 export interface JiraCredentials { site: string; email: string; token: string }
 
+export interface SfOrgGuard {
+  alias: string;
+  instanceUrl?: string;
+  allowed: boolean;
+  /** Why it was refused (or a note when allowed, e.g. a declared trial org). */
+  reason?: string;
+}
+
 export interface ConnectionsService {
   list(): Promise<ConnectionStatus[]>;
   check(id: ConnectionId): Promise<ConnectionStatus>;
@@ -84,6 +92,9 @@ export interface ConnectionsService {
   firefliesKey(): Promise<string | undefined>;
   /** sf CLI alias for an org role, e.g. "dev" / "qa". */
   sfAlias(role: "dev" | "qa"): string;
+  /** Resolves the role's alias with the sf CLI and decides whether AI may work in that org (browser agent, org
+   *  exploration). Production-looking orgs are refused unless build.config.yml declares the org a trial org. */
+  sfOrgGuard(role: "dev" | "qa"): Promise<SfOrgGuard>;
   /** GitHub REST call as the signed-in person (path like "/repos/o/r/pulls"). Throws on non-2xx with the API message. */
   githubRequest<T = any>(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<T>;
   /** GitHub GraphQL call as the signed-in person. */
@@ -292,12 +303,14 @@ export interface TestingService {
 // ---------- actions and sessions ----------
 export interface ActionRef {
   /** Grammar (src/actions/grammar.ts): "ai:<skill command>" (e.g. "ai:/dev-review-plan"), "gate:label" or
-   *  "gate:label:<label>", "gate:review", "gate:merge", "gate:signoff", "gate:deploy", "nav:feature", "nav:testing". */
+   *  "gate:label:<label>", "gate:review", "gate:merge", "gate:signoff", "gate:deploy", "nav:feature", "nav:testing",
+   *  "nav:connections". */
   id: string;
   label: string;
   persona: Persona;
   kind: "ai" | "gate" | "nav";
-  /** AI actions: {command, argKind?: "feature"|"pr"|"source", arg?, intent?}. nav:feature: {featureId}. nav:testing: {suite?}. */
+  /** AI actions: {command, argKind?: "feature"|"pr"|"source", arg?, intent?}. nav:feature: {featureId}. nav:testing: {suite?}.
+   *  gate:review / gate:merge: {pr, sha?} where sha is the head commit the person was shown. */
   args?: Record<string, string | number>;
 }
 

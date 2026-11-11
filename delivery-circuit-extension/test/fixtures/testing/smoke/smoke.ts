@@ -8,6 +8,7 @@ import * as path from "path";
 import { setExec } from "../../../../src/testing/engine/exec";
 import { TestingEngine } from "../../../../src/testing/engine/core";
 import { verdictFor } from "../../../../src/testing/engine/verdict";
+import { describeOrg } from "../../../../src/testing/engine/sfcli";
 
 // Same contract as core/util.ts run(): array args, shell only for Windows .cmd shims.
 setExec((cmd, args, opts = {}) => new Promise((resolve) => {
@@ -24,6 +25,11 @@ async function main() {
     toolRoot: path.resolve(__dirname, "../../../.."),
     settings: () => ({ headless: true, models: ["claude-haiku-4-5", "claude-sonnet-5-5"], workers: 2, maxTurns: 80 }),
     sfAlias: (r) => r,
+    // Smoke runs only against sandboxes / scratch orgs (no build.config.yml trial declaration here).
+    guardOrg: async (r) => {
+      const o = await describeOrg(r);
+      return o?.connected && o.isSandbox ? { allowed: true } : { allowed: false, reason: `Alias ${r} is not a connected sandbox.` };
+    },
   });
   const started = Date.now();
   const run = await engine.run({ suite, mode: mode as any, orgRole: role as any }, (e) => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GATES, PERSONAS, type ActionRef, type Identity, type Persona } from "../../src/core/contracts";
 import {
-  approvableEnvironments, confirmText, denyReason, isAllowed, isProtectedBranch, mergeMethods, parseAction, signoffMessage,
+  approvableEnvironments, confirmText, denyReason, isAllowed, isProtectedBranch, mergeMethods, parseAction, pinnedHead, signoffMessage,
 } from "../../src/actions/grammar";
 import { applySignOff, isSignedOff, signOffItems } from "../../src/actions/signoff";
 
@@ -155,5 +155,26 @@ describe("plan.md sign-off", () => {
     const lines = signOffItems(crlf).map((i) => i.line);
     expect(applySignOff(crlf, lines, "x", "2026-01-01")).toContain("\r\n");
     expect(() => applySignOff("# no section", [], "x", "2026-01-01")).toThrow(/no Architect Sign-Off/);
+  });
+});
+
+describe("review and merge are pinned to the reviewed head commit", () => {
+  const A1 = "a".repeat(40), B2 = "b".repeat(40);
+  it("parses an optional 40-hex sha on review and merge", () => {
+    expect(parseAction(A("gate:merge", "architect", { pr: 9, sha: A1.toUpperCase() }))).toEqual({ type: "merge", pr: 9, gate: "G8", sha: A1 });
+    expect(parseAction(A("gate:review", "developer", { pr: 9, event: "APPROVE", sha: A1 }))).toMatchObject({ sha: A1 });
+    expect(parseAction(A("gate:merge", "architect", { pr: 9 }))).not.toHaveProperty("sha");
+    expect(() => parseAction(A("gate:merge", "architect", { pr: 9, sha: "main" }))).toThrow(/40 hex/);
+  });
+  it("refuses when the PR moved on since the person saw it", () => {
+    expect(pinnedHead(9, A1, A1)).toBe(A1);
+    expect(pinnedHead(9, undefined, B2.toUpperCase())).toBe(B2);
+    expect(() => pinnedHead(9, A1, B2)).toThrow(/new commits since this view was loaded \(aaaaaaa -> bbbbbbb\)/);
+    expect(() => pinnedHead(9, A1, undefined)).toThrow(/head commit/);
+  });
+  it("names the short sha in the confirmation", () => {
+    const c = { login: "pat", owner: "acme", repo: "crm", headSha: A1 };
+    expect(confirmText(parseAction(A("gate:merge", "architect", { pr: 9 })), { ...c, mergeMethod: "squash" })).toBe("Merge PR #9 at commit aaaaaaa in acme/crm with the squash method as pat (G8).");
+    expect(confirmText(parseAction(A("gate:review", "tester", { pr: 8, event: "APPROVE" })), c)).toBe("Approve PR #8 at commit aaaaaaa in acme/crm as pat (G6: QA on sandbox).");
   });
 });

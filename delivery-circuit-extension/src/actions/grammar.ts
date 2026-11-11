@@ -3,23 +3,25 @@
 //
 //   ai:<skill>        args {command?, arg?}           -> Claude session as action.persona with "<command> <arg>"
 //   gate:label        args {pr, label}  (or id "gate:label:<label>")  label in plan-approved | testplan-approved | ai-ready
-//   gate:review       args {pr, event: APPROVE | REQUEST_CHANGES}
-//   gate:merge        args {pr}
+//   gate:review       args {pr, event: APPROVE | REQUEST_CHANGES, sha?}   sha = head commit the person reviewed
+//   gate:merge        args {pr, sha?}
 //   gate:signoff      args {featureId}
 //   gate:deploy       args {runId}
 //   nav:feature       args {featureId}
 //   nav:testing       args {suite?}
+//   nav:connections   (no args)
 import { canAct, canView, GATES, type ActionRef, type GateId, type Identity, type Persona } from "../core/contracts";
 
 export type ParsedAction =
   | { type: "ai"; skill: string; prompt: string }
   | { type: "label"; pr: number; label: GateLabel; gate: GateId }
-  | { type: "review"; pr: number; event: ReviewEvent; gate: GateId }
-  | { type: "merge"; pr: number; gate: GateId }
+  | { type: "review"; pr: number; event: ReviewEvent; gate: GateId; sha?: string }
+  | { type: "merge"; pr: number; gate: GateId; sha?: string }
   | { type: "signoff"; featureId: string; gate: GateId }
   | { type: "deploy"; runId: number; gate: GateId }
   | { type: "nav-feature"; featureId?: string }
-  | { type: "nav-testing"; suite?: string };
+  | { type: "nav-testing"; suite?: string }
+  | { type: "nav-connections" };
 
 export type GateLabel = "plan-approved" | "testplan-approved" | "ai-ready";
 export type ReviewEvent = "APPROVE" | "REQUEST_CHANGES";
@@ -40,6 +42,13 @@ const num = (v: unknown, what: string): number => {
   const n = typeof v === "number" ? v : typeof v === "string" && /^\d+$/.test(v.trim()) ? Number(v.trim()) : NaN;
   if (!Number.isInteger(n) || n <= 0) throw new ActionError(`${what} must be a positive number`);
   return n;
+};
+/** Optional head commit SHA (40 hex). */
+const sha = (v: unknown): string | undefined => {
+  if (v === undefined || v === null || v === "") return undefined;
+  const s = String(v).trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(s)) throw new ActionError("Commit SHA must be 40 hex characters");
+  return s;
 };
 const str = (v: unknown): string | undefined => (v === undefined || v === null || String(v).trim() === "" ? undefined : String(v).trim());
 
@@ -71,10 +80,13 @@ export function parseAction(a: ActionRef): ParsedAction {
       case "review": {
         const event = (str(args.event) ?? str(extra) ?? "").toUpperCase().replace(/-/g, "_");
         if (event !== "APPROVE" && event !== "REQUEST_CHANGES") throw new ActionError("Review event must be APPROVE or REQUEST_CHANGES");
-        return { type: "review", pr: num(args.pr, "PR number"), event, gate: REVIEW_GATES[a.persona] };
+        const head = sha(args.sha);
+        return { type: "review", pr: num(args.pr, "PR number"), event, gate: REVIEW_GATES[a.persona], ...(head ? { sha: head } : {}) };
       }
-      case "merge":
-        return { type: "merge", pr: num(args.pr, "PR number"), gate: "G8" };
+      case "merge": {
+        const head = sha(args.sha);
+        return { type: "merge", pr: num(args.pr, "PR number"), gate: "G8", ...(head ? { sha: head } : {}) };
+      }
       case "signoff": {
         const featureId = str(args.featureId) ?? str(extra);
         if (!featureId || !/^[\w.-]+$/.test(featureId)) throw new ActionError("Sign-off needs a feature id");
@@ -90,6 +102,7 @@ export function parseAction(a: ActionRef): ParsedAction {
   if (prefix === "nav") {
     if (rest === "feature") return { type: "nav-feature", featureId: str(args.featureId) };
     if (rest === "testing") return { type: "nav-testing", suite: str(args.suite) };
+    if (rest === "connections") return { type: "nav-connections" };
     throw new ActionError(`Unknown navigation ${id}`);
   }
   throw new ActionError(`Unknown action ${id}`);
@@ -110,6 +123,7 @@ export function denyReason(id: Identity | null, a: ActionRef): string | null {
   if (!id || !id.login) return "Sign in to GitHub first";
   let p: ParsedAction;
   try { p = parseAction(a); } catch (e) { return (e as Error).message; }
+  if (p.type === "nav-connections") return null; // everyone signed in may open Connections
   if (p.type === "nav-feature" || p.type === "nav-testing") {
     return canView(id, a.persona) ? null : `Only visible to the ${a.persona} persona`;
   }
@@ -135,8 +149,25 @@ export interface ConfirmContext {
   branch?: string;
   gitName?: string;
   gitEmail?: string;
+  /** review / merge: the head commit the action is pinned to */
+  headSha?: string;
   /** deploy: environment names that will be approved */
   environments?: string[];
+}
+
+const at = (c: ConfirmContext) => (c.headSha ? ` at commit ${c.headSha.slice(0, 7)}` : "");
+
+/**
+ * The head commit a review or merge is pinned to. `seen` is the head the person was shown (the action's sha arg);
+ * `current` is the PR's head now. Refuses when the PR moved on, so nobody approves or merges commits they never saw.
+ */
+export function pinnedHead(pr: number, seen: string | undefined, current: string | undefined): string {
+  const now = (current ?? "").toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(now)) throw new ActionError(`Could not read the head commit of PR #${pr}`);
+  if (seen && seen !== now) {
+    throw new ActionError(`PR #${pr} has new commits since this view was loaded (${seen.slice(0, 7)} -> ${now.slice(0, 7)}). Refresh, look at the new commits and try again.`);
+  }
+  return now;
 }
 
 /** The exact effect, shown in the modal confirmation and written to the log. */
@@ -145,14 +176,15 @@ export function confirmText(p: ParsedAction, c: ConfirmContext): string {
   switch (p.type) {
     case "label": return `Add label ${p.label} to PR #${p.pr} in ${repo} as ${c.login} (${p.gate}: ${GATES[p.gate].label}).`;
     case "review": return p.event === "APPROVE"
-      ? `Approve PR #${p.pr} in ${repo} as ${c.login} (${p.gate}: ${GATES[p.gate].label}).`
-      : `Request changes on PR #${p.pr} in ${repo} as ${c.login}.`;
-    case "merge": return `Merge PR #${p.pr} in ${repo} with the ${c.mergeMethod ?? "repository default"} method as ${c.login} (G8).`;
+      ? `Approve PR #${p.pr}${at(c)} in ${repo} as ${c.login} (${p.gate}: ${GATES[p.gate].label}).`
+      : `Request changes on PR #${p.pr}${at(c)} in ${repo} as ${c.login}.`;
+    case "merge": return `Merge PR #${p.pr}${at(c)} in ${repo} with the ${c.mergeMethod ?? "repository default"} method as ${c.login} (G8).`;
     case "signoff": return `Tick the Architect Sign-Off in ${c.planPath ?? "plan.md"}, commit "${signoffMessage(p.featureId)}" as ${c.gitName ?? "?"} <${c.gitEmail ?? "?"}> on branch ${c.branch ?? "?"} and push it (G1).`;
     case "deploy": return `Approve the deployment of workflow run #${p.runId} in ${repo} to ${(c.environments ?? ["production"]).join(", ")} as ${c.login} (G9).`;
     case "ai": return `Start Claude with "${p.prompt}".`;
     case "nav-feature": return `Open feature ${p.featureId ?? ""}`.trim();
     case "nav-testing": return "Open Testing";
+    case "nav-connections": return "Open Connections";
   }
 }
 

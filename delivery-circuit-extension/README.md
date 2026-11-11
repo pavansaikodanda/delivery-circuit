@@ -138,6 +138,7 @@ npx vitest run            # unit tests (test/unit, vscode mocked)
 npm run test:integration  # downloads VS Code into .vscode-test and runs test/integration on a temp copy of ../salesDemoOrg
 npm run preview           # every webview page with fixture data: http://127.0.0.1:5178
 npm run package           # build + delivery-circuit.vsix (with runtime dependencies)
+npm run test:vsix         # unpacks the VSIX, checks its contents, runs the integration suite against the unpacked copy
 ```
 
 Press F5 with this folder open to run the extension in a development host. Module layout and rules are in

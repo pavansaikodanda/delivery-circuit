@@ -1,7 +1,7 @@
 // What is waiting on each persona now. Pure function over features, PRs and deploy runs (no vscode import).
 // Action ids follow the grammar the actions module implements:
 //   ai:<skill> {command, arg} | gate:label {pr,label} | gate:review {pr,event} | gate:merge {pr}
-//   gate:signoff {featureId} | gate:deploy {runId} | nav:feature {featureId} | nav:testing {suite}
+//   gate:signoff {featureId} | gate:deploy {runId} | nav:feature {featureId} | nav:testing {suite} | nav:connections
 import type { ActionRef, DeepLink, Feature, Persona, QueueItem } from "../core/contracts";
 import { ghBlobUrl } from "./gates";
 import type { DeployInfo, PrInfo, RepoRef } from "./model";
@@ -13,7 +13,8 @@ export interface QueueEnv {
   repo?: RepoRef;
   /** Jira labels known (Jira connected) */
   jiraConnected: boolean;
-  /** G2 label per story key when Jira is connected */
+  /** Jira labels per story key when Jira is connected (the same map the G2 gate is computed from) */
+  jiraLabels?: Record<string, string[]>;
   jiraBrowseUrl?: (key: string) => string | undefined;
   /** GitHub could not be read: PR-based items are missing */
   githubError?: string;
@@ -26,12 +27,14 @@ export interface QueueInput {
   env: QueueEnv;
 }
 
+/** The head commit shown with a review / merge button, so the action is pinned to what the person saw. */
+const headArg = (sha: string | undefined): Record<string, string> => (sha && /^[0-9a-f]{40}$/i.test(sha) ? { sha } : {});
 const ai = (persona: Persona, command: string, arg: string | number, label: string): ActionRef =>
   ({ id: `ai:${command}`, label, persona, kind: "ai", args: { command, arg: String(arg) } });
 const gateLabel = (persona: Persona, pr: number, label: string): ActionRef =>
   ({ id: "gate:label", label: `Add ${label}`, persona, kind: "gate", args: { pr, label } });
-const gateReview = (persona: Persona, pr: number, event: "APPROVE" | "REQUEST_CHANGES"): ActionRef =>
-  ({ id: "gate:review", label: event === "APPROVE" ? "Approve" : "Request changes", persona, kind: "gate", args: { pr, event } });
+const gateReview = (persona: Persona, pr: number, event: "APPROVE" | "REQUEST_CHANGES", sha?: string): ActionRef =>
+  ({ id: "gate:review", label: event === "APPROVE" ? "Approve" : "Request changes", persona, kind: "gate", args: { pr, event, ...headArg(sha) } });
 const navFeature = (persona: Persona, featureId: string): ActionRef =>
   ({ id: "nav:feature", label: "Open feature", persona, kind: "nav", args: { featureId } });
 const navTesting = (persona: Persona, suite: string): ActionRef =>
@@ -80,8 +83,13 @@ export function buildQueue(persona: Persona, input: QueueInput): QueueItem[] {
   const items: QueueItem[] = [];
 
   if (env.githubError) {
+    // Not work waiting on the person: the views show it as a notice and leave it out of the waiting counts.
+    const links: DeepLink[] = env.repo
+      ? [{ kind: "github", label: `${env.repo.owner}/${env.repo.repo}`, target: `https://github.com/${encodeURIComponent(env.repo.owner)}/${encodeURIComponent(env.repo.repo)}/pulls` }]
+      : [];
     items.push({ id: `${persona}:connect:github`, persona, kind: "connect", title: "Connect GitHub to see pull requests and gates",
-      detail: env.githubError, links: [], actions: [] });
+      detail: env.githubError, links,
+      actions: [{ id: "nav:connections", label: "Open Connections", persona, kind: "nav" }] });
   }
 
   if (persona === "architect") {
@@ -109,7 +117,7 @@ export function buildQueue(persona: Persona, input: QueueInput): QueueItem[] {
           title: `#${pr.number} ${pr.title}`, detail: "Schema and design review (G7)",
           links: prLinks(pr, f, env),
           actions: [ai(persona, "/arch-review-pr", pr.number, "Review with AI (arch-review-pr)"),
-            gateReview(persona, pr.number, "APPROVE"), gateReview(persona, pr.number, "REQUEST_CHANGES")] });
+            gateReview(persona, pr.number, "APPROVE", pr.headSha), gateReview(persona, pr.number, "REQUEST_CHANGES", pr.headSha)] });
       }
       const allGates = ["gate/developer", "gate/tester", "gate/architect"].every((c) => gateOk(pr, c));
       const green = failing(pr).length === 0 && pending(pr).length === 0;
@@ -118,7 +126,7 @@ export function buildQueue(persona: Persona, input: QueueInput): QueueItem[] {
         items.push({ ...prItemBase(persona, "merge", pr, f), gate: "G8",
           title: `#${pr.number} ${pr.title}`, detail: isStoryPr(pr) ? "All gates and checks green: ready to merge" : "Spec PR signed off and green: ready to merge",
           links: prLinks(pr, f, env),
-          actions: [{ id: "gate:merge", label: "Merge", persona, kind: "gate", args: { pr: pr.number } }] });
+          actions: [{ id: "gate:merge", label: "Merge", persona, kind: "gate", args: { pr: pr.number, ...headArg(pr.headSha) } }] });
       }
     }
     for (const r of input.deploy?.runs ?? []) {
@@ -163,7 +171,7 @@ export function buildQueue(persona: Persona, input: QueueInput): QueueItem[] {
           detail: fails.length ? `Code review (G5). Failing: ${fails.join(", ")}` : "Code review (G5)",
           links: prLinks(pr, f, env, ["PLAN.md"]),
           actions: [ai(persona, "/dev-review-pr", pr.number, "Review with AI (dev-review-pr)"),
-            gateReview(persona, pr.number, "APPROVE"), gateReview(persona, pr.number, "REQUEST_CHANGES")] });
+            gateReview(persona, pr.number, "APPROVE", pr.headSha), gateReview(persona, pr.number, "REQUEST_CHANGES", pr.headSha)] });
       }
     }
   }
@@ -180,16 +188,20 @@ export function buildQueue(persona: Persona, input: QueueInput): QueueItem[] {
           actions: [ai(persona, "/qa-design-tests", f.slug, "Design with AI (qa-design-tests)"), navFeature(persona, f.id)] });
       }
       const keyed = f.stories.filter((s) => !!s.jiraKey);
-      const notStarted = keyed.filter((s) => !prStoryKeys.has(s.jiraKey));
-      if (keyed.length > 0 && notStarted.length > 0 && f.gates.G2 !== "done") {
+      // With Jira labels: exactly the stories G2 waits on (no ai-ready). Without: the stories not started yet, to check in Jira.
+      const known = env.jiraConnected && env.jiraLabels !== undefined;
+      const todo = known
+        ? keyed.filter((s) => !(env.jiraLabels![s.jiraKey!] ?? []).includes("ai-ready"))
+        : keyed.filter((s) => !prStoryKeys.has(s.jiraKey));
+      if (keyed.length > 0 && todo.length > 0 && f.gates.G2 !== "done") {
         const links: DeepLink[] = [];
-        for (const s of notStarted) {
+        for (const s of todo) {
           const u = env.jiraBrowseUrl?.(s.jiraKey!);
           if (u) links.push({ kind: "jira", label: s.jiraKey!, target: u });
         }
         items.push({ id: `tester:testability:${f.id}`, persona, kind: "testability", gate: "G2", featureId: f.id,
           title: `${f.slug}: confirm testability (ai-ready)`,
-          detail: env.jiraConnected ? `${notStarted.length} stor${notStarted.length === 1 ? "y" : "ies"} without ai-ready` : "Jira not connected: status unknown, check in Jira",
+          detail: known ? `${todo.length} stor${todo.length === 1 ? "y" : "ies"} without ai-ready: ${todo.map((s) => s.jiraKey).join(", ")}` : "Jira not connected: status unknown, check in Jira",
           links: [...links, ...featureLinks(f, [])],
           actions: [ai(persona, "/qa-push-tests", f.slug, "Push tests with AI (qa-push-tests)"), navFeature(persona, f.id)] });
       }
@@ -218,7 +230,7 @@ export function buildQueue(persona: Persona, input: QueueInput): QueueItem[] {
           detail: pr.checks.qa === "success" ? "QA checks green: explore and approve (G6)" : `QA on sandbox (G6); qa check ${pr.checks.qa ?? "missing"}`,
           links: prLinks(pr, f, env, ["TESTPLAN.md"]),
           actions: [ai(persona, "/qa-explore", pr.number, "Explore with AI (qa-explore)"),
-            gateReview(persona, pr.number, "APPROVE"), gateReview(persona, pr.number, "REQUEST_CHANGES"), ...testing] });
+            gateReview(persona, pr.number, "APPROVE", pr.headSha), gateReview(persona, pr.number, "REQUEST_CHANGES", pr.headSha), ...testing] });
       }
     }
   }

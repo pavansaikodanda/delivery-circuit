@@ -54,6 +54,7 @@ export function createTesting(base: ModuleBase, deps: { connections: Connections
     toolRoot: base.ctx.extensionPath,
     settings: readSettings,
     sfAlias: (role) => deps.connections.sfAlias(role),
+    guardOrg: (role) => deps.connections.sfOrgGuard(role),
     log: (m) => base.log(`[testing] ${m}`),
   });
   const listeners = new Set<(e: EngineEvent) => void>();

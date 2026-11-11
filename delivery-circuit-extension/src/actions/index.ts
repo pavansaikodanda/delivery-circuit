@@ -6,7 +6,7 @@ import * as vscode from "vscode";
 import type { ActionRef, ActionsService, ConnectionsService, Identity, IdentityService, ProjectContextService, SessionsService } from "../core/contracts";
 import { gitBranch, run, type ModuleBase } from "../core/util";
 import {
-  ActionError, approvableEnvironments, confirmText, denyReason, isProtectedBranch, mergeMethods, parseAction, signoffMessage,
+  ActionError, approvableEnvironments, confirmText, denyReason, isProtectedBranch, mergeMethods, parseAction, pinnedHead, signoffMessage,
   type ConfirmContext, type ParsedAction,
 } from "./grammar";
 import { applySignOff, signOffItems } from "./signoff";
@@ -30,6 +30,9 @@ export function createActions(base: ModuleBase, deps: Deps): ActionsService {
 
   async function runGate(id: Identity, p: ParsedAction): Promise<void> {
     const repo = repoPath(id);
+    /** Current head of a PR, checked against the head the person was shown. */
+    const headOf = async (pr: number, seen?: string) =>
+      pinnedHead(pr, seen, (await connections.githubRequest<any>("GET", `${repo}/pulls/${pr}`))?.head?.sha);
     switch (p.type) {
       case "label": {
         const text = confirmText(p, ctxFor(id));
@@ -48,9 +51,11 @@ export function createActions(base: ModuleBase, deps: Deps): ActionsService {
           });
           if (body === undefined) return log(`cancelled: request changes on PR #${p.pr}`);
         }
-        const text = confirmText(p, ctxFor(id));
+        const head = await headOf(p.pr, p.sha);
+        const text = confirmText(p, ctxFor(id, { headSha: head }));
         if (!(await confirm(text, p.event === "APPROVE" ? "Approve" : "Request changes"))) return log(`cancelled: ${text}`);
-        await connections.githubRequest("POST", `${repo}/pulls/${p.pr}/reviews`, body ? { event: p.event, body } : { event: p.event });
+        // commit_id pins the review to the commit shown in the confirmation, even if a push lands meanwhile.
+        await connections.githubRequest("POST", `${repo}/pulls/${p.pr}/reviews`, body ? { event: p.event, body, commit_id: head } : { event: p.event, commit_id: head });
         log(`done: ${text}`);
         vscode.window.showInformationMessage(p.event === "APPROVE" ? `PR #${p.pr} approved.` : `Changes requested on PR #${p.pr}.`);
         break;
@@ -66,10 +71,12 @@ export function createActions(base: ModuleBase, deps: Deps): ActionsService {
           if (!pick) return log(`cancelled: merge PR #${p.pr}`);
           method = pick.label as typeof method;
         }
-        const text = confirmText(p, ctxFor(id, { mergeMethod: method }));
+        const head = await headOf(p.pr, p.sha);
+        const text = confirmText(p, ctxFor(id, { mergeMethod: method, headSha: head }));
         if (!(await confirm(text, "Merge"))) return log(`cancelled: ${text}`);
         try {
-          await connections.githubRequest("PUT", `${repo}/pulls/${p.pr}/merge`, { merge_method: method });
+          // sha: GitHub refuses (409) if the head moved after the confirmation, instead of merging unreviewed commits.
+          await connections.githubRequest("PUT", `${repo}/pulls/${p.pr}/merge`, { merge_method: method, sha: head });
         } catch (e: any) {
           log(`refused: ${text}: ${e?.message ?? e}`);
           vscode.window.showErrorMessage(`GitHub refused the merge of PR #${p.pr}: ${e?.message ?? e}`, { modal: true });
@@ -181,6 +188,9 @@ export function createActions(base: ModuleBase, deps: Deps): ActionsService {
           break;
         case "nav-testing":
           await vscode.commands.executeCommand("deliveryCircuit.openTesting", p.suite ? { suite: p.suite } : undefined);
+          break;
+        case "nav-connections":
+          await vscode.commands.executeCommand("deliveryCircuit.openConnections");
           break;
         default:
           await runGate(id, p);

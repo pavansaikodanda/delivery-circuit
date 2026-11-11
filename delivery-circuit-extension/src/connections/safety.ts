@@ -46,7 +46,22 @@ export function checkLoginUrl(url: string | undefined, declaredTrial: boolean): 
   }
 }
 
-const SAFE_ARG = /^[A-Za-z0-9_@%+=:,./\\-]+$/;
+/**
+ * Whether AI (the SF AI Tester browser agent, org exploration) may work in the org an alias resolves to. Same rule
+ * as the Connections row: sandboxes, scratch orgs and Developer Edition orgs yes; a production-looking instance only
+ * when build.config.yml declares the org a trial org; an org the CLI can't resolve, no.
+ */
+export function sfOrgDecision(alias: string, instanceUrl: string | undefined, declaredTrial: boolean): { allowed: boolean; reason?: string } {
+  const kind = classifySfUrl(instanceUrl);
+  if (kind === "invalid") return { allowed: false, reason: `The sf CLI alias "${alias}" does not resolve to a connected Salesforce org. Connect it on the Connections page.` };
+  if (kind !== "production-like") return { allowed: true };
+  const host = new URL(instanceUrl!).hostname;
+  return declaredTrial
+    ? { allowed: true, reason: `${host} is a trial org per build.config.yml.` }
+    : { allowed: false, reason: `The sf CLI alias "${alias}" points at a production-looking org (${host}). AI testing only runs in sandboxes. Log out of it and connect a sandbox, or declare a trial org in build.config.yml.` };
+}
+
+const SAFE_ARG =/^[A-Za-z0-9_@%+=:,./\\-]+$/;
 
 /**
  * Builds a terminal command line from fixed program + arguments. Every argument must match a strict charset (no

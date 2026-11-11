@@ -149,6 +149,7 @@
     }
   ],
   "waitingTotal": 3,
+  "notices": [],
   "nav": [
     {
       "target": "persona:developer",

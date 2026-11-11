@@ -4,7 +4,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
-import type { ConnectionId, ConnectionStatus, ConnectionsService, DeepLink, Identity, JiraCredentials, Persona } from "../core/contracts";
+import type { ConnectionId, ConnectionStatus, ConnectionsService, DeepLink, Identity, JiraCredentials, Persona, SfOrgGuard } from "../core/contracts";
 import { PERSONAS } from "../core/contracts";
 import { run, type ModuleBase } from "../core/util";
 import { baseStatus, CONNECTIONS, def } from "./catalog";
@@ -16,7 +16,7 @@ import {
   browserDir, findCodeAnalyzer, findServerFor, isSubscriptionAuth, MCP_KNOWN, mcpListStateFor, parseClaudeAuth, parseMcpConfigs,
   parseMcpList, parseSfOrgDisplay, parseSfPlugins, requiredBrowsers, type McpListEntry, type McpRowId, type McpServerEntry,
 } from "./parse";
-import { checkLoginUrl, classifySfUrl, safeRelPath, terminalCommand } from "./safety";
+import { checkLoginUrl, classifySfUrl, safeRelPath, sfOrgDecision, terminalCommand } from "./safety";
 import { isFileSecret, scanWorkflows } from "./secrets";
 import { buildProjectInfo, type ProjectInfo } from "./panelState";
 
@@ -182,6 +182,17 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
     return put(st(id, { state: "connected", account: p.org.username, expiresAt: p.org.expirationDate,
       detail: `alias ${alias} · ${host}${kind === "production-like" ? " · trial org (per build.config.yml)" : ""}` }),
       inst ? [{ kind: "salesforce", label: "Org", target: inst }, { kind: "salesforce", label: "Setup", target: `${inst.replace(/\/+$/, "")}/lightning/setup/SetupOneHome/home` }] : undefined);
+  }
+
+  /** Fresh sf org display for the role's alias, then the same production rule as checkSf. Never cached. */
+  async function sfOrgGuard(role: "dev" | "qa"): Promise<SfOrgGuard> {
+    const alias = sfAlias(role);
+    if (!alias || !/^[\w.@+-]+$/.test(alias)) return { alias, allowed: false, reason: `No usable sf CLI alias for the ${role} org (got "${alias}").` };
+    const c = config();
+    const r = await run("sf", ["org", "display", "--target-org", alias, "--json"], { cwd: root, timeoutMs: 90_000 });
+    const p = parseSfOrgDisplay(r.stdout);
+    const instanceUrl = p.ok ? p.org?.instanceUrl : undefined;
+    return { alias, instanceUrl, ...sfOrgDecision(alias, instanceUrl, role === "dev" ? c.sf.devIsTrial : c.sf.qaIsTrial) };
   }
 
   async function atlassianGet(creds: JiraCredentials, apiPath: string) {
@@ -692,6 +703,7 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
     jira,
     firefliesKey,
     sfAlias,
+    sfOrgGuard,
     githubRequest: (method, p, body) => gh.request(method, p, body),
     githubGraphql: (q, v) => gh.graphql(q, v),
     repoSecretNames,

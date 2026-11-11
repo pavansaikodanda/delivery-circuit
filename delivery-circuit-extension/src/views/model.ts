@@ -289,34 +289,70 @@ function checkGate(c: CheckState | undefined, draft: boolean): GateState {
   return draft ? "not-started" : "waiting";
 }
 
+// The PR gate strip and "needs you" follow the same rules as the queue (src/project/queue.ts buildQueue), so a PR card
+// never says a gate waits on you when the queue does not list it, or the other way round:
+//   G3 / G4  only for draft ai-generated PRs, until plan-approved / testplan-approved;
+//   G5 / G6  on non-draft PRs from the gate/developer / gate/tester checks (labels play no part), not on your own PR,
+//            and G6 not while needs-human is set;
+//   G7       on non-draft PRs from gate/architect, not while needs-human is set;
+//   G8       non-draft, all gate/* checks and every other check green.
+const has = (pr: PrRef, l: string) => pr.labels.includes(l);
+const isAiPr = (pr: PrRef) => has(pr, "ai-generated");
+const nonGateGreen = (pr: PrRef) => Object.entries(pr.checks).every(([k, v]) => k.startsWith("gate/") || (v !== "failure" && v !== "pending"));
+const allGatesGreen = (pr: PrRef) => ["gate/developer", "gate/tester", "gate/architect"].every((c) => pr.checks[c] === "success");
+
+/** AI plan / test plan approval (G3 / G4): asked only on draft ai-generated PRs. */
+function planGate(pr: PrRef, label: string): GateState {
+  if (has(pr, label)) return "done";
+  return pr.draft && isAiPr(pr) ? "waiting" : "not-started";
+}
+
 /** The gates this persona owns on this PR, with their state. */
 export function prGates(pr: PrRef, persona: Persona): StepView[] {
   const kind = prKind(pr);
   const mk = (g: GateId, state: GateState): StepView =>
     ({ id: g, label: g, state, own: true, title: `${g} ${GATES[g].label} · ${state}` });
-  const label = (l: string): GateState => (pr.labels.includes(l) ? "done" : "waiting");
   if (kind === "spec" || kind === "intake") {
     if (persona !== "architect") return [];
     const sg = pr.checks["spec-gate"];
     return [mk("G1", sg === "success" ? "done" : sg === "failure" ? "blocked" : "waiting")];
   }
   if (kind !== "build") return [];
-  if (persona === "developer") return [mk("G3", label("plan-approved")), mk("G5", pr.labels.includes("plan-approved") ? checkGate(pr.checks["gate/developer"], pr.draft) : "not-started")];
-  if (persona === "tester") return [mk("G4", label("testplan-approved")), mk("G6", pr.labels.includes("testplan-approved") ? checkGate(pr.checks["gate/tester"], pr.draft) : "not-started")];
-  const g7 = checkGate(pr.checks["gate/architect"], pr.draft);
-  const ready = ["gate/developer", "gate/tester", "gate/architect"].every((c) => pr.checks[c] === "success");
-  return [mk("G7", g7), mk("G8", ready ? "waiting" : "not-started")];
+  if (persona === "developer") {
+    return [...(isAiPr(pr) ? [mk("G3", planGate(pr, "plan-approved"))] : []), mk("G5", checkGate(pr.checks["gate/developer"], pr.draft))];
+  }
+  if (persona === "tester") {
+    return [...(isAiPr(pr) ? [mk("G4", planGate(pr, "testplan-approved"))] : []), mk("G6", checkGate(pr.checks["gate/tester"], pr.draft))];
+  }
+  const ready = !pr.draft && allGatesGreen(pr) && nonGateGreen(pr);
+  return [mk("G7", checkGate(pr.checks["gate/architect"], pr.draft)), mk("G8", ready ? "waiting" : "not-started")];
 }
 
-/** Whether the PR is waiting on this persona now. */
-export function prNeedsPersona(pr: PrRef, persona: Persona): boolean {
-  if (persona === "developer" && pr.labels.includes("needs-human")) return true;
-  if (persona === "tester" && pr.labels.includes("needs-qa")) return true;
-  return prGates(pr, persona).some((g) => g.state === "waiting" || g.state === "blocked");
+/** Whether the PR is waiting on this persona now (same predicates as the persona's queue). `login`: the viewer,
+ *  whose own PRs are not theirs to review. */
+export function prNeedsPersona(pr: PrRef, persona: Persona, login?: string): boolean {
+  const kind = prKind(pr);
+  if (kind === "spec" || kind === "intake") return persona === "architect" && prGates(pr, persona).some((g) => g.state === "waiting" || g.state === "blocked");
+  if (kind !== "build") return false;
+  const mine = !!login && pr.author === login;
+  const open = (c: string) => pr.checks[c] !== "success";
+  switch (persona) {
+    case "developer":
+      if (has(pr, "needs-human")) return true;
+      if (pr.draft && isAiPr(pr) && !has(pr, "plan-approved")) return true;
+      return !pr.draft && open("gate/developer") && !mine;
+    case "tester":
+      if (has(pr, "needs-qa")) return true;
+      if (pr.draft && isAiPr(pr) && !has(pr, "testplan-approved")) return true;
+      return !pr.draft && open("gate/tester") && !has(pr, "needs-human") && !mine;
+    case "architect":
+      if (!pr.draft && open("gate/architect") && !has(pr, "needs-human")) return true;
+      return !pr.draft && allGatesGreen(pr) && nonGateGreen(pr);
+  }
 }
 
 /** PRs relevant to a persona: Architect all; Developer build, spec and other PRs; Tester build and spec PRs. */
-export function prsForPersona(prs: PrRef[], persona: Persona): PrRef[] {
+export function prsForPersona(prs: PrRef[], persona: Persona, login?: string): PrRef[] {
   const keep = (p: PrRef) => {
     const k = prKind(p);
     if (persona === "architect") return true;
@@ -324,7 +360,7 @@ export function prsForPersona(prs: PrRef[], persona: Persona): PrRef[] {
     return k === "build" || k === "spec";
   };
   return prs.filter(keep).sort((a, b) =>
-    Number(prNeedsPersona(b, persona)) - Number(prNeedsPersona(a, persona)) || b.updatedAt.localeCompare(a.updatedAt));
+    Number(prNeedsPersona(b, persona, login)) - Number(prNeedsPersona(a, persona, login)) || b.updatedAt.localeCompare(a.updatedAt));
 }
 
 export interface PrView {
@@ -333,7 +369,7 @@ export interface PrView {
   checks: BadgeView[]; gates: StepView[]; groups: SignalGroup[]; missing: string[]; links: DeepLink[];
 }
 
-export function prView(pr: PrRef, persona: Persona, jiraUrl: (key: string) => string | undefined, now: number): PrView {
+export function prView(pr: PrRef, persona: Persona, jiraUrl: (key: string) => string | undefined, now: number, login?: string): PrView {
   const { groups, missing } = groupSignals(pr.reviews ?? []);
   const links: DeepLink[] = [{ kind: "github", label: `PR #${pr.number}`, target: pr.url }];
   const ju = pr.storyKey ? jiraUrl(pr.storyKey) : undefined;
@@ -343,7 +379,7 @@ export function prView(pr: PrRef, persona: Persona, jiraUrl: (key: string) => st
   return {
     number: pr.number, title: pr.title, url: pr.url, branch: pr.branch, draft: pr.draft, author: pr.author, labels: pr.labels,
     storyKey: pr.storyKey, featureId: pr.featureId, aiAttempt: pr.aiAttempt, age: ageLabel(pr.updatedAt, now),
-    needsYou: prNeedsPersona(pr, persona), checks: checkBadges(pr), gates: prGates(pr, persona), groups, missing, links,
+    needsYou: prNeedsPersona(pr, persona, login), checks: checkBadges(pr), gates: prGates(pr, persona), groups, missing, links,
   };
 }
 
@@ -413,7 +449,10 @@ export interface HomeState {
   mode: HomeMode;
   identity?: { login: string; active: Persona | null; activeLabel: string; personas: Persona[]; canSwitch: boolean; owner: string; repo: string; orgOwned: boolean; isAdmin: boolean };
   waiting: QueueItemView[];
+  /** Work items only: "connect" items are notices, not work, and are not counted. */
   waitingTotal: number;
+  /** Queue items of kind "connect" (e.g. GitHub could not be read), shown as notices above the list */
+  notices: QueueItemView[];
   nav: NavItem[];
   setupNeeded: boolean;
   teams: Record<string, string>;
@@ -438,7 +477,7 @@ export function buildHome(i: HomeInput): HomeState {
   const id = i.identity;
   const attention = connectionsAttention(i.connections, id);
   const base: HomeState = {
-    mode, waiting: [], waitingTotal: 0, nav: [], setupNeeded: !i.circuitInstalled, teams: i.teams, attention,
+    mode, waiting: [], waitingTotal: 0, notices: [], nav: [], setupNeeded: !i.circuitInstalled, teams: i.teams, attention,
     error: i.error, updated: new Date(i.now).toISOString(),
   };
   if (id?.notice) base.notice = id.notice;
@@ -453,8 +492,10 @@ export function buildHome(i: HomeInput): HomeState {
     return base;
   }
   const own = i.queue.filter((q) => !id.active || q.persona === id.active);
-  base.waiting = queueView(own, id, i.allowed, i.now, WAITING_LIMIT);
-  base.waitingTotal = own.length;
+  const work = own.filter((q) => q.kind !== "connect");
+  base.notices = queueView(own.filter((q) => q.kind === "connect"), id, i.allowed, i.now);
+  base.waiting = queueView(work, id, i.allowed, i.now, WAITING_LIMIT);
+  base.waitingTotal = work.length;
   base.nav = navItems(id, attention);
   return base;
 }
@@ -511,7 +552,7 @@ export function buildPersona(i: PersonaInput): PersonaState {
   st.notice = viewOnlyNotice(id, selected);
   st.queue = queueView(i.queue.filter((q) => q.persona === selected), id, i.allowed, i.now);
   st.features = [...i.features].sort((a, b) => a.id.localeCompare(b.id)).map((f) => featureCard(f, selected));
-  st.prs = prsForPersona(i.prs, selected).map((p) => prView(p, selected, i.jiraUrl, i.now));
+  st.prs = prsForPersona(i.prs, selected, id.login).map((p) => prView(p, selected, i.jiraUrl, i.now, id.login));
   st.aiActions = aiActions(selected).map((a) => toActionView(id, a, i.allowed));
   return st;
 }

@@ -10,6 +10,7 @@ import { BrowserHost, startBrowserHost } from "./browserHost";
 import { analyzeRun } from "./analyst";
 import { resolveTarget } from "./target";
 import { writeReport } from "./report";
+import { ensureToolDir } from "./runs";
 import { CaseResult, OrgConfig, RunEvent, RunOptions, TestCase, TestSuite } from "./types";
 
 /** Carry-over chains are restarted after this many cases so one agent conversation does not grow without bound. */
@@ -73,10 +74,8 @@ export async function runSuite(
   abort = new AbortController(),
 ): Promise<CaseResult[]> {
   const log = (message: string) => emit({ type: "log", message });
-  const toolDir = path.join(opts.workspaceDir, ".sf-ai-tester");
-  fs.mkdirSync(toolDir, { recursive: true });
   // Session cookies and run output must never be committed.
-  fs.writeFileSync(path.join(toolDir, ".gitignore"), "*\n");
+  const toolDir = ensureToolDir(opts.workspaceDir);
 
   const needsAutomation = suite.cases.some((c) => (c.mode ?? opts.mode) !== "manual");
   if (needsAutomation) ensureAutomationProject(opts.workspaceDir, log);

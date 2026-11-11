@@ -2,6 +2,7 @@
   "mode": "signin",
   "waiting": [],
   "waitingTotal": 0,
+  "notices": [],
   "nav": [],
   "setupNeeded": false,
   "teams": {

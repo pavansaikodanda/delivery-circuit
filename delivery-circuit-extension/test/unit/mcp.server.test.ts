@@ -316,6 +316,51 @@ describe("createMcp service", () => {
     expect(names).toContain("test_results_get");
     await client.close();
   });
+  it("revokes tokens, local configs and in-process access when the identity changes", async () => {
+    const root = await tmp();
+    let id: Identity | null = { ...identity(["architect", "developer"]), login: "arch1" };
+    const listeners: ((i: Identity | null) => void)[] = [];
+    const d = fakeData();
+    const svc = createMcp({ ctx: { subscriptions: [] } as any, root, pluginRoot: "", log: () => {} }, {
+      identity: { get: () => id, refresh: async () => id, setActive: async () => {}, onDidChange: (l: any) => { listeners.push(l); return { dispose() {} }; } } as any,
+      connections: { list: d.connections } as any,
+      project: { features: d.features, feature: d.feature, prs: d.prs, queue: async (_i: Identity, p: Persona) => d.queue(p), jiraMap: d.jiraMap, sources: d.sources, transcript: d.transcript } as any,
+    });
+    const change = (next: Identity | null) => { id = next; listeners.forEach((l) => l(next)); };
+    const post = (url: string, token: string) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "x", version: "1" } } }) }).then((r) => r.status);
+    try {
+      const file = await svc.writePersonaConfig("architect");
+      const arch = await svc.endpoint("architect");
+      const dev = await svc.endpoint("developer");
+      const sdk = svc.sdkServer("architect") as any;
+      expect(await post(arch.url, arch.token)).toBe(200);
+
+      // Removed from the architects team: the architect token, its config file and the in-process server stop working.
+      change({ ...id!, personas: ["developer"] });
+      expect(await post(arch.url, arch.token)).toBe(401);
+      await expect(fsp.access(file)).rejects.toThrow();
+      expect(await post(dev.url, dev.token)).toBe(200);
+      const [a, b] = InMemoryTransport.createLinkedPair();
+      const client = new Client({ name: "t", version: "1" });
+      await Promise.all([sdk.instance.connect(a), client.connect(b)]);
+      const r: any = await client.callTool({ name: "transcript_get", arguments: { sourceId: "fireflies:01ABC" } });
+      expect(r.isError).toBe(true);
+      expect(JSON.stringify(r.content)).toMatch(/revoked/);
+      await client.close();
+
+      // Someone else signs in to GitHub in the same window: every old token is refused.
+      change({ ...identity(["developer"]), login: "other" });
+      expect(await post(dev.url, dev.token)).toBe(401);
+      const fresh = await svc.endpoint("developer");
+      expect(fresh.token).not.toBe(dev.token);
+      expect(await post(fresh.url, fresh.token)).toBe(200);
+
+      // Signed out: nothing works.
+      change(null);
+      expect(await post(fresh.url, fresh.token)).toBe(401);
+    } finally { await svc.stop(); }
+  });
   it("writes the persona config with the live endpoint and stops cleanly", async () => {
     const { svc, root } = await make(identity(["architect"]));
     try {

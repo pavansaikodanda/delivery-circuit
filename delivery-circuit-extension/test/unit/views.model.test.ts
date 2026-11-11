@@ -207,7 +207,32 @@ describe("pull requests", () => {
     expect(M.prsForPersona(all, "architect").map((p) => p.number)).toContain(40);
     expect(M.prsForPersona(all, "developer").map((p) => p.number)).not.toContain(40);
     expect(M.prsForPersona(all, "developer")[0].number).toBe(44); // needs-human, newest
-    expect(M.prsForPersona(all, "tester").map((p) => p.number)).toEqual([44, 42, 43, 41]);
+    // #44 is needs-human: the Tester queue does not ask for G6 there, so it is not "waiting on you" for the Tester.
+    expect(M.prsForPersona(all, "tester").map((p) => p.number)).toEqual([42, 43, 44, 41]);
+  });
+  it("PR gates and needs-you follow the queue rules", () => {
+    // Non-draft, human-authored story PR without ai-generated / plan-approved labels.
+    const human: PrRef = { ...PRS[1], number: 50, author: "sam-dev", labels: [], checks: { guard: "success", "gate/developer": "missing", "gate/tester": "missing", "gate/architect": "missing" } };
+    const states = (pr: PrRef, p: "developer" | "tester" | "architect") => M.prGates(pr, p).map((g) => `${g.id}:${g.state}`);
+    expect(states(human, "developer")).toEqual(["G5:waiting"]);
+    expect(states(human, "tester")).toEqual(["G6:waiting"]);
+    expect(M.prNeedsPersona(human, "developer", "ravi-dev")).toBe(true);
+    expect(M.prNeedsPersona(human, "developer", "sam-dev")).toBe(false); // own PR: not offered for own review
+    expect(M.prNeedsPersona(human, "tester", "tess-qa")).toBe(true);
+    // G5 follows gate/developer whatever the labels say.
+    expect(states({ ...human, checks: { ...human.checks, "gate/developer": "success" } }, "developer")).toEqual(["G5:done"]);
+    // needs-human: the Architect queue leaves it out, so neither G7 nor G6 needs you.
+    const stuck: PrRef = { ...human, labels: ["needs-human"] };
+    expect(M.prNeedsPersona(stuck, "architect")).toBe(false);
+    expect(M.prNeedsPersona(stuck, "tester", "tess-qa")).toBe(false);
+    expect(M.prNeedsPersona(stuck, "developer", "ravi-dev")).toBe(true);
+    // Draft AI PR: G3 / G4 wait, and nobody is asked for G5-G7 yet.
+    expect(M.prNeedsPersona(PRS[2], "developer", "ravi-dev")).toBe(true);
+    expect(M.prNeedsPersona(PRS[2], "architect")).toBe(false);
+    // Merge (G8) only when every gate and check is green.
+    const green: PrRef = { ...human, checks: { guard: "success", "gate/developer": "success", "gate/tester": "success", "gate/architect": "success" } };
+    expect(states(green, "architect")).toEqual(["G7:done", "G8:waiting"]);
+    expect(M.prNeedsPersona({ ...green, checks: { ...green.checks, static: "failure" } }, "architect")).toBe(false);
   });
 });
 
@@ -264,5 +289,19 @@ describe("feature panel", () => {
     const arch = build(ARCHITECT).actions;
     expect(arch.map((a) => a.persona)).toEqual(["architect", "architect", "developer", "tester", "tester"]);
     expect(arch.filter((a) => a.allowed).map((a) => a.id)).toEqual(["ai:/arch-design", "ai:/arch-jira-push"]);
+  });
+});
+
+describe("connect notices are not waiting work", () => {
+  it("keeps kind connect out of the waiting list and count, with its link and action intact", () => {
+    const notice: QueueItem = { id: "developer:connect:github", persona: "developer", kind: "connect", title: "Connect GitHub to see pull requests and gates",
+      detail: "Bad credentials", links: [{ kind: "github", label: "acme/crm", target: "https://github.com/acme/crm/pulls" }],
+      actions: [{ id: "nav:connections", label: "Open Connections", persona: "developer", kind: "nav" }] };
+    const s = M.buildHome({ hasRemote: true, identity: DEVELOPER, githubConnected: true, circuitInstalled: true, connections: CONNECTIONS,
+      queue: [notice], allowed: allowedFor(DEVELOPER), teams: TEAMS, now: NOW });
+    expect(s.waitingTotal).toBe(0);
+    expect(s.waiting).toEqual([]);
+    expect(s.notices.map((n) => [n.kind, n.links.length, n.actions[0].id, n.actions[0].allowed])).toEqual([["connect", 1, "nav:connections", true]]);
+    expect(M.statusText(DEVELOPER, s.waitingTotal).text).toContain("0 waiting");
   });
 });

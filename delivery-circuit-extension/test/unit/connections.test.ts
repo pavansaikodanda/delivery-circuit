@@ -5,7 +5,7 @@ import type { ConnectionStatus, Persona } from "../../src/core/contracts";
 import { actionable, baseStatus, CONNECTIONS, visibleRows } from "../../src/connections/catalog";
 import { isPlaceholder, normalizeSite, parseBuildConfig, parseDate, parseReminders, slackWorkspaceUrl } from "../../src/connections/config";
 import { applyExpiry, claudeTokenExpiry, expiryState, expiryText } from "../../src/connections/expiry";
-import { checkLoginUrl, classifySfUrl, safeRelPath, terminalCommand } from "../../src/connections/safety";
+import { checkLoginUrl, classifySfUrl, safeRelPath, sfOrgDecision, terminalCommand } from "../../src/connections/safety";
 import { isFileSecret, scanWorkflows, sealSecret, loadSodium, validateEnvironmentName, validateSecretName } from "../../src/connections/secrets";
 import {
   findCodeAnalyzer, findServerFor, isSubscriptionAuth, mcpListStateFor, parseClaudeAuth, parseMcpConfigs, parseMcpList,
@@ -84,6 +84,15 @@ describe("Salesforce URL safety", () => {
     expect(t.allowed).toBe(true);
     expect(t.warning).toMatch(/production/);
     expect(t.url).toBe("https://acme.my.salesforce.com");
+  });
+  it("lets AI work only in sandbox-like orgs or declared trial orgs", () => {
+    expect(sfOrgDecision("qa", "https://acme--uat.sandbox.my.salesforce.com", false)).toEqual({ allowed: true });
+    expect(sfOrgDecision("dev", "https://acme-dev-ed.develop.my.salesforce.com", false).allowed).toBe(true);
+    const prod = sfOrgDecision("qa", "https://acme.my.salesforce.com", false);
+    expect(prod.allowed).toBe(false);
+    expect(prod.reason).toMatch(/production-looking org \(acme\.my\.salesforce\.com\)/);
+    expect(sfOrgDecision("qa", "https://acme.my.salesforce.com", true)).toMatchObject({ allowed: true, reason: expect.stringMatching(/trial/) });
+    expect(sfOrgDecision("qa", undefined, true).allowed).toBe(false);
   });
   it("defaults to test.salesforce.com and allows sandboxes silently", () => {
     expect(checkLoginUrl(undefined, false)).toEqual({ allowed: true, url: "https://test.salesforce.com" });

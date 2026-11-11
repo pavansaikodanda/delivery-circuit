@@ -1,7 +1,8 @@
 
 # --- delivery circuit (appended by circuit-bootstrap) ---
 .ai/
-.sf-ai-tester/runs/
+# SF AI Tester working folder: session cookies (auth/), org metadata, generated evidence and runs never enter git
+.sf-ai-tester/
 coverage/
 test-results/
 playwright-report/

@@ -6,6 +6,19 @@ import type { CaseResult, Status } from "./types";
 import { routeOf, type Route } from "./verdict";
 
 export const TOOL_DIR = ".sf-ai-tester";
+
+/**
+ * Creates <workspace>/.sf-ai-tester with a `*` .gitignore before anything is written there: it holds Salesforce
+ * session cookies (auth/), org metadata and run evidence, none of which may be committed. Returns the folder.
+ */
+export function ensureToolDir(workspaceDir: string): string {
+  const dir = path.join(workspaceDir, TOOL_DIR);
+  fs.mkdirSync(dir, { recursive: true });
+  const ignore = path.join(dir, ".gitignore");
+  if (!fs.existsSync(ignore) || fs.readFileSync(ignore, "utf8").trim() !== "*") fs.writeFileSync(ignore, "*\n");
+  return dir;
+}
+
 export const STATUSES: Status[] = ["passed", "failed", "blocked", "error"];
 
 export interface RunInfo {

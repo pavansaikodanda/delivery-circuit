@@ -11,7 +11,7 @@ import { generateCases } from "./generate";
 import { resolveTarget } from "./target";
 import { caseHash, caseText } from "./hash";
 import { catalog, listSuiteFiles, newSuitePath, suiteKey, suiteRecord, SUITE_DIR, type SuiteRecord } from "./catalog";
-import { listRuns, readRun, TOOL_DIR, type RunInfo } from "./runs";
+import { ensureToolDir, listRuns, readRun, TOOL_DIR, type RunInfo } from "./runs";
 import { exec, shellArg } from "./exec";
 import type { RunAnalysis } from "./analyst";
 import { collectReport, writeExcel, writePdf } from "./export";
@@ -32,6 +32,11 @@ export interface EngineConfig {
   settings: () => EngineSettings;
   /** sf CLI alias for an org role */
   sfAlias: (role: "dev" | "qa") => string;
+  /**
+   * Resolves the role's alias and says whether AI may work in that org. Called before every org login (runs and
+   * generate with explore); a production-looking org is refused unless it is a declared trial org.
+   */
+  guardOrg: (role: "dev" | "qa") => Promise<{ allowed: boolean; reason?: string }>;
   log?: (m: string) => void;
 }
 
@@ -108,6 +113,15 @@ export class TestingEngine {
     return { name: alias, authMode: "sfcli", loginUrl: "https://login.salesforce.com", sfAlias: alias };
   }
 
+  /** The org for a role, after the production check. Throws when AI must not work in that org. */
+  private async safeSfOrg(role: "dev" | "qa", log: (m: string) => void): Promise<OrgConfig> {
+    const org = this.sfOrg(role);
+    const g = await this.cfg.guardOrg(role);
+    if (!g.allowed) throw new Error(g.reason || `Refusing to test in the ${role} org "${org.sfAlias}".`);
+    if (g.reason) log(g.reason);
+    return org;
+  }
+
   private orgMeta(alias: string): OrgMeta | undefined {
     try {
       return new OrgMeta(alias, path.join(this.ws, TOOL_DIR, "meta"));
@@ -133,17 +147,18 @@ export class TestingEngine {
     const key = suiteKey(this.ws, file);
     const settings = this.cfg.settings();
     const sfCases = cases.filter((c) => resolveTarget(c, suite) === "salesforce");
-    const org: OrgConfig = sfCases.length ? this.sfOrg(req.orgRole) : { name: "web", authMode: "interactive", loginUrl: suite.baseUrl ?? "" };
+    const log = (message: string) => {
+      this.cfg.log?.(message);
+      onEvent({ type: "log", message });
+    };
 
     const abort = new AbortController();
     this.abort = abort;
     this.busyWith = "run";
     let runDir: string | undefined;
-    const log = (message: string) => {
-      this.cfg.log?.(message);
-      onEvent({ type: "log", message });
-    };
     try {
+      ensureToolDir(this.ws);
+      const org: OrgConfig = sfCases.length ? await this.safeSfOrg(req.orgRole, log) : { name: "web", authMode: "interactive", loginUrl: suite.baseUrl ?? "" };
       log(`Run ${new Date().toLocaleString()} - ${suite.name}: ${cases.length} case(s), ${req.mode}, org ${org.name}`);
       const meta = sfCases.length ? this.orgMeta(org.sfAlias!) : undefined;
       const orgContexts = meta ? await contextsForCases(meta, sfCases.map((c) => ({ id: c.id, text: caseText(c) })), 60_000, log) : {};
@@ -233,6 +248,9 @@ export class TestingEngine {
     try {
       const settings = this.cfg.settings();
       const alias = this.alias(input.orgRole);
+      ensureToolDir(this.ws);
+      // Check the org before anything reaches it (metadata reads, and the browser login when exploring).
+      const org = await this.safeSfOrg(input.orgRole, log);
       const existingIds = this.suites().flatMap((s) => s.cases.map((c) => c.id));
       let orgMeta: string | undefined;
       const meta = this.orgMeta(alias);
@@ -245,7 +263,7 @@ export class TestingEngine {
       }
       let explore;
       if (input.explore) {
-        const auth = await authenticate(this.sfOrg(input.orgRole), path.join(this.ws, TOOL_DIR, "auth"), LOGIN, { log, needsUser: log });
+        const auth = await authenticate(org, path.join(this.ws, TOOL_DIR, "auth"), LOGIN, { log, needsUser: log });
         const evidenceDir = path.join(this.ws, TOOL_DIR, "generate");
         fs.mkdirSync(evidenceDir, { recursive: true });
         explore = { auth, toolRoot: this.cfg.toolRoot, evidenceDir, headless: settings.headless };
@@ -309,7 +327,7 @@ export class TestingEngine {
     this.busyWith = "export";
     try {
       const data = collectReport(this.ws, listSuiteFiles(this.ws), readAll(this.ws));
-      const dir = path.join(this.ws, TOOL_DIR, "exports");
+      const dir = path.join(ensureToolDir(this.ws), "exports");
       fs.mkdirSync(dir, { recursive: true });
       const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
       const out: string[] = [];

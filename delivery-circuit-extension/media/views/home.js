@@ -52,7 +52,7 @@
       ]);
     }
     if (s.mode === "no-persona") return noPersona(s);
-    return h("div", [s.notice ? h("div.dc-section", DC.notice(s.notice, "info")) : null, setupNotice(s), waiting(s), nav(s)]);
+    return h("div", [s.notice ? h("div.dc-section", DC.notice(s.notice, "info")) : null, setupNotice(s), notices(s), waiting(s), nav(s)]);
   }
 
   function noPersona(s) {
@@ -88,6 +88,19 @@
         ? DC.button("Open Project setup", () => post({ type: "nav", target: "setup" }))
         : h("p.muted.small", "Ask a repo admin to run Project setup from this sidebar."),
     ]);
+  }
+
+  // Things to fix before the list is complete (e.g. GitHub unreadable). Not counted as waiting work.
+  function notices(s) {
+    const list = s.notices || [];
+    if (!list.length) return null;
+    return h("div.dc-section.stack", list.map((q) => h("div.stack", [
+      DC.notice(q.title + (q.detail ? ": " + q.detail : ""), "warn"),
+      h("div.row", [
+        DC.links(q.links),
+        (q.actions || []).length ? DC.actionButtons(q.actions, (a) => a.allowed) : null,
+      ]),
+    ])));
   }
 
   function waiting(s) {

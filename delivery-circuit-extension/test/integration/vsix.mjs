@@ -14,9 +14,12 @@ const vsix = path.resolve(extRoot, process.argv[2] || "delivery-circuit.vsix");
 if (!fs.existsSync(vsix)) { console.error(`${vsix} not found: run npm run package first.`); process.exit(1); }
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dc-vsix-"));
-// A VSIX is a zip; bsdtar (Windows 10+, macOS) and GNU tar with zip support unpack it.
-const un = spawnSync("tar", ["-xf", vsix, "-C", tmp], { stdio: "inherit" });
-if (un.status !== 0) { console.error("Could not unpack the VSIX with tar."); process.exit(1); }
+// A VSIX is a zip. bsdtar unpacks zips (Windows 10+ ships it as System32\tar.exe, macOS as tar); GNU tar (Git Bash,
+// most Linux) does not, so fall back to unzip. The archive is passed by its relative name from its own folder.
+const sysTar = process.platform === "win32" ? path.join(process.env.SystemRoot || "C:\\Windows", "System32", "tar.exe") : "tar";
+const unpackers = [[sysTar, ["-xf", path.basename(vsix), "-C", tmp]], ["unzip", ["-q", path.basename(vsix), "-d", tmp]]];
+const unpacked = unpackers.some(([cmd, args]) => spawnSync(cmd, args, { stdio: "inherit", cwd: path.dirname(vsix) }).status === 0);
+if (!unpacked) { console.error("Could not unpack the VSIX (needs bsdtar or unzip)."); process.exit(1); }
 const ext = path.join(tmp, "extension");
 
 const problems = [];

@@ -111,6 +111,7 @@
     }
   ],
   "waitingTotal": 2,
+  "notices": [],
   "nav": [
     {
       "target": "persona:tester",

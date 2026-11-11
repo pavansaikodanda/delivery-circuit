@@ -9,7 +9,7 @@ import type { CircuitServices, ConnectionId } from "../core/contracts";
 import { gitBranch, parseJson, run } from "../core/util";
 import { resolveClaude } from "../sessions/terminal";
 import { parseBuildState, statusKind } from "./buildState";
-import { FILE_SECRETS, installCommand, LABELS, parseInstallOutput, rulesetWithTeam, secretNameOk, TOOLS, variablesFor, versionOf } from "./commands";
+import { FILE_SECRETS, installCommand, LABELS, parseInstallOutput, rulesetWithTeam, secretNameOk, shellArg, TOOLS, variablesFor, versionOf } from "./commands";
 import { readConfig, type BuildConfig } from "./config";
 import { fillMcpUrls, type PhaseCtx, type StepDef } from "./phases";
 
@@ -62,6 +62,14 @@ export class SetupSteps {
   private gh<T = any>(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", p: string, body?: unknown): Promise<T> {
     return this.s.connections.githubRequest<T>(method, p, body);
   }
+  /** sf org display for an alias. sf is a .cmd shim on Windows, so it runs through run()'s shell default with the
+   *  alias quoted by shellArg (which refuses characters cmd.exe would expand). */
+  private async sfOrgDisplay(alias: string) {
+    let arg: string;
+    try { arg = shellArg(alias, process.platform); } catch (e) { return { code: 1, stdout: "", stderr: (e as Error).message }; }
+    return run("sf", ["org", "display", "--target-org", arg, "--json"], { cwd: this.s.root, timeoutMs: 60_000 });
+  }
+
   private async tryGh<T = any>(p: string): Promise<{ data?: T; error?: string }> {
     try { return { data: await this.gh<T>("GET", p) }; } catch (e: any) { return { error: e?.message ?? String(e) }; }
   }
@@ -123,7 +131,8 @@ export class SetupSteps {
           const v = r.code === 0 ? versionOf(r.stdout + " " + r.stderr) : undefined;
           if (v) found.push(`${t.name} ${v}`); else if (t.required) missing.push(t.name); else found.push(`${t.name} missing (optional)`);
         }));
-        const plugins = await run("sf", ["plugins"], { cwd: this.s.root, timeoutMs: 60_000, shell: false });
+        // sf is sf.cmd on Windows: let run() use its shell default there (shell: false gives ENOENT).
+        const plugins = await run("sf", ["plugins"], { cwd: this.s.root, timeoutMs: 60_000 });
         const ca = plugins.stdout.match(/code-analyzer\s+(\d[\w.]*)/);
         const order = (x: string) => TOOLS.findIndex((t) => x.startsWith(t.name + " "));
         found.sort((a, b) => order(a) - order(b));
@@ -215,7 +224,7 @@ export class SetupSteps {
         let bad = false;
         for (const role of ["dev", "qa"] as const) {
           const alias = this.s.connections.sfAlias(role);
-          const r = await run("sf", ["org", "display", "--target-org", alias, "--json"], { cwd: this.s.root, timeoutMs: 60_000, shell: false });
+          const r = await this.sfOrgDisplay(alias);
           const j = parseJson<any>(r.stdout)?.result;
           if (r.code === 0 && j) lines.push(`${role} (${alias}): ${j.username ?? "?"} at ${j.instanceUrl ?? "?"}, ${j.connectedStatus ?? "unknown"}`);
           else { lines.push(`${role} (${alias}): not available`); bad = true; }
@@ -226,7 +235,7 @@ export class SetupSteps {
         const lines: string[] = [];
         let good = 0;
         for (const alias of ["ci-dev-test", "ci-qa-test"]) {
-          const r = await run("sf", ["org", "display", "--target-org", alias, "--json"], { cwd: this.s.root, timeoutMs: 60_000, shell: false });
+          const r = await this.sfOrgDisplay(alias);
           const j = parseJson<any>(r.stdout)?.result;
           if (r.code === 0 && j) { good++; lines.push(`${alias}: ${j.username} (JWT login works)`); } else lines.push(`${alias}: no JWT test login yet`);
         }

@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { describe, expect, it } from "vitest";
 import {
-  aiAttemptFromLabels, checkRunState, featureIdFromBranch, mapDeployRuns, mapPrsResponse, PRS_QUERY, reviewerVerdict,
+  aiAttemptFromLabels, checkRunState, featureIdFromBranch, mapDeployRuns, mapPr, mapPrsResponse, mapStoryPrsResponse, missingStoryKeys, PRS_QUERY, STORY_SEARCH_BATCH, storyPrsQuery, reviewerVerdict,
   statusContextState, storyKeyFromBranch,
 } from "../../src/project/github";
 
@@ -109,5 +109,27 @@ describe("deploy runs", () => {
     const runs = mapDeployRuns({ workflow_runs: [{ id: 7, status: "waiting", conclusion: null, html_url: "https://github.com/acme/sales/actions/runs/7", created_at: "2026-11-10T00:00:00Z", head_sha: "abc" }] });
     expect(runs).toEqual([{ id: 7, status: "waiting", conclusion: null, url: "https://github.com/acme/sales/actions/runs/7", createdAt: "2026-11-10T00:00:00Z", headSha: "abc" }]);
     expect(mapDeployRuns({})).toEqual([]);
+  });
+});
+
+describe("older story PR lookup", () => {
+  const pr = (n: number, branch: string, state: "open" | "merged" | "closed") => ({ ...mapPr({ number: n, headRefName: branch, state: state.toUpperCase() }) });
+  it("lists only referenced, well-formed keys with no open or merged PR", () => {
+    const prs = [pr(1, "feature/CE-1-a", "merged"), pr(2, "feature/CE-2-b", "open"), pr(3, "feature/CE-3-c", "closed")];
+    expect(missingStoryKeys(["CE-1", "CE-2", "CE-3", "CE-4", "CE-4", "bad key"], prs)).toEqual(["CE-3", "CE-4"]);
+  });
+  it("builds one aliased search per key with variables, never interpolating them into the query", () => {
+    const keys = Array.from({ length: 25 }, (_v, i) => `CE-${i + 1}`);
+    const q = storyPrsQuery("acme", "sales", ["bad\" key", ...keys]);
+    expect(Object.keys(q.variables)).toHaveLength(STORY_SEARCH_BATCH);
+    expect(q.variables.q0).toBe("repo:acme/sales is:pr is:merged head:feature/CE-1");
+    expect(q.query).toContain("s0: search(query: $q0, type: ISSUE");
+    expect(q.query).not.toContain("CE-1");
+    expect(() => storyPrsQuery("acme", "sa les", ["CE-1"])).toThrow();
+  });
+  it("keeps only merged PRs whose branch is exactly that story", () => {
+    const node = (n: number, b: string, st = "MERGED") => ({ number: n, headRefName: b, state: st, mergedAt: "2026-01-01T00:00:00Z" });
+    const out = mapStoryPrsResponse({ data: { s0: { nodes: [node(5, "feature/CE-1-x"), node(6, "feature/CE-10-y"), node(7, "feature/CE-1-z", "OPEN"), null] }, s1: { nodes: [node(8, "feature/CE-2")] } } }, ["CE-1", "CE-2"]);
+    expect(out.map((p) => [p.number, p.storyKey])).toEqual([[5, "CE-1"], [8, "CE-2"]]);
   });
 });

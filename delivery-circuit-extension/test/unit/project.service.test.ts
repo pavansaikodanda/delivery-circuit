@@ -36,15 +36,21 @@ afterAll(async () => {
   await fsp.rm(storage, { recursive: true, force: true });
 });
 
-function make(opts: { graphqlFails?: boolean; jira?: boolean } = {}) {
+function make(opts: { graphqlFails?: boolean; jira?: boolean; graphql?: (q: string, v: any) => Promise<any>; state?: Map<string, unknown> } = {}) {
+  const state = opts.state ?? new Map<string, unknown>();
   const ctx: any = {
     subscriptions: subs,
+    workspaceState: { get: (k: string) => state.get(k), update: async (k: string, v: unknown) => { state.set(k, v); } },
     globalStorageUri: { fsPath: storage },
     secrets: { get: async (k: string) => secrets.get(k), store: async (k: string, v: string) => { secrets.set(k, v); } },
   };
   const connections: any = {
     onDidChange: () => ({ dispose() {} }),
-    githubGraphql: async (q: string, v: any) => { graphqlCalls.push(v); if (opts.graphqlFails) throw new Error("Not signed in to GitHub"); return resp.data; },
+    githubGraphql: async (q: string, v: any) => {
+      graphqlCalls.push(v);
+      if (opts.graphqlFails) throw new Error("Not signed in to GitHub");
+      return opts.graphql ? opts.graphql(q, v) : resp.data;
+    },
     githubRequest: async () => ({ workflow_runs: [{ id: 5, status: "waiting", conclusion: null, html_url: "https://github.com/acme/sales/actions/runs/5", created_at: "2026-11-10T00:00:00Z", head_sha: "abc" }] }),
     jira: async () => (opts.jira ? { site: "acme.atlassian.net", email: "a@b.c", token: "t" } : undefined),
     firefliesKey: async () => undefined,
@@ -123,6 +129,50 @@ describe("createProject", () => {
     expect(await svc.firefliesRecent()).toEqual([]);
     await expect(svc.indexFireflies("01ABC")).rejects.toThrow(/not connected/);
     await expect(svc.indexFireflies("../x")).rejects.toThrow(/Invalid/);
+  });
+  it("finds story PRs that merged before the recent-merged window and keeps them", async () => {
+    const clone = () => JSON.parse(JSON.stringify(resp.data));
+    const node43 = resp.data.repository.open.nodes.find((n: any) => n.number === 43);
+    const merged = (n: number, branch: string) => ({ ...node43, number: n, headRefName: branch, state: "MERGED", isDraft: false, mergedAt: "2026-01-02T00:00:00Z" });
+    const searches: any[] = [];
+    const graphql = async (q: string, v: any) => {
+      if (q.includes("CircuitStoryPrs")) {
+        searches.push(v);
+        // head: is a prefix match, so the search also returns ABC-130's PR; only ABC-13's may be used.
+        return { s0: { nodes: [merged(143, "feature/ABC-13-escalation-queue"), merged(1300, "feature/ABC-130-other")] } };
+      }
+      const d = clone();
+      d.repository.open.nodes = d.repository.open.nodes.filter((n: any) => n.number !== 43);
+      return d;
+    };
+    const state = new Map<string, unknown>();
+    const { svc } = make({ graphql, state });
+    const f = (await svc.feature("001"))!;
+    expect(searches).toEqual([{ q0: "repo:acme/sales is:pr is:merged head:feature/ABC-13" }]);
+    expect(f.stories.find((x) => x.jiraKey === "ABC-13")!.prNumber).toBe(143);
+    // A new window (or session) reuses the stored merged PR instead of searching again.
+    const again = make({ graphql, state });
+    expect((await again.svc.feature("001"))!.stories.find((x) => x.jiraKey === "ABC-13")!.prNumber).toBe(143);
+    expect(searches).toHaveLength(1);
+  });
+  it("a forced refresh does not reuse a GitHub read that started before it", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let calls = 0;
+    const graphql = async () => {
+      calls++;
+      const d = JSON.parse(JSON.stringify(resp.data));
+      if (calls === 1) { await gate; return d; } // the poll's read, started before the gate action
+      d.repository.open.nodes = d.repository.open.nodes.filter((n: any) => n.number !== 46); // state after the action
+      return d;
+    };
+    const { svc } = make({ graphql });
+    const before = svc.prs();
+    const refreshed = svc.refresh();
+    release();
+    await Promise.all([before, refreshed]);
+    expect(calls).toBe(2);
+    expect((await svc.prs()).map((p) => p.number)).not.toContain(46);
   });
   it("refresh re-reads and fires", async () => {
     const { svc } = make();

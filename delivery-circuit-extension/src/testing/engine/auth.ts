@@ -53,6 +53,9 @@ export async function authenticate(
   force = false,
 ): Promise<AuthSession> {
   fs.mkdirSync(stateDir, { recursive: true });
+  // The saved storageState holds a live Salesforce session cookie: keep the folder out of git whoever calls this.
+  const ignore = path.join(stateDir, ".gitignore");
+  if (!fs.existsSync(ignore)) fs.writeFileSync(ignore, "*\n");
   const slug = org.name.replace(/[^A-Za-z0-9_-]/g, "_");
   const storageStatePath = path.join(stateDir, `${slug}.storage.json`);
   const metaPath = path.join(stateDir, `${slug}.meta.json`);
