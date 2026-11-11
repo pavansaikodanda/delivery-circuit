@@ -12,7 +12,7 @@ const common = {
 import fs from "node:fs";
 // Bundle the sf-delivery-circuit plugin (templates, installer, skills) so the setup wizard works offline.
 fs.rmSync("plugin", { recursive: true, force: true });
-fs.cpSync("../sf-delivery-circuit", "plugin", { recursive: true, filter: (src) => !/[\/](node_modules|.git)([\/]|$)/.test(src) });
+fs.cpSync("../sf-delivery-circuit", "plugin", { recursive: true, filter: (src) => !/[\\/](node_modules|\.git)([\\/]|$)/.test(src) });
 
 const ctxs = await Promise.all([
   esbuild.context({ ...common, entryPoints: ["src/extension.ts"], outfile: "dist/extension.js" }),
