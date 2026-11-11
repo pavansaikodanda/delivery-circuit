@@ -3,6 +3,10 @@
   "featureId": "001",
   "viewer": "architect",
   "viewerLabel": "Architect",
+  "login": "maya-arch",
+  "personas": [
+    "architect"
+  ],
   "stages": [
     {
       "id": "intake",
@@ -73,7 +77,34 @@
       "ownerLabel": "Architect",
       "state": "done",
       "own": true,
-      "cls": "ok"
+      "cls": "ok",
+      "waitsOnViewer": false,
+      "actions": [
+        {
+          "id": "ai:/arch-design",
+          "label": "Design",
+          "persona": "architect",
+          "kind": "ai",
+          "args": {
+            "command": "/arch-design",
+            "argKind": "feature",
+            "arg": "001-case-escalation"
+          },
+          "allowed": true
+        },
+        {
+          "id": "ai:/arch-jira-push",
+          "label": "Push to Jira",
+          "persona": "architect",
+          "kind": "ai",
+          "args": {
+            "command": "/arch-jira-push",
+            "argKind": "feature",
+            "arg": "001-case-escalation"
+          },
+          "allowed": true
+        }
+      ]
     },
     {
       "id": "G2",
@@ -82,7 +113,36 @@
       "ownerLabel": "Tester",
       "state": "done",
       "own": false,
-      "cls": "ok"
+      "cls": "ok",
+      "waitsOnViewer": false,
+      "actions": [
+        {
+          "id": "ai:/qa-design-tests",
+          "label": "Design tests",
+          "persona": "tester",
+          "kind": "ai",
+          "args": {
+            "command": "/qa-design-tests",
+            "argKind": "feature",
+            "arg": "001-case-escalation"
+          },
+          "allowed": false,
+          "reason": "Only a Tester can run this"
+        },
+        {
+          "id": "ai:/qa-push-tests",
+          "label": "Push tests",
+          "persona": "tester",
+          "kind": "ai",
+          "args": {
+            "command": "/qa-push-tests",
+            "argKind": "feature",
+            "arg": "001-case-escalation"
+          },
+          "allowed": false,
+          "reason": "Only a Tester can run this"
+        }
+      ]
     },
     {
       "id": "G3",
@@ -91,7 +151,9 @@
       "ownerLabel": "Developer",
       "state": "waiting",
       "own": false,
-      "cls": "info"
+      "cls": "info",
+      "waitsOnViewer": false,
+      "actions": []
     },
     {
       "id": "G4",
@@ -100,7 +162,9 @@
       "ownerLabel": "Tester",
       "state": "waiting",
       "own": false,
-      "cls": "info"
+      "cls": "info",
+      "waitsOnViewer": false,
+      "actions": []
     },
     {
       "id": "G5",
@@ -109,7 +173,9 @@
       "ownerLabel": "Developer",
       "state": "waiting",
       "own": false,
-      "cls": "info"
+      "cls": "info",
+      "waitsOnViewer": false,
+      "actions": []
     },
     {
       "id": "G6",
@@ -118,7 +184,9 @@
       "ownerLabel": "Tester",
       "state": "waiting",
       "own": false,
-      "cls": "info"
+      "cls": "info",
+      "waitsOnViewer": false,
+      "actions": []
     },
     {
       "id": "G7",
@@ -127,7 +195,9 @@
       "ownerLabel": "Architect",
       "state": "waiting",
       "own": true,
-      "cls": "info"
+      "cls": "info",
+      "waitsOnViewer": true,
+      "actions": []
     },
     {
       "id": "G8",
@@ -136,7 +206,9 @@
       "ownerLabel": "Architect",
       "state": "not-started",
       "own": true,
-      "cls": ""
+      "cls": "",
+      "waitsOnViewer": false,
+      "actions": []
     },
     {
       "id": "G9",
@@ -145,7 +217,9 @@
       "ownerLabel": "Architect",
       "state": "not-started",
       "own": true,
-      "cls": ""
+      "cls": "",
+      "waitsOnViewer": false,
+      "actions": []
     }
   ],
   "stories": [
@@ -177,7 +251,8 @@
           "label": "PR #41",
           "target": "https://github.com/acme-org/salesDemoOrg/pull/41"
         }
-      ]
+      ],
+      "prState": "open"
     },
     {
       "num": "01",
@@ -207,7 +282,8 @@
           "label": "PR #42",
           "target": "https://github.com/acme-org/salesDemoOrg/pull/42"
         }
-      ]
+      ],
+      "prState": "open"
     },
     {
       "num": "02",
@@ -237,7 +313,8 @@
           "label": "PR #43",
           "target": "https://github.com/acme-org/salesDemoOrg/pull/43"
         }
-      ]
+      ],
+      "prState": "draft"
     },
     {
       "num": "03",
@@ -267,7 +344,8 @@
           "label": "PR #44",
           "target": "https://github.com/acme-org/salesDemoOrg/pull/44"
         }
-      ]
+      ],
+      "prState": "open"
     }
   ],
   "sources": [

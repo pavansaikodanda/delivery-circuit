@@ -1,11 +1,13 @@
 // Preview harness: renders any webview page in a normal browser with fixture data and a VS Code-like theme.
 //   npm run preview  ->  http://127.0.0.1:5178/
-//   /page/<module>/<page>?fixture=<name>&theme=dark|light   (fixture file: preview/fixtures/<module>.<page>.<name>.json)
+//   /page/<module>/<page>?fixture=<name>&theme=dark|light|hc&persona=architect|developer|tester&motion=reduce&sidebar
+//   (fixture file: preview/fixtures/<module>.<page>.<name>.json). The UI kit gallery is /page/shared/kit.
 // Messages the page posts are logged to the console as "[post]" and shown in the footer, so clicks can be checked.
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { brandsJs } from "../build-brands.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = Number(process.env.PREVIEW_PORT || 5178);
@@ -16,14 +18,37 @@ const THEMES = {
     "--vscode-textLink-foreground": "#4daafc", "--vscode-button-background": "#0078d4", "--vscode-button-foreground": "#ffffff",
     "--vscode-button-secondaryBackground": "#313131", "--vscode-button-secondaryForeground": "#cccccc", "--vscode-input-background": "#313131",
     "--vscode-input-border": "#3c3c3c", "--vscode-focusBorder": "#0078d4", "--vscode-font-family": "-apple-system, 'Segoe UI', sans-serif",
-    "--vscode-font-size": "13px", "--vscode-editor-font-family": "Consolas, monospace" },
+    "--vscode-font-size": "13px", "--vscode-editor-font-family": "Consolas, monospace",
+    "--vscode-editorWidget-background": "#202020", "--vscode-editorHoverWidget-background": "#202020",
+    "--vscode-list-activeSelectionBackground": "#04395e", "--vscode-list-activeSelectionForeground": "#ffffff",
+    "--vscode-charts-purple": "#b180d7", "--vscode-charts-blue": "#3794ff", "--vscode-charts-green": "#89d185",
+    "--vscode-testing-iconPassed": "#73c991", "--vscode-testing-iconFailed": "#f14c4c", "--vscode-editorWarning-foreground": "#cca700",
+    "--vscode-errorForeground": "#f85149", "--vscode-input-foreground": "#cccccc" },
   light: { "--vscode-editor-background": "#ffffff", "--vscode-foreground": "#3b3b3b", "--vscode-descriptionForeground": "#717171",
     "--vscode-panel-border": "#e5e5e5", "--vscode-sideBar-background": "#f8f8f8", "--vscode-list-hoverBackground": "#f2f2f2",
     "--vscode-textLink-foreground": "#005fb8", "--vscode-button-background": "#005fb8", "--vscode-button-foreground": "#ffffff",
     "--vscode-button-secondaryBackground": "#e5e5e5", "--vscode-button-secondaryForeground": "#3b3b3b", "--vscode-input-background": "#ffffff",
     "--vscode-input-border": "#cecece", "--vscode-focusBorder": "#005fb8", "--vscode-font-family": "-apple-system, 'Segoe UI', sans-serif",
+    "--vscode-font-size": "13px", "--vscode-editor-font-family": "Consolas, monospace",
+    "--vscode-editorWidget-background": "#f3f3f3", "--vscode-editorHoverWidget-background": "#f3f3f3",
+    "--vscode-list-activeSelectionBackground": "#e8e8e8", "--vscode-list-activeSelectionForeground": "#000000",
+    "--vscode-charts-purple": "#652d90", "--vscode-charts-blue": "#005fb8", "--vscode-charts-green": "#388a34",
+    "--vscode-testing-iconPassed": "#388a34", "--vscode-testing-iconFailed": "#e51400", "--vscode-editorWarning-foreground": "#bf8803",
+    "--vscode-errorForeground": "#e51400", "--vscode-input-foreground": "#3b3b3b" },
+  hc: { "--vscode-editor-background": "#000000", "--vscode-foreground": "#ffffff", "--vscode-descriptionForeground": "#ffffff",
+    "--vscode-panel-border": "#6fc3df", "--vscode-contrastBorder": "#6fc3df", "--vscode-contrastActiveBorder": "#f38518",
+    "--vscode-sideBar-background": "#000000", "--vscode-list-hoverBackground": "transparent", "--vscode-textLink-foreground": "#21a6ff",
+    "--vscode-button-background": "#000000", "--vscode-button-foreground": "#ffffff", "--vscode-button-border": "#6fc3df",
+    "--vscode-button-secondaryBackground": "#000000", "--vscode-button-secondaryForeground": "#ffffff", "--vscode-input-background": "#000000",
+    "--vscode-input-border": "#6fc3df", "--vscode-input-foreground": "#ffffff", "--vscode-focusBorder": "#f38518",
+    "--vscode-editorWidget-background": "#0c141f", "--vscode-editorHoverWidget-background": "#0c141f",
+    "--vscode-list-activeSelectionBackground": "transparent", "--vscode-list-activeSelectionForeground": "#ffffff",
+    "--vscode-charts-purple": "#b180d7", "--vscode-charts-blue": "#3794ff", "--vscode-charts-green": "#89d185",
+    "--vscode-testing-iconPassed": "#73c991", "--vscode-testing-iconFailed": "#f48771", "--vscode-editorWarning-foreground": "#ffd370",
+    "--vscode-errorForeground": "#f48771", "--vscode-font-family": "-apple-system, 'Segoe UI', sans-serif",
     "--vscode-font-size": "13px", "--vscode-editor-font-family": "Consolas, monospace" },
 };
+const BODY_CLASS = { dark: "vscode-dark", light: "vscode-light", hc: "vscode-high-contrast" };
 
 function listPages() {
   const dir = path.join(root, "preview", "fixtures");
@@ -31,14 +56,20 @@ function listPages() {
   return files.map((f) => { const [mod, page, ...rest] = f.replace(/\.json$/, "").split("."); return { mod, page, fixture: rest.join(".") }; });
 }
 
-function pageHtml(mod, page, fixture, theme, sidebar) {
+function pageHtml(mod, page, fixture, theme, sidebar, opts = {}) {
   const fx = path.join(root, "preview", "fixtures", `${mod}.${page}.${fixture}.json`);
   const data = fs.existsSync(fx) ? fs.readFileSync(fx, "utf8") : "null";
-  const vars = Object.entries(THEMES[theme] || THEMES.dark).map(([k, v]) => `${k}:${v}`).join(";");
+  const t = THEMES[theme] ? theme : "dark";
+  const vars = Object.entries(THEMES[t]).map(([k, v]) => `${k}:${v}`).join(";");
+  const cls = [BODY_CLASS[t], sidebar ? "sidebar" : "", opts.reduce ? "dc-reduced-motion" : ""].filter(Boolean).join(" ");
+  const persona = /^(architect|developer|tester)$/.test(opts.persona || "") ? ` data-persona="${opts.persona}"` : "";
   return `<!doctype html><html><head><meta charset="utf-8"><title>${mod}/${page} (${fixture})</title>
+<link rel="stylesheet" href="/media/shared/codicons/codicon.css">
 <link rel="stylesheet" href="/media/shared/base.css"><style>:root{${vars}} #dc-preview-log{position:fixed;bottom:0;left:0;right:0;
-font:11px monospace;background:#0008;color:#eee;padding:2px 8px;max-height:60px;overflow:auto}</style></head>
-<body class="${sidebar ? "sidebar" : ""}" data-page="${mod}/${page}" style="${sidebar ? "max-width:340px" : ""}"><main id="app"></main><div id="dc-preview-log"></div>
+font:11px monospace;background:#0008;color:#eee;padding:2px 8px;max-height:60px;overflow:auto;z-index:50} #dc-toasts{bottom:72px}</style></head>
+<body class="${cls}"${persona} data-page="${mod}/${page}" style="${sidebar ? "max-width:340px" : ""}"><main id="app" tabindex="-1"></main>
+<div id="dc-live" class="sr-only" role="status" aria-live="polite"></div><div id="dc-toasts" role="region" aria-label="Notifications"></div>
+<div id="dc-preview-log"></div>
 <script>
 window.__FIXTURE__ = ${data};
 window.acquireVsCodeApi = () => ({
@@ -50,24 +81,38 @@ window.acquireVsCodeApi = () => ({
   getState() { return null; }, setState() {},
 });
 </script>
-<script src="/media/shared/ui.js"></script><script src="/media/${mod}/${page}.js"></script></body></html>`;
+<script src="/media/shared/brands.js"></script><script src="/media/shared/ui.js"></script><script src="/media/${mod}/${page}.js"></script></body></html>`;
 }
 
 http.createServer((req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
   if (url.pathname === "/") {
     const rows = listPages().map((p) => `<li><a href="/page/${p.mod}/${p.page}?fixture=${p.fixture}&theme=dark">${p.mod}/${p.page} · ${p.fixture}</a>
-      · <a href="/page/${p.mod}/${p.page}?fixture=${p.fixture}&theme=light">light</a></li>`).join("");
+      · <a href="/page/${p.mod}/${p.page}?fixture=${p.fixture}&theme=light">light</a>
+      · <a href="/page/${p.mod}/${p.page}?fixture=${p.fixture}&theme=hc">high contrast</a>
+      · <a href="/page/${p.mod}/${p.page}?fixture=${p.fixture}&theme=dark&motion=reduce">reduced motion</a></li>`).join("");
     res.writeHead(200, { "content-type": "text/html" }); res.end(`<h3>Delivery Circuit previews</h3><ul>${rows}</ul>`); return;
   }
   const pm = url.pathname.match(/^\/page\/([\w-]+)\/([\w-]+)$/);
   if (pm) {
     res.writeHead(200, { "content-type": "text/html" });
-    res.end(pageHtml(pm[1], pm[2], url.searchParams.get("fixture") || "default", url.searchParams.get("theme") || "dark", url.searchParams.has("sidebar")));
+    res.end(pageHtml(pm[1], pm[2], url.searchParams.get("fixture") || "default", url.searchParams.get("theme") || "dark", url.searchParams.has("sidebar"),
+      { persona: url.searchParams.get("persona"), reduce: url.searchParams.get("motion") === "reduce" }));
     return;
   }
-  const file = path.join(root, decodeURIComponent(url.pathname));
-  if (!file.startsWith(path.join(root, "media")) || !fs.existsSync(file)) { res.writeHead(404); res.end("not found"); return; }
-  const type = file.endsWith(".css") ? "text/css" : file.endsWith(".js") ? "text/javascript" : file.endsWith(".svg") ? "image/svg+xml" : "application/octet-stream";
+  let file = path.join(root, decodeURIComponent(url.pathname));
+  // brands.js is generated by build.mjs; generate it on the fly when the build has not run yet.
+  if (file === path.join(root, "media", "shared", "brands.js") && !fs.existsSync(file)) {
+    brandsJs(root).then((js) => { res.writeHead(200, { "content-type": "text/javascript" }); res.end(js); },
+      (e) => { res.writeHead(200, { "content-type": "text/javascript" }); res.end(`console.warn(${JSON.stringify("brands: " + e.message)});`); });
+    return;
+  }
+  // Codicons are copied by build.mjs; serve them straight from node_modules when the build has not run yet.
+  const codicons = path.join(root, "media", "shared", "codicons");
+  if (file.startsWith(codicons + path.sep) && !fs.existsSync(file)) file = path.join(root, "node_modules", "@vscode", "codicons", "dist", path.basename(file));
+  const allowed = [path.join(root, "media"), path.join(root, "node_modules", "@vscode", "codicons", "dist")].some((d) => file.startsWith(d + path.sep));
+  if (!allowed || !fs.existsSync(file)) { res.writeHead(404); res.end("not found"); return; }
+  const type = file.endsWith(".css") ? "text/css" : file.endsWith(".js") ? "text/javascript" : file.endsWith(".svg") ? "image/svg+xml"
+    : file.endsWith(".ttf") ? "font/ttf" : "application/octet-stream";
   res.writeHead(200, { "content-type": type }); fs.createReadStream(file).pipe(res);
 }).listen(PORT, "127.0.0.1", () => console.log(`preview: http://127.0.0.1:${PORT}/`));

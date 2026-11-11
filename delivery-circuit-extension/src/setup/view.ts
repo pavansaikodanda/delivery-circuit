@@ -19,7 +19,18 @@ export interface StepView {
   verify: boolean;
   links: DeepLink[];
   result?: StepResultView;
+  /** the one status shown on the collapsed row */
+  status: StepStatus;
+  /** what the row offers; the first is the row's primary action, the rest go to its menu and expanded panel */
+  actions: StepAction[];
+  /** the last result passed */
+  done: boolean;
 }
+
+export type Tone = "ok" | "warn" | "err" | "info" | "muted";
+export interface StepStatus { tone: Tone; text: string; busy?: boolean }
+/** run = post {type:"run"}, verify = {type:"verify"}, secret = {type:"secret", name}, form = switch to the config tab */
+export interface StepAction { do: "run" | "verify" | "secret" | "form"; label: string; name?: string }
 
 export interface PhaseView {
   id: string;
@@ -33,6 +44,8 @@ export interface PhaseView {
   steps: StepView[];
   /** all verifiable steps passed: offer "Mark DONE" */
   ready: boolean;
+  /** steps whose last result passed, of all steps */
+  progress: { done: number; total: number };
 }
 
 export interface SetupView {
@@ -59,6 +72,61 @@ export function linkKind(url: string): DeepLink["kind"] {
   return "url";
 }
 
+type StepCore = Omit<StepView, "status" | "actions" | "done">;
+
+/** One status phrase for a step row (DESIGN.md §6.6): working, passed/done, needs attention, failed, or what is open. */
+export function stepStatus(s: StepCore, busy: string | null): StepStatus {
+  if (busy && busy === s.id) return { tone: "info", text: "working", busy: true };
+  const r = s.result;
+  if (r?.state === "ok") return { tone: "ok", text: s.kind === "check" ? "passed" : "done" };
+  if (r?.state === "warn") return { tone: "warn", text: "needs attention" };
+  if (r?.state === "err") return { tone: "err", text: "failed" };
+  const secrets = s.secrets ?? [];
+  const known = secrets.filter((x) => x.set !== null);
+  if (s.kind === "secret" && secrets.length) {
+    if (known.length < secrets.length) return { tone: "muted", text: "not checked" };
+    const set = known.filter((x) => x.set).length;
+    return set === secrets.length ? { tone: "ok", text: "all set" } : { tone: "warn", text: `${set} of ${secrets.length} set` };
+  }
+  if (s.kind === "human") {
+    const list = s.checklist ?? [];
+    const ticked = list.filter((c) => c.done).length;
+    if (list.length && ticked === list.length) return { tone: "info", text: "ready to verify" };
+    return { tone: "info", text: list.length && ticked ? `${ticked} of ${list.length} ticked` : "waiting for you" };
+  }
+  if (s.kind === "check" || s.kind === "form") return { tone: "muted", text: "not checked" };
+  return { tone: "muted", text: "not run" };
+}
+
+/** Actions a step offers, primary first: the open thing to do comes before re-checking. */
+export function stepActions(s: StepCore): StepAction[] {
+  const out: StepAction[] = [];
+  const verify: StepAction | null = s.verify ? { do: "verify", label: s.kind === "human" ? "Verify" : "Check" } : null;
+  const secrets = s.secrets ?? [];
+  const secretActs = secrets.map((x): StepAction => ({ do: "secret", label: `${x.set ? "Replace" : "Set"} ${x.name}`, name: x.name }));
+  const missing = secretActs.filter((_, i) => secrets[i].set === false);
+  const others = secretActs.filter((_, i) => secrets[i].set !== false);
+  if (s.kind === "form") {
+    out.push({ do: "form", label: "Open form" });
+    if (verify) out.push(verify);
+    return out;
+  }
+  const run: StepAction | null = s.action && s.kind !== "secret" ? { do: "run", label: s.action } : null;
+  if (s.kind === "secret") {
+    // a known missing secret first; when nothing is known yet, Check reads the names
+    out.push(...missing);
+    if (verify) out.push(verify);
+    out.push(...others);
+    return out;
+  }
+  if (run) out.push(run);
+  out.push(...missing);
+  if (verify) out.push(verify);
+  out.push(...others);
+  if (!out.length && s.kind === "terminal") out.push({ do: "run", label: "Open terminal" });
+  return out;
+}
+
 export function buildView(p: {
   login: string; admin: boolean; owner: string; repo: string;
   defs: PhaseDef[]; state: BuildState | undefined; buildStateExists: boolean;
@@ -71,19 +139,21 @@ export function buildView(p: {
     const row = p.state?.rows.find((r) => r.id === d.id);
     const steps = d.steps.map((s): StepView => {
       const names = p.secretNames?.[s.env ?? ""];
-      return {
+      const core: StepCore = {
         id: s.id, kind: s.kind, title: s.title, detail: s.detail, hc: s.hc, action: s.action, env: s.env, verify: !!s.verify,
         checklist: s.checklist?.map((text, i) => ({ text, done: !!p.ticks[s.id]?.[i] })),
         secrets: s.secrets?.map((name) => ({ name, set: names ? names.includes(name) : null })),
         links: (s.urls ?? []).map((u) => ({ kind: linkKind(u.url), label: u.label, target: u.url })),
         result: p.results[s.id],
       };
+      return { ...core, status: stepStatus(core, p.busy), actions: stepActions(core), done: core.result?.state === "ok" };
     });
     const verifiable = steps.filter((s) => s.verify);
     return {
       id: d.id, name: d.name, summary: d.summary,
       status: row?.status || "TODO", kind: statusKind(row?.status ?? ""), verified: row?.verified ?? "", evidence: row?.evidence ?? "", notes: row?.notes ?? "",
       steps, ready: verifiable.length > 0 && verifiable.every((s) => s.result?.state === "ok"),
+      progress: { done: steps.filter((s) => s.done).length, total: steps.length },
     };
   });
   return {

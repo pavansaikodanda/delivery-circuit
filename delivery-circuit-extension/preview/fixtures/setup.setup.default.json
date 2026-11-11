@@ -36,7 +36,22 @@
             "state": "ok",
             "text": "git 2.53.0, gh 2.73.0, node 22.23.3, npm 10.9.9, python 3.13.1, uv 0.13.0, sf 2.157.8 (code-analyzer 5.1.0), claude 2.1.318, openssl 3.5.5, jq 1.7.1, actionlint 1.7.7, specify 1.3.4",
             "at": "2026-11-11T09:30:00Z"
-          }
+          },
+          "status": {
+            "tone": "ok",
+            "text": "passed"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Record in build-state.md"
+            },
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": true
         },
         {
           "id": "b0.gh",
@@ -53,7 +68,18 @@
               "gh: signed in; scopes repo, workflow",
               "You: pavansaikodanda, admin of acme-org/salesDemoOrg"
             ]
-          }
+          },
+          "status": {
+            "tone": "warn",
+            "text": "needs attention"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b0.dryrun",
@@ -67,7 +93,18 @@
             "state": "ok",
             "text": "Dry run: add 0, update 2, skip 41",
             "at": "2026-11-11T09:30:00Z"
-          }
+          },
+          "status": {
+            "tone": "ok",
+            "text": "done"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Run dry run"
+            }
+          ],
+          "done": true
         },
         {
           "id": "b0.config",
@@ -80,7 +117,22 @@
             "state": "warn",
             "text": "Still empty: people.architects, people.developers, people.testers, jira.site",
             "at": "2026-11-11T09:30:00Z"
-          }
+          },
+          "status": {
+            "tone": "warn",
+            "text": "needs attention"
+          },
+          "actions": [
+            {
+              "do": "form",
+              "label": "Open form"
+            },
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b0.hc1",
@@ -133,10 +185,25 @@
               "label": "Slack",
               "target": "https://slack.com/signin"
             }
-          ]
+          ],
+          "status": {
+            "tone": "info",
+            "text": "waiting for you"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
         }
       ],
-      "ready": false
+      "ready": false,
+      "progress": {
+        "done": 2,
+        "total": 5
+      }
     },
     {
       "id": "B1",
@@ -165,7 +232,22 @@
               "developers: missing",
               "testers: missing"
             ]
-          }
+          },
+          "status": {
+            "tone": "warn",
+            "text": "needs attention"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Create teams and members"
+            },
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b1.labels",
@@ -179,7 +261,22 @@
             "state": "warn",
             "text": "Missing labels: plan-approved, testplan-approved, ai-ready, needs-human, needs-qa",
             "at": "2026-11-11T09:30:00Z"
-          }
+          },
+          "status": {
+            "tone": "warn",
+            "text": "needs attention"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Create missing labels"
+            },
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b1.hc2",
@@ -225,7 +322,18 @@
               "label": "Org installed apps",
               "target": "https://github.com/organizations/acme-org/settings/installations"
             }
-          ]
+          ],
+          "status": {
+            "tone": "info",
+            "text": "2 of 6 ticked"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b1.app",
@@ -248,7 +356,28 @@
             "state": "warn",
             "text": "Missing repository secrets: APP_ID, APP_PRIVATE_KEY",
             "at": "2026-11-11T09:30:00Z"
-          }
+          },
+          "status": {
+            "tone": "warn",
+            "text": "needs attention"
+          },
+          "actions": [
+            {
+              "do": "secret",
+              "label": "Set APP_ID",
+              "name": "APP_ID"
+            },
+            {
+              "do": "secret",
+              "label": "Set APP_PRIVATE_KEY",
+              "name": "APP_PRIVATE_KEY"
+            },
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b1.hc3",
@@ -285,7 +414,27 @@
             "state": "ok",
             "text": "CLAUDE_CODE_OAUTH_TOKEN set; no ANTHROPIC_API_KEY",
             "at": "2026-11-11T09:30:00Z"
-          }
+          },
+          "status": {
+            "tone": "ok",
+            "text": "done"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Open terminal: claude setup-token"
+            },
+            {
+              "do": "verify",
+              "label": "Verify"
+            },
+            {
+              "do": "secret",
+              "label": "Replace CLAUDE_CODE_OAUTH_TOKEN",
+              "name": "CLAUDE_CODE_OAUTH_TOKEN"
+            }
+          ],
+          "done": true
         },
         {
           "id": "b1.vars",
@@ -294,7 +443,22 @@
           "detail": "MAX_AI_ATTEMPTS, SF_INSTANCE_URL_SANDBOX, SF_INSTANCE_URL_PROD, SF_AI_TESTER_IN_CI, SF_AI_TESTER_REF, SF_AI_TESTER_MODE from build.config.yml.",
           "action": "Set variables",
           "verify": true,
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "muted",
+            "text": "not run"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Set variables"
+            },
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b1.env",
@@ -308,10 +472,29 @@
             "state": "ok",
             "text": "Environment production exists",
             "at": "2026-11-11T09:30:00Z"
-          }
+          },
+          "status": {
+            "tone": "ok",
+            "text": "done"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Create environment"
+            },
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": true
         }
       ],
-      "ready": false
+      "ready": false,
+      "progress": {
+        "done": 2,
+        "total": 7
+      }
     },
     {
       "id": "B2",
@@ -329,7 +512,18 @@
           "title": "Org aliases dev and qa",
           "detail": "sf org display for both aliases (read-only).",
           "verify": true,
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "muted",
+            "text": "not checked"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b2.keys",
@@ -338,7 +532,18 @@
           "detail": "Creates dev.key/dev.crt and qa.key/qa.crt in ~/.sfkeys with openssl (730 days). Existing keys are kept.",
           "action": "Create keys",
           "verify": false,
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "muted",
+            "text": "not run"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Create keys"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b2.hc4",
@@ -386,7 +591,18 @@
               "label": "QA External Client Apps",
               "target": "https://acme-demo.my.salesforce.com/lightning/setup/ManageExternalClientApplication/home"
             }
-          ]
+          ],
+          "status": {
+            "tone": "info",
+            "text": "waiting for you"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b2.secrets",
@@ -420,7 +636,48 @@
               "set": false
             }
           ],
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "warn",
+            "text": "0 of 6 set"
+          },
+          "actions": [
+            {
+              "do": "secret",
+              "label": "Set SF_CLIENT_ID_DEV",
+              "name": "SF_CLIENT_ID_DEV"
+            },
+            {
+              "do": "secret",
+              "label": "Set SF_USERNAME_DEV",
+              "name": "SF_USERNAME_DEV"
+            },
+            {
+              "do": "secret",
+              "label": "Set SF_JWT_KEY_DEV",
+              "name": "SF_JWT_KEY_DEV"
+            },
+            {
+              "do": "secret",
+              "label": "Set SF_CLIENT_ID_QA",
+              "name": "SF_CLIENT_ID_QA"
+            },
+            {
+              "do": "secret",
+              "label": "Set SF_USERNAME_QA",
+              "name": "SF_USERNAME_QA"
+            },
+            {
+              "do": "secret",
+              "label": "Set SF_JWT_KEY_QA",
+              "name": "SF_JWT_KEY_QA"
+            },
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b2.hc5",
@@ -464,10 +721,40 @@
               "label": "Environment secrets",
               "target": "https://github.com/acme-org/salesDemoOrg/settings/environments"
             }
-          ]
+          ],
+          "status": {
+            "tone": "info",
+            "text": "waiting for you"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Verify"
+            },
+            {
+              "do": "secret",
+              "label": "Set SF_CLIENT_ID_PROD",
+              "name": "SF_CLIENT_ID_PROD"
+            },
+            {
+              "do": "secret",
+              "label": "Set SF_USERNAME_PROD",
+              "name": "SF_USERNAME_PROD"
+            },
+            {
+              "do": "secret",
+              "label": "Set SF_JWT_KEY_PROD",
+              "name": "SF_JWT_KEY_PROD"
+            }
+          ],
+          "done": false
         }
       ],
-      "ready": false
+      "ready": false,
+      "progress": {
+        "done": 0,
+        "total": 5
+      }
     },
     {
       "id": "B3",
@@ -486,7 +773,22 @@
           "detail": "git switch -c pipeline/foundation (or switch to it).",
           "action": "Switch branch",
           "verify": true,
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "muted",
+            "text": "not run"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Switch branch"
+            },
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b3.install",
@@ -495,7 +797,22 @@
           "detail": "install.mjs for real: CLAUDE.md, .claude/, CODEOWNERS, PR template, scripts/ci, .coderabbit.yaml, sf-config, workflows. Existing files are skipped.",
           "action": "Install",
           "verify": true,
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "muted",
+            "text": "not run"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Install"
+            },
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b3.mcp",
@@ -504,7 +821,22 @@
           "detail": "Replaces VERIFY placeholders in .claude/personas/*.mcp.json with the verified vendor URLs (Atlassian v2, Lucid, Fireflies, GitHub, Slack).",
           "action": "Fill URLs",
           "verify": true,
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "muted",
+            "text": "not run"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Fill URLs"
+            },
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b3.pr",
@@ -532,10 +864,25 @@
               "label": "Pull requests",
               "target": "https://github.com/acme-org/salesDemoOrg/pulls"
             }
-          ]
+          ],
+          "status": {
+            "tone": "info",
+            "text": "waiting for you"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
         }
       ],
-      "ready": false
+      "ready": false,
+      "progress": {
+        "done": 0,
+        "total": 4
+      }
     },
     {
       "id": "B4",
@@ -554,7 +901,18 @@
           "detail": "specify init --here --integration claude --integration-options=--no-model-invocation",
           "action": "Open terminal: specify init",
           "verify": false,
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "muted",
+            "text": "not run"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Open terminal: specify init"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b4.ext",
@@ -563,7 +921,18 @@
           "detail": "specify extension add sf --from the v2.0.1 release archive (confirm the URL in the terminal).",
           "action": "Open terminal: add extension",
           "verify": false,
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "muted",
+            "text": "not run"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Open terminal: add extension"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b4.skills",
@@ -572,7 +941,22 @@
           "detail": "Deletes .claude/skills/speckit-sf-deploy, -hotfix and -pr (the guard blocks them anyway).",
           "action": "Remove",
           "verify": true,
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "muted",
+            "text": "not run"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Remove"
+            },
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b4.check",
@@ -580,7 +964,18 @@
           "title": "Spec Kit state",
           "detail": ".specify/, extension sf, sf-config prod: \"none\", constitution present.",
           "verify": true,
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "muted",
+            "text": "not checked"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b4.constitution",
@@ -603,10 +998,29 @@
               "done": false
             }
           ],
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "info",
+            "text": "waiting for you"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Start Architect session"
+            },
+            {
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
         }
       ],
-      "ready": false
+      "ready": false,
+      "progress": {
+        "done": 0,
+        "total": 5
+      }
     },
     {
       "id": "B5",
@@ -655,7 +1069,33 @@
               "label": "Atlassian API tokens",
               "target": "https://id.atlassian.com/manage-profile/security/api-tokens"
             }
-          ]
+          ],
+          "status": {
+            "tone": "info",
+            "text": "waiting for you"
+          },
+          "actions": [
+            {
+              "do": "secret",
+              "label": "Set JIRA_API_TOKEN",
+              "name": "JIRA_API_TOKEN"
+            },
+            {
+              "do": "secret",
+              "label": "Set JIRA_BASE_URL",
+              "name": "JIRA_BASE_URL"
+            },
+            {
+              "do": "secret",
+              "label": "Set JIRA_EMAIL",
+              "name": "JIRA_EMAIL"
+            },
+            {
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b5.setup",
@@ -687,7 +1127,18 @@
               "label": "Groups",
               "target": "https://admin.atlassian.com/"
             }
-          ]
+          ],
+          "status": {
+            "tone": "info",
+            "text": "waiting for you"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b5.hc7",
@@ -720,7 +1171,18 @@
               "label": "New fine-grained PAT",
               "target": "https://github.com/settings/personal-access-tokens/new"
             }
-          ]
+          ],
+          "status": {
+            "tone": "info",
+            "text": "waiting for you"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b5.app",
@@ -744,7 +1206,18 @@
               "label": "GitHub for Jira",
               "target": "https://github.com/apps/jira"
             }
-          ]
+          ],
+          "status": {
+            "tone": "info",
+            "text": "waiting for you"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b5.discover",
@@ -753,10 +1226,25 @@
           "detail": "jira-sync.mjs discover writes .specify/extensions/jira/jira-config.json (your Jira credentials are passed through the environment).",
           "action": "Open terminal: discover",
           "verify": false,
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "muted",
+            "text": "not run"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Open terminal: discover"
+            }
+          ],
+          "done": false
         }
       ],
-      "ready": false
+      "ready": false,
+      "progress": {
+        "done": 0,
+        "total": 5
+      }
     },
     {
       "id": "B6",
@@ -774,7 +1262,18 @@
           "title": "Confluence space",
           "detail": "The space from build.config.yml exists (REST with your Atlassian token).",
           "verify": true,
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "muted",
+            "text": "not checked"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b6.hc",
@@ -812,10 +1311,25 @@
               "label": "Fireflies MCP",
               "target": "https://docs.fireflies.ai/getting-started/mcp-configuration"
             }
-          ]
+          ],
+          "status": {
+            "tone": "info",
+            "text": "waiting for you"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
         }
       ],
-      "ready": false
+      "ready": false,
+      "progress": {
+        "done": 0,
+        "total": 2
+      }
     },
     {
       "id": "B7",
@@ -867,10 +1381,40 @@
               "label": "Slack apps",
               "target": "https://api.slack.com/apps"
             }
-          ]
+          ],
+          "status": {
+            "tone": "info",
+            "text": "waiting for you"
+          },
+          "actions": [
+            {
+              "do": "secret",
+              "label": "Set SLACK_WEBHOOK_ARCH",
+              "name": "SLACK_WEBHOOK_ARCH"
+            },
+            {
+              "do": "secret",
+              "label": "Set SLACK_WEBHOOK_DEV",
+              "name": "SLACK_WEBHOOK_DEV"
+            },
+            {
+              "do": "secret",
+              "label": "Set SLACK_WEBHOOK_QA",
+              "name": "SLACK_WEBHOOK_QA"
+            },
+            {
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
         }
       ],
-      "ready": false
+      "ready": false,
+      "progress": {
+        "done": 0,
+        "total": 1
+      }
     },
     {
       "id": "B8",
@@ -889,7 +1433,22 @@
           "detail": "git switch -c pipeline/workflows (or switch to it).",
           "action": "Switch branch",
           "verify": true,
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "muted",
+            "text": "not run"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Switch branch"
+            },
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b8.lint",
@@ -897,7 +1456,18 @@
           "title": "actionlint",
           "detail": "actionlint on .github/workflows/*.yml must be clean.",
           "verify": true,
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "muted",
+            "text": "not checked"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b8.coderabbit",
@@ -917,7 +1487,18 @@
               "label": "Install CodeRabbit",
               "target": "https://github.com/apps/coderabbitai/installations/new"
             }
-          ]
+          ],
+          "status": {
+            "tone": "info",
+            "text": "waiting for you"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b8.pr",
@@ -950,10 +1531,25 @@
               "label": "Pull requests",
               "target": "https://github.com/acme-org/salesDemoOrg/pulls"
             }
-          ]
+          ],
+          "status": {
+            "tone": "info",
+            "text": "waiting for you"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
         }
       ],
-      "ready": false
+      "ready": false,
+      "progress": {
+        "done": 0,
+        "total": 4
+      }
     },
     {
       "id": "B9",
@@ -973,7 +1569,22 @@
           "hc": "HC-8",
           "action": "Review and create",
           "verify": true,
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "muted",
+            "text": "not run"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Review and create"
+            },
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b9.env",
@@ -982,7 +1593,22 @@
           "detail": "Environment production: required reviewers = team architects, prevent self-review, deployments from main only.",
           "action": "Protect environment",
           "verify": true,
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "muted",
+            "text": "not run"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Protect environment"
+            },
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b9.tag",
@@ -1006,10 +1632,25 @@
               "label": "New tag ruleset",
               "target": "https://github.com/acme-org/salesDemoOrg/settings/rules/new?target=tag"
             }
-          ]
+          ],
+          "status": {
+            "tone": "info",
+            "text": "waiting for you"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
         }
       ],
-      "ready": false
+      "ready": false,
+      "progress": {
+        "done": 0,
+        "total": 3
+      }
     },
     {
       "id": "B10",
@@ -1051,10 +1692,25 @@
               "label": "Team members",
               "target": "https://github.com/organizations/acme-org/teams"
             }
-          ]
+          ],
+          "status": {
+            "tone": "info",
+            "text": "waiting for you"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
         }
       ],
-      "ready": false
+      "ready": false,
+      "progress": {
+        "done": 0,
+        "total": 1
+      }
     },
     {
       "id": "B11",
@@ -1073,7 +1729,22 @@
           "detail": "DEPLOY_ENVIRONMENT=production-dryrun (environment holding QA secrets under the PROD names) and AI_LOOP_DRY_RUN=false.",
           "action": "Set dry-run variables",
           "verify": true,
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "muted",
+            "text": "not run"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Set dry-run variables"
+            },
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b11.hc9",
@@ -1135,7 +1806,18 @@
               "label": "Actions",
               "target": "https://github.com/acme-org/salesDemoOrg/actions"
             }
-          ]
+          ],
+          "status": {
+            "tone": "info",
+            "text": "waiting for you"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
         },
         {
           "id": "b11.cleanup",
@@ -1144,10 +1826,29 @@
           "detail": "Sets DEPLOY_ENVIRONMENT back (removes the variable). Close dry-run issues and delete branches yourself; keep the PRs.",
           "action": "Reset variables",
           "verify": true,
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "muted",
+            "text": "not run"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Reset variables"
+            },
+            {
+              "do": "verify",
+              "label": "Check"
+            }
+          ],
+          "done": false
         }
       ],
-      "ready": false
+      "ready": false,
+      "progress": {
+        "done": 0,
+        "total": 3
+      }
     },
     {
       "id": "B12",
@@ -1175,10 +1876,25 @@
               "done": false
             }
           ],
-          "links": []
+          "links": [],
+          "status": {
+            "tone": "info",
+            "text": "waiting for you"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
         }
       ],
-      "ready": false
+      "ready": false,
+      "progress": {
+        "done": 0,
+        "total": 1
+      }
     }
   ],
   "config": {

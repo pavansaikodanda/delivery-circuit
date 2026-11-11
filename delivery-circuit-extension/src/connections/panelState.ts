@@ -45,6 +45,8 @@ export interface PanelState {
   project?: ProjectInfo;
   hiddenCount: number;
   checkedAt: string;
+  /** True while "Check all" runs (the section action shows a spinner). */
+  refreshing: boolean;
 }
 
 const DISCONNECTABLE = new Set<ConnectionId>(["sf-dev", "sf-qa", "jira", "confluence", "fireflies", "slack", "lucid", "claude"]);
@@ -56,6 +58,9 @@ const CONNECT_LABEL: Partial<Record<ConnectionId, string>> = {
 export function buildPanelState(args: {
   identity: Identity | null; notice?: string; statuses: ConnectionStatus[]; links: Partial<Record<ConnectionId, DeepLink[]>>;
   project?: ProjectInfo; now?: Date;
+  /** Rows whose check the person started and which has not finished yet: shown as "Checking" with the controls busy. */
+  checking?: Iterable<ConnectionId>;
+  refreshing?: boolean;
 }): PanelState {
   const { identity, statuses, links } = args;
   const now = args.now ?? new Date();
@@ -63,13 +68,16 @@ export function buildPanelState(args: {
   const personas = identity?.personas ?? [];
   const visible = visibleRows(statuses, personas, identity?.active ?? null);
   const order = new Map(CONNECTIONS.map((c, i) => [c.id, i]));
-  const rows: PanelRow[] = visible.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0)).map((s) => {
+  const checking = new Set(args.checking ?? []);
+  const rows: PanelRow[] = visible.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0)).map((s0) => {
+    const s: ConnectionStatus = checking.has(s0.id) && s0.state !== "checking" ? { ...s0, state: "checking" } : s0;
     const act = actionable(s, isAdmin);
     return {
       ...s, group: groupOf(s.id), actionable: act,
       reason: act ? undefined : "Project connections are managed by a repo or org admin.",
-      canDisconnect: act && DISCONNECTABLE.has(s.id) && (s.state === "connected" || s.state === "expiring" || s.state === "error"),
-      connectLabel: CONNECT_LABEL[s.id] ?? (s.state === "connected" || s.state === "expiring" ? "Reconnect" : "Connect"),
+      canDisconnect: act && DISCONNECTABLE.has(s.id) && (s0.state === "connected" || s0.state === "expiring" || s0.state === "error"),
+      connectLabel: (s0.state === "connected" && (s.id === "testing-browsers" || s.id === "code-analyzer")) ? "Update"
+        : CONNECT_LABEL[s.id] ?? (s0.state === "connected" || s0.state === "expiring" ? "Reconnect" : "Connect"),
       expiryText: expiryText(s.expiresAt, now),
       links: links[s.id] ?? (s.manageUrl ? [{ kind: "url", label: "Manage", target: s.manageUrl }] : []),
     };
@@ -79,6 +87,7 @@ export function buildPanelState(args: {
   return {
     identity, notice: args.notice, signedIn: !!identity, isArchitect: personas.includes("architect"),
     groups, project: args.project, hiddenCount: statuses.length - visible.length, checkedAt: now.toISOString(),
+    refreshing: !!args.refreshing,
   };
 }
 

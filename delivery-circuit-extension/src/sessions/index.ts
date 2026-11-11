@@ -6,7 +6,7 @@ import * as vscode from "vscode";
 import { canAct, PERSONAS, type CircuitMcpService, type IdentityService, type Persona, type SessionsService } from "../core/contracts";
 import { openLink, type ModuleBase } from "../core/util";
 import { openPanel } from "../core/webview";
-import { addError, addSystem, addUser, claudeEnv, newChat, reduce, sdkOptions, toolLabel, toolSummary, vendorServers, type ChatState } from "./chat";
+import { addError, addSystem, addUser, chatMeta, claudeEnv, newChat, reduce, sdkOptions, toolLabel, toolSummary, vendorServers, type ChatState } from "./chat";
 import { buildTerminalSpec, PERSONA_TITLE, resolveClaude } from "./terminal";
 import { loadAgentSdk } from "../core/claude";
 
@@ -72,10 +72,11 @@ export function createSessions(base: ModuleBase, deps: Deps): SessionsService {
     }, key);
     panel.onDidDispose(() => { disposed = true; stop(); });
 
-    function view(): ChatState {
+    function view(): ChatState & { meta: string } {
       const root = base.root;
       return {
         ...state,
+        meta: chatMeta(state),
         items: state.items.map((i) => {
           if (!i.file) return i;
           const rel = path.relative(root, path.resolve(root, i.file));

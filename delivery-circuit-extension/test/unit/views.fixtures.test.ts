@@ -44,6 +44,18 @@ const FIXTURES: Record<string, unknown> = {
     feature: FEATURES[0], featureId: "001", identity: ARCHITECT, sources: SOURCES, prs: PRS, owner: OWNER, repo: REPO,
     jiraUrl, existingFiles: EXISTING_FILES, allowed: allowedFor(ARCHITECT), now: NOW,
   }),
+  "views.feature.developer": M.buildFeature({
+    feature: FEATURES[0], featureId: "001", identity: DEVELOPER, sources: SOURCES, prs: PRS, owner: OWNER, repo: REPO,
+    jiraUrl, existingFiles: EXISTING_FILES, allowed: allowedFor(DEVELOPER), now: NOW,
+  }),
+  "views.feature.clarify": M.buildFeature({
+    feature: FEATURES[1], featureId: "002", identity: ARCHITECT, sources: SOURCES, prs: PRS, owner: OWNER, repo: REPO,
+    jiraUrl, existingFiles: [], allowed: allowedFor(ARCHITECT), now: NOW,
+  }),
+  "views.feature.missing": M.buildFeature({
+    feature: undefined, featureId: "009", identity: DEVELOPER, sources: [], prs: [], owner: OWNER, repo: REPO,
+    jiraUrl, existingFiles: [], allowed: allowedFor(DEVELOPER), now: NOW,
+  }),
 };
 
 describe("views preview fixtures", () => {

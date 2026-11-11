@@ -5,7 +5,7 @@ import { parseBuildState, serializeBuildState, setToolVersions, splitRow, status
 import { FORBIDDEN_SECRETS, installCommand, LABELS, parseInstallOutput, rulesetWithTeam, secretNameOk, shellArg, variablesFor } from "../../src/setup/commands";
 import { looksLikeSecret, readConfig, readForm, textToPeople, validateForm, writeForm } from "../../src/setup/config";
 import { fillMcpUrls, PHASE_IDS, phases } from "../../src/setup/phases";
-import { buildView, linkKind } from "../../src/setup/view";
+import { buildView, linkKind, stepActions, stepStatus } from "../../src/setup/view";
 
 const FX = path.join(__dirname, "..", "fixtures", "setup");
 const STATE = fs.readFileSync(path.join(FX, "build-state.salesDemoOrg.md"), "utf8");
@@ -201,5 +201,46 @@ describe("phases", () => {
     expect(linkKind("https://acme.atlassian.net/jira/settings/automation")).toBe("jira");
     expect(linkKind("https://acme--dev.sandbox.my.salesforce.com/lightning/setup/ManageUsers/home")).toBe("salesforce");
     expect(linkKind("https://api.slack.com/apps")).toBe("slack");
+  });
+});
+
+describe("step rows (design v2: one status, one primary action)", () => {
+  const base = { id: "x", kind: "run" as const, title: "T", detail: "", verify: true, links: [] };
+  it("gives one status phrase per step", () => {
+    expect(stepStatus(base, "x")).toEqual({ tone: "info", text: "working", busy: true });
+    expect(stepStatus({ ...base, kind: "check", result: { state: "ok", text: "", at: "" } }, null)).toEqual({ tone: "ok", text: "passed" });
+    expect(stepStatus({ ...base, result: { state: "ok", text: "", at: "" } }, "other")).toEqual({ tone: "ok", text: "done" });
+    expect(stepStatus({ ...base, result: { state: "warn", text: "", at: "" } }, null).text).toBe("needs attention");
+    expect(stepStatus({ ...base, result: { state: "err", text: "", at: "" } }, null).tone).toBe("err");
+    expect(stepStatus(base, null)).toEqual({ tone: "muted", text: "not run" });
+    expect(stepStatus({ ...base, kind: "check" }, null).text).toBe("not checked");
+    const human = { ...base, kind: "human" as const, checklist: [{ text: "a", done: true }, { text: "b", done: false }] };
+    expect(stepStatus(human, null)).toEqual({ tone: "info", text: "1 of 2 ticked" });
+    expect(stepStatus({ ...human, checklist: [] }, null).text).toBe("waiting for you");
+    expect(stepStatus({ ...human, checklist: [{ text: "a", done: true }] }, null).text).toBe("ready to verify");
+    const secret = { ...base, kind: "secret" as const, secrets: [{ name: "A", set: true }, { name: "B", set: false }] };
+    expect(stepStatus(secret, null)).toEqual({ tone: "warn", text: "1 of 2 set" });
+    expect(stepStatus({ ...secret, secrets: [{ name: "A", set: true }] }, null)).toEqual({ tone: "ok", text: "all set" });
+    expect(stepStatus({ ...secret, secrets: [{ name: "A", set: null }] }, null).text).toBe("not checked");
+  });
+  it("puts the open thing to do first", () => {
+    expect(stepActions({ ...base, action: "Create labels" }).map((a) => a.label)).toEqual(["Create labels", "Check"]);
+    expect(stepActions({ ...base, kind: "form" }).map((a) => a.do)).toEqual(["form", "verify"]);
+    expect(stepActions({ ...base, kind: "human" }).map((a) => a.label)).toEqual(["Verify"]);
+    const secret = { ...base, kind: "secret" as const, action: "ignored", secrets: [{ name: "A", set: true }, { name: "B", set: false }] };
+    expect(stepActions(secret)).toEqual([{ do: "secret", label: "Set B", name: "B" }, { do: "verify", label: "Check" }, { do: "secret", label: "Replace A", name: "A" }]);
+    expect(stepActions({ ...secret, secrets: [{ name: "A", set: null }] }).map((a) => a.label)).toEqual(["Check", "Set A"]);
+    expect(stepActions({ ...base, kind: "terminal", verify: false })).toEqual([{ do: "run", label: "Open terminal" }]);
+  });
+  it("adds status, actions and progress to the page state", () => {
+    const ctx = { owner: "acme", repo: "crm", org: "acme", devUrl: "https://acme--dev.sandbox.my.salesforce.com", qaUrl: "", jiraSite: "https://acme.atlassian.net", jiraKey: "CRM", spaceKey: "SD" };
+    const v = buildView({ login: "pat", admin: true, owner: "acme", repo: "crm", defs: phases(ctx), state: parseBuildState(STATE), buildStateExists: true,
+      results: { "b6.space": { state: "ok", text: "Space SD", at: "2026-11-11T00:00:00Z" } }, ticks: {}, secretNames: undefined,
+      selected: "B6", busy: "b6.space", config: { exists: true, values: {}, errors: [] } });
+    const b6 = v.phases.find((p) => p.id === "B6")!;
+    expect(b6.progress).toEqual({ done: 1, total: b6.steps.length });
+    expect(b6.steps[0].done).toBe(true);
+    expect(b6.steps[0].status.busy).toBe(true);
+    expect(v.phases.every((p) => p.steps.every((s) => s.status.text && Array.isArray(s.actions)))).toBe(true);
   });
 });

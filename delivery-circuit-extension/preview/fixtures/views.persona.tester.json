@@ -1,6 +1,10 @@
 {
   "login": "tess-qa",
+  "repo": "acme-org/salesDemoOrg",
   "active": "tester",
+  "personas": [
+    "tester"
+  ],
   "tabs": [
     {
       "id": "tester",
@@ -612,6 +616,20 @@
           "label": "Checks",
           "target": "https://github.com/acme-org/salesDemoOrg/pull/42/checks"
         }
+      ],
+      "actions": [
+        {
+          "id": "ai:/qa-explore",
+          "label": "Explore on QA",
+          "persona": "tester",
+          "kind": "ai",
+          "args": {
+            "command": "/qa-explore",
+            "argKind": "pr",
+            "arg": 42
+          },
+          "allowed": true
+        }
       ]
     },
     {
@@ -674,6 +692,20 @@
           "kind": "github",
           "label": "Checks",
           "target": "https://github.com/acme-org/salesDemoOrg/pull/43/checks"
+        }
+      ],
+      "actions": [
+        {
+          "id": "ai:/qa-review-testplan",
+          "label": "Review test plan",
+          "persona": "tester",
+          "kind": "ai",
+          "args": {
+            "command": "/qa-review-testplan",
+            "argKind": "pr",
+            "arg": 43
+          },
+          "allowed": true
         }
       ]
     },
@@ -848,6 +880,20 @@
           "label": "Checks",
           "target": "https://github.com/acme-org/salesDemoOrg/pull/44/checks"
         }
+      ],
+      "actions": [
+        {
+          "id": "ai:/qa-explore",
+          "label": "Explore on QA",
+          "persona": "tester",
+          "kind": "ai",
+          "args": {
+            "command": "/qa-explore",
+            "argKind": "pr",
+            "arg": 44
+          },
+          "allowed": true
+        }
       ]
     },
     {
@@ -953,7 +999,8 @@
           "label": "Checks",
           "target": "https://github.com/acme-org/salesDemoOrg/pull/41/checks"
         }
-      ]
+      ],
+      "actions": []
     }
   ],
   "aiActions": [

@@ -45,6 +45,8 @@ export interface LiveRun {
   current?: { caseId: string; mode?: string; model?: string };
   needsUser?: string;
   error?: string;
+  /** set when the user asked to cancel this run */
+  cancelled?: boolean;
   lastRunDir?: string;
   results: { caseId: string; mode?: string; status: string; summary?: string }[];
   log: string[];
@@ -110,10 +112,22 @@ function suiteLinks(ctx: PageContext, s: SuiteRecord): DeepLink[] {
   return [{ kind: "file", label: "Suite file", target: s.key }, ...jiraLink(ctx, s.storyKey)];
 }
 
+type ModeView = NonNullable<ReturnType<typeof modeView>>;
+
+/** The one status a case row shows: the mode that ran last (manual or automation); the other goes in the expanded row. */
+export function latestOf(manual?: ModeView, automation?: ModeView): (ModeView & { mode: "manual" | "automation" }) | undefined {
+  const t = (m?: ModeView) => (m?.at ? Date.parse(m.at) || 0 : 0);
+  if (!manual && !automation) return undefined;
+  if (manual && (!automation || t(manual) >= t(automation))) return { ...manual, mode: "manual" };
+  return { ...(automation as ModeView), mode: "automation" };
+}
+
 function caseView(ctx: PageContext, s: SuiteRecord, c: CaseRow) {
   const links: DeepLink[] = [...jiraLink(ctx, c.jiraKey)];
   const spec = c.automation?.specFile;
   if (spec) links.push({ kind: "file", label: "Spec", target: spec });
+  const manual = modeView(c.manual);
+  const automation = modeView(c.automation);
   return {
     id: c.id,
     title: c.title,
@@ -121,8 +135,9 @@ function caseView(ctx: PageContext, s: SuiteRecord, c: CaseRow) {
     target: c.target,
     steps: c.steps,
     jiraKey: c.jiraKey,
-    manual: modeView(c.manual),
-    automation: modeView(c.automation),
+    manual,
+    automation,
+    latest: latestOf(manual, automation),
     links,
   };
 }
@@ -184,6 +199,51 @@ export const ROUTE_TEXT: Record<Route, string> = {
   infra: "Infra: nothing ran or the agent errored",
 };
 
+export type Tone = "ok" | "warn" | "err" | "info";
+
+/** The run panel (the one box on the Testing page): heading, tone, progress and one dot per case. */
+export interface RunPanel {
+  state: "running" | "finished" | "cancelled" | "stopped";
+  tone: Tone;
+  title: string;
+  done: number;
+  total?: number;
+  counts: { passed: number; failed: number; blocked: number; error: number };
+  cases: { caseId: string; mode?: string; status: string }[];
+  report?: DeepLink;
+}
+
+const toneOfCounts = (c: RunPanel["counts"]): Tone => (c.failed || c.error ? "err" : c.blocked ? "warn" : "ok");
+
+export function runPanel(live: LiveRun): RunPanel | undefined {
+  if (!live.running && !live.log.length && !live.results.length && !live.error) return undefined;
+  const counts = { passed: 0, failed: 0, blocked: 0, error: 0 };
+  for (const r of live.results) {
+    const k = r.status in counts ? (r.status as keyof typeof counts) : "error";
+    counts[k]++;
+  }
+  const cases: RunPanel["cases"] = live.results.map((r) => ({ caseId: r.caseId, mode: r.mode, status: r.status }));
+  if (live.running && live.current) cases.push({ caseId: live.current.caseId, mode: live.current.mode, status: "running" });
+  const of = live.total ? ` of ${live.total}` : "";
+  const report: DeepLink | undefined = !live.running && live.lastRunDir && !path.isAbsolute(live.lastRunDir)
+    ? { kind: "report", label: "Report", target: `${live.lastRunDir.split("\\").join("/")}/report.html` } : undefined;
+  const base = { done: live.done, total: live.total, counts, cases, report };
+  if (live.running) {
+    const cur = live.current ? ` · ${live.current.caseId}${live.current.mode ? " " + live.current.mode : ""}` : "";
+    return { ...base, state: "running", tone: "info", title: live.cancelled ? `Cancelling · ${live.done}${of} done` : `Running · ${live.done}${of}${cur}` };
+  }
+  if (live.cancelled) return { ...base, state: "cancelled", tone: "warn", title: `Cancelled · ${live.done}${of} done` };
+  if (live.error) return { ...base, state: "stopped", tone: "err", title: `Stopped · ${live.error}` };
+  const n = live.results.length;
+  return { ...base, state: "finished", tone: n ? toneOfCounts(counts) : "info", title: n ? `Finished · ${counts.passed} of ${n} passed` : "Last run log" };
+}
+
+/** Toast text for a finished run ("Smoke - Account finished: 2/2 passed · route pass"). */
+export function finishToast(sum: { suite: string; total: number; counts: { passed?: number }; route: Route }): { kind: Tone; text: string } {
+  const kind: Tone = sum.route === "pass" ? "ok" : sum.route === "dev" ? "err" : "warn";
+  return { kind, text: `${sum.suite} finished: ${sum.counts.passed ?? 0}/${sum.total} passed · route ${sum.route}` };
+}
+
 /** Whole page state. */
 export function buildPageState(engine: Pick<TestingEngine, "suites" | "runs">, ctx: PageContext, view: PageView, live: LiveRun) {
   const persona = { login: ctx.login, active: ctx.active, canSee: ctx.canSee, canRun: ctx.canRun, reason: ctx.reason };
@@ -224,6 +284,7 @@ export function buildPageState(engine: Pick<TestingEngine, "suites" | "runs">, c
         }
       : undefined,
     live,
+    run: runPanel(live),
     result: runFor ? { ...runView(ctx, runFor, suites.find((x) => x.name === runFor.suite)), routeText: ROUTE_TEXT[runFor.route] } : undefined,
     runs: runs.map((r) => ({ id: r.id, suite: r.suite, startedAt: r.startedAt, org: r.org, total: r.total, counts: r.counts, route: r.route, links: runLinks(ctx, r, roleOf(ctx, r.org)) })),
     generate: view.generate,

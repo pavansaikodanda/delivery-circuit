@@ -1,94 +1,146 @@
-// Claude session panel (Agent SDK). State: { persona, title, items[], running, model, costUsd, turns, mcpIssues[] }.
+// Claude session panel (Agent SDK), DESIGN.md §6.7. State: { persona, title, items[], running, model, costUsd, turns,
+// mcpIssues[], meta }. The conversation log is the page's one box; tool calls are quiet meta rows under the message
+// they belong to (long runs of them fold behind "Show n earlier"). Model text is only ever rendered as text.
 // Posts: ready, send {text}, stop, openLink {link}.
 (function () {
-  const { h } = DC;
-  let draft = "";
-  let stickToBottom = true;
+  const { h, post } = DC;
+  const me = document.currentScript && document.currentScript.src;
+  if (me) document.head.append(h("link", { rel: "stylesheet", href: me.replace(/[^/]*$/, "session.css") }));
 
+  const FOLD = 4;            // tool runs longer than this show only the last FOLD - 1 until unfolded
+  const unfolded = {};       // block key -> true (page-local)
+  let stick = true;          // follow the newest message
+  let seen = 0;              // items rendered while following (drives "Jump to latest")
+
+  const PERSONA_LABEL = { architect: "Architect", developer: "Developer", tester: "Tester" };
+  const personaLabel = (p) => PERSONA_LABEL[p] || (p ? String(p) : "");
+
+  // ---------------------------------------------------------------- grouping
+  /** Consecutive tool calls attach to the message before them; a run without one gets its own Claude block. */
+  function blocks(items) {
+    const out = [];
+    for (const i of items || []) {
+      if (!i || typeof i !== "object") continue;
+      if (i.kind === "tool") {
+        const last = out[out.length - 1];
+        if (last && (last.lead == null || last.lead.kind === "assistant" || last.lead.kind === "user")) last.tools.push(i);
+        else out.push({ key: "tools-" + i.id, lead: null, tools: [i] });
+      } else out.push({ key: "m-" + i.id, lead: i, tools: [] });
+    }
+    return out;
+  }
+
+  // ---------------------------------------------------------------- pieces
   function toolRow(i) {
-    const state = i.status === "error" ? "err" : i.status === "ok" ? "ok" : "info";
-    return h("div.item", { style: { padding: "4px 12px", marginLeft: i.nested ? "16px" : "0" } },
-      h("div.row", { style: { flexWrap: "nowrap" } },
-        DC.dot(state),
-        h("span.mono.small", { style: { flex: "none" } }, i.tool || "tool"),
-        h("span.mono.small.muted", { title: i.text, style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: "0", flex: "1" } }, i.text || ""),
-        i.link ? DC.links([i.link]) : null));
+    const st = i.status === "error" ? DC.icon("error", { size: 12, cls: "err", label: "Failed" })
+      : i.status === "ok" ? DC.icon("check", { size: 12, cls: "ok", label: "Done" })
+        : DC.icon("loading", { size: 12, spin: true, cls: "info", label: "Running" });
+    const link = i.link && i.link.target ? i.link : null;
+    return h("div.ss-tool" + (i.nested ? ".nested" : ""), { "data-key": "t-" + i.id },
+      DC.icon(i.nested ? "type-hierarchy-sub" : "arrow-small-right", { size: 12, cls: "ss-tool-ic" }),
+      h("span.ss-tool-n.mono", i.tool || "tool"),
+      h("span.ss-tool-x.mono", { title: i.text || null }, i.text || ""),
+      st,
+      link ? h("a.ss-tool-a", { href: "#", title: link.target, onclick: (e) => { e.preventDefault(); DC.openLink(link); } }, link.label || "Open") : null);
+  }
+  function toolList(b) {
+    if (!b.tools.length) return null;
+    const open = !!unfolded[b.key];
+    const hidden = !open && b.tools.length > FOLD ? b.tools.length - (FOLD - 1) : 0;
+    const shown = hidden ? b.tools.slice(hidden) : b.tools;
+    const failed = b.tools.filter((t) => t.status === "error").length;
+    return h("div.ss-tools", { "data-key": "tools:" + b.key },
+      hidden ? h("button.ss-more", {
+        type: "button", "aria-expanded": "false",
+        onclick: () => { unfolded[b.key] = true; if (DC.state) DC.mount(render(DC.state)); },
+      }, DC.icon("chevron-right", { size: 12 }), "Show " + hidden + " earlier tool call" + (hidden === 1 ? "" : "s"),
+      failed && b.tools.slice(0, hidden).some((t) => t.status === "error") ? h("span.err", " · includes a failure") : null) : null,
+      shown.map(toolRow));
+  }
+  function text(i) {
+    // plain text with preserved line breaks; no HTML from the model is ever rendered
+    return h("div.ss-text", i.text || "", i.streaming ? h("span.ss-caret", { "aria-hidden": "true" }) : null);
+  }
+  function block(b) {
+    const i = b.lead;
+    let who = "", body;
+    if (!i) { who = "Claude"; body = null; }
+    else if (i.kind === "user") { who = "You"; body = text(i); }
+    else if (i.kind === "assistant") { who = "Claude"; body = text(i); }
+    else if (i.kind === "error") body = DC.notice(i.text || "Something went wrong.", "err");
+    else body = h("div.ss-system", DC.icon("info", { size: 12 }), h("span", i.text || ""));
+    return h("div", { class: "ss-msg" + (i ? " " + i.kind : ""), "data-key": b.key },
+      h("div.ss-who", who, i && i.streaming ? h("span.sr-only", " (writing)") : null),
+      h("div.ss-body", body, toolList(b)));
   }
 
-  function textBlock(i) {
-    // Plain text with preserved line breaks; no HTML from the model is ever rendered.
-    return h("div", { style: { whiteSpace: "pre-wrap", wordBreak: "break-word" } }, i.text);
+  // ---------------------------------------------------------------- composer
+  function submit() {
+    const ta = document.getElementById("ss-msg");
+    const value = ta ? String(ta.value || "").trim() : "";
+    if (!value) { if (ta) ta.focus(); DC.announce("Type a message first"); return; }
+    ta.value = "";
+    stick = true;
+    post({ type: "send", text: value });
   }
-
-  function message(i) {
-    if (i.kind === "tool") return toolRow(i);
-    if (i.kind === "user") {
-      return h("div.item", h("div.small.muted", "You"), textBlock(i));
-    }
-    if (i.kind === "assistant") {
-      return h("div.item", h("div.small.muted", "Claude" + (i.streaming ? " · writing" : "")), textBlock(i));
-    }
-    if (i.kind === "error") return h("div.item", DC.notice(i.text, "err"));
-    return h("div.item.small.muted", i.text);
-  }
-
-  function footer(s) {
-    const parts = [];
-    if (s.model) parts.push(s.model);
-    parts.push(s.turns + (s.turns === 1 ? " turn" : " turns"));
-    parts.push("$" + Number(s.costUsd || 0).toFixed(4));
-    return h("div.spread.small.muted", { style: { marginTop: "8px" } },
-      h("span", parts.join(" · ")),
-      h("span", s.running ? "Running" : "Idle"));
-  }
-
   function composer(s) {
-    const ta = h("textarea#msg", {
-      rows: 3, placeholder: s.running ? "Claude is working. A message sent now is queued for the next turn." : "Message Claude (Ctrl+Enter to send)",
-      "aria-label": "Message", style: { width: "100%", resize: "vertical" },
-      oninput: (e) => { draft = e.target.value; },
+    const ta = h("textarea#ss-msg", {
+      rows: 3, "aria-label": "Message to Claude",
+      placeholder: s.running ? "Claude is working. A message sent now is queued for the next turn." : "Message Claude, or a skill command such as /dev-review-plan 42",
       onkeydown: (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } },
     });
-    ta.value = draft;
-    function submit() {
-      const text = (draft || "").trim();
-      if (!text) return;
-      draft = ""; stickToBottom = true;
-      DC.post({ type: "send", text });
-    }
-    return h("div.stack", { style: { marginTop: "12px" } }, ta,
-      h("div.row",
-        DC.button("Send", submit),
-        s.running ? DC.button("Stop", () => DC.post({ type: "stop" }), { kind: "secondary" }) : null));
+    return h("div.ss-composer", { "data-key": "composer" }, ta,
+      h("div.ss-bar",
+        h("span.meta.ss-meta", s.meta || ""),
+        h("span.dc-acts",
+          s.running ? DC.button("Stop", () => post({ type: "stop" }), { kind: "ghost", size: "sm", icon: "debug-stop", tip: "Stop this turn" }) : null,
+          DC.button("Send", submit, { size: "sm", icon: "send", tip: "Send (Ctrl+Enter)" }))));
   }
 
+  // ---------------------------------------------------------------- page
+  function follow() {
+    const el = document.getElementById("ss-log");
+    if (!el) return;
+    if (stick) el.scrollTop = el.scrollHeight;
+    const jump = document.getElementById("ss-jump");
+    if (jump) jump.hidden = stick || (DC.state && (DC.state.items || []).length <= seen);
+    if (stick && DC.state) seen = (DC.state.items || []).length;
+  }
   function render(s) {
-    const active = document.activeElement;
-    const hadFocus = !!active && active.id === "msg";
-    const caret = hadFocus ? active.selectionStart : 0;
-    const header = h("div.header",
-      h("div", h("h1", s.title || "Claude"), h("div.sub", "Runs in this repository with the " + s.persona + " agent, its skills, settings and the circuit guard.")),
-      h("span.row", DC.dot(s.running ? "info" : ""), DC.badge(s.persona, "info")));
-
-    const issues = (s.mcpIssues || []).length
-      ? DC.notice("Not connected: " + s.mcpIssues.map((m) => m.name + " (" + m.status + ")").join(", ") +
-          ". Sign in once with /mcp in a terminal session or `claude mcp login <name>`.", "warn")
-      : null;
-
-    const list = (s.items || []).length
-      ? h("div.list#log", { style: { maxHeight: "calc(100vh - 260px)", overflowY: "auto" } }, s.items.map(message))
-      : DC.empty("No messages yet. Type a prompt or a skill command such as /dev-review-plan 42.");
-
-    const view = h("div", header, issues, list, footer(s), composer(s));
-    setTimeout(() => {
-      const el = document.getElementById("log");
-      if (el && stickToBottom) el.scrollTop = el.scrollHeight;
-      const ta = document.getElementById("msg");
-      if (ta && hadFocus) { ta.focus(); ta.setSelectionRange(caret, caret); }
-      if (el) el.onscroll = () => { stickToBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 24; };
-    }, 0);
-    return view;
+    if (!s) return DC.skeleton({ n: 3, label: "Starting the session" });
+    const issues = (s.mcpIssues || []).filter((m) => m && m.name);
+    const bs = blocks(s.items);
+    const log = h("div.dc-box.ss-log#ss-log", {
+      role: "log", "aria-live": "off", "aria-label": "Conversation", tabindex: "0", "data-key": "log", "data-scroll": "ss-log",
+      onscroll: (e) => {
+        const el = e.currentTarget;
+        stick = el.scrollTop + el.clientHeight >= el.scrollHeight - 24;
+        if (stick) { seen = (DC.state && DC.state.items || []).length; const j = document.getElementById("ss-jump"); if (j) j.hidden = true; }
+      },
+    }, bs.length ? bs.map(block)
+      : DC.empty({ icon: "comment-discussion", title: "No messages yet", text: "Type a prompt or a skill command such as /dev-review-plan 42." }));
+    const jump = DC.button("Jump to latest", () => { stick = true; follow(); }, { kind: "secondary", size: "sm", icon: "arrow-down", id: "ss-jump", cls: "ss-jump" });
+    jump.hidden = true;
+    requestAnimationFrame(follow);
+    return h("div.ss-page", { "data-key": "page" },
+      DC.header({
+        title: s.title || "Claude",
+        sub: "Runs in this repository as the " + personaLabel(s.persona) + " agent, with its skills, settings and the circuit guard.",
+        persona: s.persona || null,
+        actions: s.running ? DC.status("running", "running") : DC.status("muted", "idle"),
+      }),
+      issues.length ? DC.notice("Not connected: " + issues.map((m) => m.name + (m.status ? " (" + m.status + ")" : "")).join(", ") +
+        ". Sign in once with /mcp in a terminal session, or run claude mcp login <name>.", "warn") : null,
+      h("div.ss-logwrap", { "data-key": "logwrap" }, log, jump),
+      composer(s));
   }
 
-  DC.onState(render);
+  DC.mount(render(null));
+  DC.onState((s) => {
+    const r = render(s);
+    // a new message from you always brings the log back to the bottom
+    const items = (s && s.items) || [];
+    if (items.length && items[items.length - 1].kind === "user") stick = true;
+    return r;
+  });
 })();

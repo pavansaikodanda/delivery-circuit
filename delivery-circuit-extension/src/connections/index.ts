@@ -1,7 +1,7 @@
 // Connections + identity module: who the person is (GitHub teams -> personas) and every outside connection the circuit
 // needs (personal, Claude MCP, review tools, project secrets), with a Connections page.
 import * as vscode from "vscode";
-import { PERSONAS, type CircuitServices, type ConnectionsService, type IdentityService, type Persona } from "../core/contracts";
+import { PERSONAS, type CircuitServices, type ConnectionId, type ConnectionsService, type IdentityService, type Persona } from "../core/contracts";
 import { openLink, type ModuleBase } from "../core/util";
 import { openPanel } from "../core/webview";
 import { def, isConnectionId } from "./catalog";
@@ -31,10 +31,14 @@ export function registerConnectionsUI(s: CircuitServices): void {
   let panel: vscode.WebviewPanel | undefined;
   let project: ProjectInfo | undefined;
   let pending: NodeJS.Timeout | undefined;
+  // Checks the person started from the page: the row shows "Checking" until its own check returns.
+  const checking = new Set<ConnectionId>();
+  let refreshing = false;
 
   const post = () => {
     if (!panel) return;
-    const state = buildPanelState({ identity: identity.get(), notice: identity.notice(), statuses: connections.cached(), links: connections.links(), project });
+    const state = buildPanelState({ identity: identity.get(), notice: identity.notice(), statuses: connections.cached(), links: connections.links(), project,
+      checking, refreshing });
     void panel.webview.postMessage({ type: "state", data: state });
   };
   const schedulePost = () => { if (pending) clearTimeout(pending); pending = setTimeout(post, 80); };
@@ -53,11 +57,18 @@ export function registerConnectionsUI(s: CircuitServices): void {
           if (m.link && typeof m.link.target === "string") await openLink(root, m.link);
           return;
         case "refresh":
-          await identity.refresh(); await connections.checkAll(); await loadProject(); return;
+          if (refreshing) return;
+          refreshing = true; post();
+          try { await identity.refresh(); await connections.checkAll(); await loadProject(); } finally { refreshing = false; post(); }
+          return;
         case "connect": case "check": case "disconnect": case "manage": {
           if (!isConnectionId(m.id)) return;
           if (m.type === "connect") await connections.connect(m.id);
-          else if (m.type === "check") await connections.check(m.id);
+          else if (m.type === "check") {
+            if (checking.has(m.id)) return;
+            checking.add(m.id); post();
+            try { await connections.check(m.id); } finally { checking.delete(m.id); post(); }
+          }
           else if (m.type === "disconnect") await connections.disconnect(m.id);
           else {
             const url = connections.cached().find((c) => c.id === m.id)?.manageUrl ?? def(m.id).manageUrl;

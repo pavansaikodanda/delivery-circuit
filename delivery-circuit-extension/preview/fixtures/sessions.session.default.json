@@ -72,5 +72,6 @@
     }
   ],
   "sessionId": "s-1",
-  "model": "claude-sonnet-5-5"
+  "model": "claude-sonnet-5-5",
+  "meta": "claude-sonnet-5-5 · 6 turns · $0.084"
 }

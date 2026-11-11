@@ -1,6 +1,10 @@
 {
   "login": "maya-arch",
+  "repo": "acme-org/salesDemoOrg",
   "active": "architect",
+  "personas": [
+    "architect"
+  ],
   "tabs": [
     {
       "id": "architect",
@@ -661,6 +665,35 @@
           "label": "Checks",
           "target": "https://github.com/acme-org/salesDemoOrg/pull/44/checks"
         }
+      ],
+      "actions": [
+        {
+          "id": "ai:/dev-review-pr",
+          "label": "Take over",
+          "persona": "developer",
+          "kind": "ai",
+          "args": {
+            "command": "/dev-review-pr",
+            "argKind": "pr",
+            "intent": "takeover",
+            "arg": 44
+          },
+          "allowed": false,
+          "reason": "Only a Developer can run this"
+        },
+        {
+          "id": "ai:/dev-review-pr",
+          "label": "Review PR",
+          "persona": "developer",
+          "kind": "ai",
+          "args": {
+            "command": "/dev-review-pr",
+            "argKind": "pr",
+            "arg": 44
+          },
+          "allowed": false,
+          "reason": "Only a Developer can run this"
+        }
       ]
     },
     {
@@ -838,6 +871,21 @@
           "label": "Checks",
           "target": "https://github.com/acme-org/salesDemoOrg/pull/42/checks"
         }
+      ],
+      "actions": [
+        {
+          "id": "ai:/dev-review-pr",
+          "label": "Review PR",
+          "persona": "developer",
+          "kind": "ai",
+          "args": {
+            "command": "/dev-review-pr",
+            "argKind": "pr",
+            "arg": 42
+          },
+          "allowed": false,
+          "reason": "Only a Developer can run this"
+        }
       ]
     },
     {
@@ -900,6 +948,21 @@
           "kind": "github",
           "label": "Checks",
           "target": "https://github.com/acme-org/salesDemoOrg/pull/43/checks"
+        }
+      ],
+      "actions": [
+        {
+          "id": "ai:/dev-review-plan",
+          "label": "Review plan",
+          "persona": "developer",
+          "kind": "ai",
+          "args": {
+            "command": "/dev-review-plan",
+            "argKind": "pr",
+            "arg": 43
+          },
+          "allowed": false,
+          "reason": "Only a Developer can run this"
         }
       ]
     },
@@ -1005,6 +1068,21 @@
           "kind": "github",
           "label": "Checks",
           "target": "https://github.com/acme-org/salesDemoOrg/pull/41/checks"
+        }
+      ],
+      "actions": [
+        {
+          "id": "ai:/dev-review-pr",
+          "label": "Review PR",
+          "persona": "developer",
+          "kind": "ai",
+          "args": {
+            "command": "/dev-review-pr",
+            "argKind": "pr",
+            "arg": 41
+          },
+          "allowed": false,
+          "reason": "Only a Developer can run this"
         }
       ]
     }

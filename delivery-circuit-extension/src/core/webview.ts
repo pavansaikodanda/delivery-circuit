@@ -1,5 +1,8 @@
 // Webview shell shared by every page. Each page is: media/<module>/<page>.js (plain browser JS, no framework)
-// plus the shared kit media/shared/base.css + media/shared/ui.js. Data flows only by postMessage:
+// plus the shared kit media/shared/base.css + media/shared/ui.js (design/DESIGN.md), the codicons font that build.mjs
+// copies to media/shared/codicons/ and the monochrome app logos build.mjs writes to media/shared/brands.js (loaded
+// before ui.js). #dc-live is the one polite live region (DC.announce); #dc-toasts hosts DC.toast.
+// Data flows only by postMessage:
 //   extension -> page: { type: "state", data }   (whole page state; the page re-renders)
 //                      { type: "event", ... }    (incremental, page-specific)
 //   page -> extension: { type: "ready" } | { type: "openLink", link } | { type: "action", action } | page-specific
@@ -20,9 +23,13 @@ export function pageHtml(webview: vscode.Webview, extUri: vscode.Uri, spec: Page
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource}; script-src 'nonce-${n}'; font-src ${webview.cspSource};">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="${u("shared", "codicons", "codicon.css")}">
 <link rel="stylesheet" href="${u("shared", "base.css")}">
 <title>${spec.title}</title></head>
-<body data-page="${spec.module}/${spec.page}"><main id="app" aria-live="polite"><p class="muted">Loading…</p></main>
+<body data-page="${spec.module}/${spec.page}"><main id="app" tabindex="-1"><p class="muted">Loading…</p></main>
+<div id="dc-live" class="sr-only" role="status" aria-live="polite"></div>
+<div id="dc-toasts" role="region" aria-label="Notifications"></div>
+<script nonce="${n}" src="${u("shared", "brands.js")}"></script>
 <script nonce="${n}" src="${u("shared", "ui.js")}"></script>
 <script nonce="${n}" src="${u(spec.module, spec.page + ".js")}"></script>
 </body></html>`;

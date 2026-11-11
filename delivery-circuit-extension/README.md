@@ -28,17 +28,36 @@ Your persona comes from your GitHub team membership (`deliveryCircuit.githubTeam
 
 Surfaces:
 
-- **Sidebar (Circuit):** your login and active persona, the top 8 items waiting on you (oldest first, gate badge,
-  age, deep links, the main action), and navigation. Empty states cover no git remote, not signed in, no persona, and
+- **Sidebar (Circuit):** your login and active persona, the top 8 items waiting on you (oldest first; each
+  with its gate icon, status and age, opening your persona view), and navigation. Empty states cover no git remote, not signed in, no persona, and
   a repo not yet set up with the circuit.
 - **Status bar:** `Circuit: <Persona> · N waiting`; click to focus the sidebar.
-- **Persona panel:** features with the stage strip (intake to release) and gate strip (G1 to G9), pull requests with
-  checks and review signals, the persona's AI actions. One tab per persona you can view.
-- **Feature panel:** stage timeline, gates table, open questions, stories with Jira keys, test cases by level and
-  PR links, spec files, and (Architect only) the cited transcript sources.
+- **Persona panel:** what waits on you, features with a stage line (intake to release, gates in the expanded row),
+  pull requests with one computed status (checks and reviews in the expanded row), and the persona's AI actions in
+  the "Start AI session" menu. One tab per persona you can view.
+- **Feature panel:** stage line and the next gate, gates list (only the gate waiting on you has a button), stories
+  with their PR state, links, and (Architect only) the cited transcript sources.
 
 Every row that refers to something outside VS Code links to it: GitHub, Jira, Salesforce, Slack, Confluence, Lucid,
 Fireflies, CodeRabbit, or the file.
+
+## Look and feel
+
+The pages follow design v2, "Quiet Circuit" (`design/DESIGN.md`, prototype in `design/prototype.html`, screenshots
+in `design/screens/`). The design aims to be calm and easy to scan:
+
+- **One line per item.** Each row shows its title, one status, its age and one main action. Links, other actions,
+  checks and reviews appear when you hover the row (app logos and a "…" menu) or click it to expand.
+- **Three colours.** Indigo for actions and selection, teal for progress and the count of items waiting on you, slate
+  for text and icons. Status is a small dot and a word. Your persona is a small chip in the header and does not tint
+  the page.
+- **App logos.** GitHub, Jira, Confluence, Atlassian, Lucid, CodeRabbit, Claude and Anthropic use monochrome logos
+  from the `simple-icons` package. Slack, Salesforce and Fireflies are not in that package, so they use neutral
+  icons.
+- **Unavailable actions say why.** A greyed-out button shows the reason in its tooltip, and the expanded row repeats
+  it. For example, an Architect looking at the Developer tab sees "Only a Developer can run this".
+- **Follows VS Code.** Backgrounds and fonts come from your theme. The pages work in dark, light and high contrast.
+  Motion is short and turns off when your system asks for reduced motion.
 
 ## Connections
 

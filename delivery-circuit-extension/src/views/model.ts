@@ -367,6 +367,30 @@ export interface PrView {
   number: number; title: string; url: string; branch: string; draft: boolean; author: string; labels: string[];
   storyKey?: string; featureId?: string; aiAttempt?: number; age: string; needsYou: boolean;
   checks: BadgeView[]; gates: StepView[]; groups: SignalGroup[]; missing: string[]; links: DeepLink[];
+  /** The persona's AI actions that fit this PR now, most relevant first (filled by buildPersona). */
+  actions: ActionView[];
+}
+
+/** AI actions a persona would run on this PR now, most relevant first, with the PR number preset.
+ *  Developer: take over (needs-human) > review the AI plan (draft ai-generated, plan not approved) > review the PR.
+ *  Tester: review the AI test plan > explore on QA. Architect: review the PR (build, not draft) or the spec PR. */
+export function prActions(pr: PrRef, persona: Persona): ActionRef[] {
+  const kind = prKind(pr);
+  const all = aiActions(persona, { pr: pr.number });
+  const pick = (command: string, intent?: string) =>
+    all.find((a) => a.args?.command === command && (intent ? a.args?.intent === intent : a.args?.intent === undefined));
+  const out: (ActionRef | undefined)[] = [];
+  if (persona === "developer") {
+    if (kind === "build" && has(pr, "needs-human")) out.push(pick("/dev-review-pr", "takeover"));
+    if (pr.draft && isAiPr(pr) && !has(pr, "plan-approved")) out.push(pick("/dev-review-plan"));
+    if (kind !== "intake" && !pr.draft) out.push(pick("/dev-review-pr"));
+  } else if (persona === "tester") {
+    if (pr.draft && isAiPr(pr) && !has(pr, "testplan-approved")) out.push(pick("/qa-review-testplan"));
+    if (kind === "build" && (has(pr, "needs-qa") || !pr.draft)) out.push(pick("/qa-explore"));
+  } else if (!pr.draft) {
+    out.push(pick("/arch-review-pr"));
+  }
+  return out.filter((a): a is ActionRef => !!a);
 }
 
 export function prView(pr: PrRef, persona: Persona, jiraUrl: (key: string) => string | undefined, now: number, login?: string): PrView {
@@ -379,7 +403,7 @@ export function prView(pr: PrRef, persona: Persona, jiraUrl: (key: string) => st
   return {
     number: pr.number, title: pr.title, url: pr.url, branch: pr.branch, draft: pr.draft, author: pr.author, labels: pr.labels,
     storyKey: pr.storyKey, featureId: pr.featureId, aiAttempt: pr.aiAttempt, age: ageLabel(pr.updatedAt, now),
-    needsYou: prNeedsPersona(pr, persona, login), checks: checkBadges(pr), gates: prGates(pr, persona), groups, missing, links,
+    needsYou: prNeedsPersona(pr, persona, login), checks: checkBadges(pr), gates: prGates(pr, persona), groups, missing, links, actions: [],
   };
 }
 
@@ -507,6 +531,8 @@ export function statusText(id: Identity | null, waiting: number): { text: string
   return { text: `$(checklist) Circuit: ${p} · ${waiting} waiting`, tooltip: `Delivery Circuit: ${waiting} item${waiting === 1 ? "" : "s"} waiting on you as ${p}` };
 }
 
+const repoLabel = (id: Identity | null | undefined) => (id && id.owner && id.repo ? `${id.owner}/${id.repo}` : undefined);
+
 // ---------- persona panel ----------
 export interface PersonaInput {
   identity: Identity | null;
@@ -522,7 +548,11 @@ export interface PersonaInput {
 
 export interface PersonaState {
   login?: string;
+  /** "owner/repo" of the workspace, for the header line */
+  repo?: string;
   active: Persona | null;
+  /** The personas the identity holds (the header chip offers a switch when there are several). */
+  personas: Persona[];
   tabs: TabView[];
   selected: Persona | null;
   selectedLabel: string;
@@ -539,7 +569,7 @@ export interface PersonaState {
 export function buildPersona(i: PersonaInput): PersonaState {
   const { tabs, selected } = personaTabs(i.identity, i.requested);
   const st: PersonaState = {
-    login: i.identity?.login, active: i.identity?.active ?? null, tabs, selected,
+    login: i.identity?.login, repo: repoLabel(i.identity), active: i.identity?.active ?? null, personas: i.identity?.personas ?? [], tabs, selected,
     selectedLabel: selected ? PERSONA_LABEL[selected] : "", canAct: false, queue: [], features: [], prs: [], aiActions: [],
     error: i.error, updated: new Date(i.now).toISOString(),
   };
@@ -552,17 +582,47 @@ export function buildPersona(i: PersonaInput): PersonaState {
   st.notice = viewOnlyNotice(id, selected);
   st.queue = queueView(i.queue.filter((q) => q.persona === selected), id, i.allowed, i.now);
   st.features = [...i.features].sort((a, b) => a.id.localeCompare(b.id)).map((f) => featureCard(f, selected));
-  st.prs = prsForPersona(i.prs, selected, id.login).map((p) => prView(p, selected, i.jiraUrl, i.now, id.login));
+  st.prs = prsForPersona(i.prs, selected, id.login).map((p) => ({
+    ...prView(p, selected, i.jiraUrl, i.now, id.login), actions: prActions(p, selected).map((a) => toActionView(id, a, i.allowed)),
+  }));
   st.aiActions = aiActions(selected).map((a) => toActionView(id, a, i.allowed));
   return st;
 }
 
 // ---------- feature panel ----------
+export type StoryPrState = "open" | "draft" | "merged" | "closed";
 export interface StoryRow {
   num: string; title: string; file: string; jiraKey?: string;
   counts: { ui: number; unit: number; manual: number }; total: number; prNumber?: number; links: DeepLink[];
+  /** State of the story's PR when the PR list knows it (open PRs and recently merged ones). */
+  prState?: StoryPrState;
 }
-export interface GateRow { id: GateId; label: string; owner: Persona; ownerLabel: string; state: GateState; own: boolean; cls: string }
+export interface GateRow {
+  id: GateId; label: string; owner: Persona; ownerLabel: string; state: GateState; own: boolean; cls: string;
+  /** The gate waits on the viewer now: it is the viewer's gate, not done, and the first open gate or already waiting. */
+  waitsOnViewer: boolean;
+  /** Spec Kit actions that move this gate (owner persona's feature actions), allowed/reason per viewer. */
+  actions: ActionView[];
+}
+
+/** Feature-level Spec Kit commands that work towards each gate. G3-G9 are moved on the story PRs
+ *  (e.g. G3 = /dev-review-plan on the draft PR), so the feature page shows them on the PR/story rows instead. */
+export const GATE_COMMANDS: Partial<Record<GateId, string[]>> = {
+  G1: ["/arch-design", "/arch-jira-push"],
+  G2: ["/qa-design-tests", "/qa-push-tests"],
+};
+
+/** Which gate a feature-level action belongs to (undefined: not tied to a gate). */
+export function gateOfCommand(command: string): GateId | undefined {
+  for (const [g, cmds] of Object.entries(GATE_COMMANDS)) if (cmds?.includes(command)) return g as GateId;
+  return undefined;
+}
+
+export function storyPrState(pr: PrRef | undefined): StoryPrState | undefined {
+  if (!pr) return undefined;
+  if (pr.state === "merged" || pr.state === "closed") return pr.state;
+  return pr.draft ? "draft" : "open";
+}
 export interface SourceRow { id: string; kind: SourceRef["kind"]; title: string; date: string; links: DeepLink[]; canOpen: boolean }
 
 export interface FeatureInput {
@@ -585,6 +645,9 @@ export interface FeatureState {
   featureId: string;
   viewer: Persona | null;
   viewerLabel: string;
+  login?: string;
+  /** The personas the identity holds (header chip). */
+  personas: Persona[];
   feature?: { id: string; slug: string; title: string; score?: number; openQuestions: number; signedOff: boolean; dir: string; links: DeepLink[] };
   stages: StepView[];
   gates: GateRow[];
@@ -607,18 +670,29 @@ export function buildFeature(i: FeatureInput): FeatureState {
   const viewer = i.identity?.active ?? i.identity?.personas[0] ?? null;
   const st: FeatureState = {
     found: !!i.feature, featureId: i.featureId, viewer, viewerLabel: viewer ? PERSONA_LABEL[viewer] : "",
+    login: i.identity?.login, personas: i.identity?.personas ?? [],
     stages: [], gates: [], stories: [], sources: null, files: [], actions: [], error: i.error, updated: new Date(i.now).toISOString(),
   };
   const f = i.feature;
   if (!f) return st;
   st.feature = { id: f.id, slug: f.slug, title: f.title, score: f.score, openQuestions: f.openQuestions, signedOff: f.signedOff, dir: f.dir, links: f.links ?? [] };
   st.stages = stageStrip(f);
+  st.next = nextGate(f);
+  const acts: ActionRef[] = [
+    ...aiActions("architect", { feature: f.slug }).filter((a) => a.args?.argKind === "feature"),
+    ...aiActions("developer", { feature: f.slug }).filter((a) => a.args?.argKind === "feature"),
+    ...aiActions("tester", { feature: f.slug }).filter((a) => a.args?.argKind === "feature"),
+  ];
+  const visible = acts.filter((a) => !!i.identity && canView(i.identity, a.persona));
+  st.actions = visible.map((a) => toActionView(i.identity, a, i.allowed));
   st.gates = GATE_IDS.map((g) => {
     const state = f.gates?.[g] ?? "not-started";
     const owner = GATES[g].owner;
-    return { id: g, label: GATES[g].label, owner, ownerLabel: PERSONA_LABEL[owner], state, own: owner === viewer, cls: stateClass(state) };
+    const own = owner === viewer;
+    const waitsOnViewer = own && state !== "done" && (state === "waiting" || st.next?.id === g);
+    const actions = st.actions.filter((a) => gateOfCommand(String(a.args?.command ?? "")) === g);
+    return { id: g, label: GATES[g].label, owner, ownerLabel: PERSONA_LABEL[owner], state, own, cls: stateClass(state), waitsOnViewer, actions };
   });
-  st.next = nextGate(f);
   const prByNum = new Map(i.prs.map((p) => [p.number, p]));
   st.stories = [...f.stories].sort((a, b) => a.num.localeCompare(b.num)).map((s) => {
     const counts = { ui: 0, unit: 0, manual: 0 };
@@ -630,7 +704,8 @@ export function buildFeature(i: FeatureInput): FeatureState {
       const url = prByNum.get(s.prNumber)?.url ?? (i.owner && i.repo ? `https://github.com/${i.owner}/${i.repo}/pull/${s.prNumber}` : undefined);
       if (url) links.push({ kind: "github", label: `PR #${s.prNumber}`, target: url });
     }
-    return { num: s.num, title: s.title, file: s.file, jiraKey: s.jiraKey, counts, total: s.testCases?.length ?? 0, prNumber: s.prNumber, links };
+    const prState = s.prNumber ? storyPrState(prByNum.get(s.prNumber)) : undefined;
+    return { num: s.num, title: s.title, file: s.file, jiraKey: s.jiraKey, counts, total: s.testCases?.length ?? 0, prNumber: s.prNumber, links, prState };
   });
   if (i.identity?.personas.includes("architect")) {
     const byId = new Map(i.sources.map((s) => [s.id, s]));
@@ -649,12 +724,5 @@ export function buildFeature(i: FeatureInput): FeatureState {
     .map((n) => `${dir}/${n}`)
     .filter((p) => i.existingFiles.includes(p))
     .map((p) => ({ kind: "file" as const, label: p.split("/").pop()!, target: p }));
-  const acts: ActionRef[] = [
-    ...aiActions("architect", { feature: f.slug }).filter((a) => a.args?.argKind === "feature"),
-    ...aiActions("developer", { feature: f.slug }).filter((a) => a.args?.argKind === "feature"),
-    ...aiActions("tester", { feature: f.slug }).filter((a) => a.args?.argKind === "feature"),
-  ];
-  const visible = acts.filter((a) => !!i.identity && canView(i.identity, a.persona));
-  st.actions = visible.map((a) => toActionView(i.identity, a, i.allowed));
   return st;
 }

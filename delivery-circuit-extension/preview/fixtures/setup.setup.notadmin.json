@@ -1,0 +1,23 @@
+{
+  "login": "ravi-dev",
+  "admin": false,
+  "repo": {
+    "owner": "acme-org",
+    "repo": "salesDemoOrg",
+    "url": "https://github.com/acme-org/salesDemoOrg"
+  },
+  "buildState": {
+    "exists": true,
+    "repaired": true,
+    "path": "build-state.md"
+  },
+  "selected": "B0",
+  "busy": null,
+  "phases": [],
+  "config": {
+    "exists": true,
+    "fields": [],
+    "values": {},
+    "errors": []
+  }
+}

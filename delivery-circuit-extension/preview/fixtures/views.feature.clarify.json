@@ -1,0 +1,331 @@
+{
+  "found": true,
+  "featureId": "002",
+  "viewer": "architect",
+  "viewerLabel": "Architect",
+  "login": "maya-arch",
+  "personas": [
+    "architect"
+  ],
+  "stages": [
+    {
+      "id": "intake",
+      "label": "Intake",
+      "state": "done",
+      "title": "Intake: done"
+    },
+    {
+      "id": "clarify",
+      "label": "Clarify",
+      "state": "active",
+      "title": "Clarify: active"
+    },
+    {
+      "id": "plan",
+      "label": "Plan",
+      "state": "todo",
+      "title": "Plan: todo"
+    },
+    {
+      "id": "signoff",
+      "label": "Sign-off",
+      "state": "todo",
+      "title": "Sign-off: todo"
+    },
+    {
+      "id": "stories",
+      "label": "Stories",
+      "state": "todo",
+      "title": "Stories: todo"
+    },
+    {
+      "id": "tests",
+      "label": "Tests",
+      "state": "todo",
+      "title": "Tests: todo"
+    },
+    {
+      "id": "jira",
+      "label": "Jira",
+      "state": "todo",
+      "title": "Jira: todo"
+    },
+    {
+      "id": "build",
+      "label": "Build",
+      "state": "todo",
+      "title": "Build: todo"
+    },
+    {
+      "id": "qa",
+      "label": "QA",
+      "state": "todo",
+      "title": "QA: todo"
+    },
+    {
+      "id": "release",
+      "label": "Release",
+      "state": "todo",
+      "title": "Release: todo"
+    }
+  ],
+  "gates": [
+    {
+      "id": "G1",
+      "label": "Plan signed off",
+      "owner": "architect",
+      "ownerLabel": "Architect",
+      "state": "waiting",
+      "own": true,
+      "cls": "info",
+      "waitsOnViewer": true,
+      "actions": [
+        {
+          "id": "ai:/arch-design",
+          "label": "Design",
+          "persona": "architect",
+          "kind": "ai",
+          "args": {
+            "command": "/arch-design",
+            "argKind": "feature",
+            "arg": "002-entitlement-sla"
+          },
+          "allowed": true
+        },
+        {
+          "id": "ai:/arch-jira-push",
+          "label": "Push to Jira",
+          "persona": "architect",
+          "kind": "ai",
+          "args": {
+            "command": "/arch-jira-push",
+            "argKind": "feature",
+            "arg": "002-entitlement-sla"
+          },
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "id": "G2",
+      "label": "Testability confirmed (ai-ready)",
+      "owner": "tester",
+      "ownerLabel": "Tester",
+      "state": "not-started",
+      "own": false,
+      "cls": "",
+      "waitsOnViewer": false,
+      "actions": [
+        {
+          "id": "ai:/qa-design-tests",
+          "label": "Design tests",
+          "persona": "tester",
+          "kind": "ai",
+          "args": {
+            "command": "/qa-design-tests",
+            "argKind": "feature",
+            "arg": "002-entitlement-sla"
+          },
+          "allowed": false,
+          "reason": "Only a Tester can run this"
+        },
+        {
+          "id": "ai:/qa-push-tests",
+          "label": "Push tests",
+          "persona": "tester",
+          "kind": "ai",
+          "args": {
+            "command": "/qa-push-tests",
+            "argKind": "feature",
+            "arg": "002-entitlement-sla"
+          },
+          "allowed": false,
+          "reason": "Only a Tester can run this"
+        }
+      ]
+    },
+    {
+      "id": "G3",
+      "label": "AI plan approved",
+      "owner": "developer",
+      "ownerLabel": "Developer",
+      "state": "not-started",
+      "own": false,
+      "cls": "",
+      "waitsOnViewer": false,
+      "actions": []
+    },
+    {
+      "id": "G4",
+      "label": "AI test plan approved",
+      "owner": "tester",
+      "ownerLabel": "Tester",
+      "state": "not-started",
+      "own": false,
+      "cls": "",
+      "waitsOnViewer": false,
+      "actions": []
+    },
+    {
+      "id": "G5",
+      "label": "Code review",
+      "owner": "developer",
+      "ownerLabel": "Developer",
+      "state": "not-started",
+      "own": false,
+      "cls": "",
+      "waitsOnViewer": false,
+      "actions": []
+    },
+    {
+      "id": "G6",
+      "label": "QA on sandbox",
+      "owner": "tester",
+      "ownerLabel": "Tester",
+      "state": "not-started",
+      "own": false,
+      "cls": "",
+      "waitsOnViewer": false,
+      "actions": []
+    },
+    {
+      "id": "G7",
+      "label": "Schema and design review",
+      "owner": "architect",
+      "ownerLabel": "Architect",
+      "state": "not-started",
+      "own": true,
+      "cls": "",
+      "waitsOnViewer": false,
+      "actions": []
+    },
+    {
+      "id": "G8",
+      "label": "Merge",
+      "owner": "architect",
+      "ownerLabel": "Architect",
+      "state": "not-started",
+      "own": true,
+      "cls": "",
+      "waitsOnViewer": false,
+      "actions": []
+    },
+    {
+      "id": "G9",
+      "label": "Production approval",
+      "owner": "architect",
+      "ownerLabel": "Architect",
+      "state": "not-started",
+      "own": true,
+      "cls": "",
+      "waitsOnViewer": false,
+      "actions": []
+    }
+  ],
+  "stories": [],
+  "sources": [
+    {
+      "id": "fireflies:01JDC4M9ZP",
+      "kind": "fireflies",
+      "title": "Acme support: premium SLA call",
+      "date": "2026-11-06",
+      "links": [
+        {
+          "kind": "fireflies",
+          "label": "Fireflies",
+          "target": "https://app.fireflies.ai/view/01JDC4M9ZP"
+        }
+      ],
+      "canOpen": true
+    }
+  ],
+  "files": [],
+  "actions": [
+    {
+      "id": "ai:/arch-design",
+      "label": "Design",
+      "persona": "architect",
+      "kind": "ai",
+      "args": {
+        "command": "/arch-design",
+        "argKind": "feature",
+        "arg": "002-entitlement-sla"
+      },
+      "allowed": true
+    },
+    {
+      "id": "ai:/arch-jira-push",
+      "label": "Push to Jira",
+      "persona": "architect",
+      "kind": "ai",
+      "args": {
+        "command": "/arch-jira-push",
+        "argKind": "feature",
+        "arg": "002-entitlement-sla"
+      },
+      "allowed": true
+    },
+    {
+      "id": "ai:/dev-review-stories",
+      "label": "Review stories",
+      "persona": "developer",
+      "kind": "ai",
+      "args": {
+        "command": "/dev-review-stories",
+        "argKind": "feature",
+        "arg": "002-entitlement-sla"
+      },
+      "allowed": false,
+      "reason": "Only a Developer can run this"
+    },
+    {
+      "id": "ai:/qa-design-tests",
+      "label": "Design tests",
+      "persona": "tester",
+      "kind": "ai",
+      "args": {
+        "command": "/qa-design-tests",
+        "argKind": "feature",
+        "arg": "002-entitlement-sla"
+      },
+      "allowed": false,
+      "reason": "Only a Tester can run this"
+    },
+    {
+      "id": "ai:/qa-push-tests",
+      "label": "Push tests",
+      "persona": "tester",
+      "kind": "ai",
+      "args": {
+        "command": "/qa-push-tests",
+        "argKind": "feature",
+        "arg": "002-entitlement-sla"
+      },
+      "allowed": false,
+      "reason": "Only a Tester can run this"
+    }
+  ],
+  "updated": "2026-11-11T15:00:00.000Z",
+  "feature": {
+    "id": "002",
+    "slug": "002-entitlement-sla",
+    "title": "Entitlement SLA timers on premium support Cases",
+    "openQuestions": 3,
+    "signedOff": false,
+    "dir": ".specify/specs/002-entitlement-sla",
+    "links": [
+      {
+        "kind": "file",
+        "label": "spec.md",
+        "target": ".specify/specs/002-entitlement-sla/spec.md"
+      }
+    ]
+  },
+  "next": {
+    "id": "G1",
+    "label": "Plan signed off",
+    "owner": "architect",
+    "ownerLabel": "Architect",
+    "state": "waiting"
+  }
+}

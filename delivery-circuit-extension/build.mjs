@@ -10,9 +10,16 @@ const common = {
   external: ["vscode", "@anthropic-ai/claude-agent-sdk", "playwright", "playwright-core", "@playwright/*", "exceljs", "libsodium-wrappers"],
 };
 import fs from "node:fs";
+import { writeBrands } from "./build-brands.mjs";
 // Bundle the sf-delivery-circuit plugin (templates, installer, skills) so the setup wizard works offline.
 fs.rmSync("plugin", { recursive: true, force: true });
 fs.cpSync("../sf-delivery-circuit", "plugin", { recursive: true, filter: (src) => !/[\\/](node_modules|\.git)([\\/]|$)/.test(src) });
+
+// Codicons for the webview kit (media/shared/ui.js DC.icon). Generated, not committed; packaged with media/.
+fs.mkdirSync("media/shared/codicons", { recursive: true });
+for (const f of ["codicon.css", "codicon.ttf"]) fs.copyFileSync(`node_modules/@vscode/codicons/dist/${f}`, `media/shared/codicons/${f}`);
+// Monochrome app logos (CC0 paths from simple-icons, DESIGN.md §3.2) -> media/shared/brands.js (window.DC_BRANDS).
+await writeBrands(process.cwd());
 
 const ctxs = await Promise.all([
   esbuild.context({ ...common, entryPoints: ["src/extension.ts"], outfile: "dist/extension.js" }),

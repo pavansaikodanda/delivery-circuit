@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addUser, claudeEnv, newChat, reduce, sdkOptions, toolLabel, toolSummary, vendorServers } from "../../src/sessions/chat";
+import { addUser, chatMeta, claudeEnv, newChat, reduce, sdkOptions, toolLabel, toolSummary, vendorServers } from "../../src/sessions/chat";
 import { buildTerminalSpec, parseCmdShim, resolveClaude, unsafeForCmd, type FsProbe } from "../../src/sessions/terminal";
 
 const fsOf = (files: Record<string, string>): FsProbe => ({ exists: (p) => p in files, read: (p) => files[p] ?? "" });
@@ -126,5 +126,14 @@ describe("panel chat", () => {
     expect(toolSummary("Grep", { pattern: "TC:", path: "force-app" })).toBe("TC:  in force-app");
     expect(toolSummary("Bash", { command: "x".repeat(300) })).toHaveLength(140);
     expect(toolLabel("mcp__github__get_pull_request")).toBe("github · get_pull_request");
+  });
+});
+
+describe("panel footer", () => {
+  it("shows model, turns and cost only once something was spent", () => {
+    expect(chatMeta({ model: "claude-sonnet-5-5", turns: 3, costUsd: 0.0123 })).toBe("claude-sonnet-5-5 · 3 turns · $0.012");
+    expect(chatMeta({ turns: 1, costUsd: 0.0041 })).toBe("1 turn · $0.0041");
+    expect(chatMeta({ turns: 0, costUsd: 0 })).toBe("0 turns");
+    expect(chatMeta({ model: undefined, turns: NaN, costUsd: NaN })).toBe("0 turns");
   });
 });

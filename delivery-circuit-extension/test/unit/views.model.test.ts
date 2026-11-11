@@ -305,3 +305,70 @@ describe("connect notices are not waiting work", () => {
     expect(M.statusText(DEVELOPER, s.waitingTotal).text).toContain("0 waiting");
   });
 });
+
+describe("design v2 view-model additions", () => {
+  const pr = (n: number) => PRS.find((p) => p.number === n)!;
+  const cmds = (as: ActionRef[]) => as.map((a) => `${a.args?.command}${a.args?.intent ? "#" + a.args.intent : ""}:${a.args?.arg}`);
+
+  it("PR actions: the persona's most relevant AI action first, PR number preset", () => {
+    expect(cmds(M.prActions(pr(44), "developer"))).toEqual(["/dev-review-pr#takeover:44", "/dev-review-pr:44"]);
+    expect(cmds(M.prActions(pr(43), "developer"))).toEqual(["/dev-review-plan:43"]);
+    expect(cmds(M.prActions(pr(42), "developer"))).toEqual(["/dev-review-pr:42"]);
+    expect(cmds(M.prActions(pr(43), "tester"))).toEqual(["/qa-review-testplan:43"]);
+    expect(cmds(M.prActions(pr(42), "tester"))).toEqual(["/qa-explore:42"]);
+    expect(cmds(M.prActions(pr(41), "tester"))).toEqual([]);
+    expect(cmds(M.prActions(pr(43), "architect"))).toEqual([]);
+    expect(cmds(M.prActions(pr(42), "architect"))).toEqual(["/arch-review-pr:42"]);
+  });
+
+  it("persona state carries the identity's personas, the repo and per-PR actions; view-only actions explain why", () => {
+    const dev = persona(DEVELOPER);
+    expect(dev.personas).toEqual(["developer"]);
+    expect(dev.repo).toBe(`${OWNER}/${REPO}`);
+    expect(dev.prs.find((p) => p.number === 44)!.actions.map((a) => [a.label, a.allowed])).toEqual([["Take over", true], ["Review PR", true]]);
+    const arch = persona(ARCHITECT, "developer");
+    expect(arch.canAct).toBe(false);
+    const a = arch.prs.find((p) => p.number === 44)!.actions[0];
+    expect(a.allowed).toBe(false);
+    expect(a.reason).toBe("Only a Developer can run this");
+    expect(persona(ARCHITECT, "architect").prs.every((p) => p.actions.every((x) => x.persona === "architect" && x.allowed))).toBe(true);
+  });
+
+  it("gate rows: waitsOnViewer only for the viewer's open gates; actions follow the owner", () => {
+    const build = (id: Identity, f = FEATURES[0]) => M.buildFeature({ feature: f, featureId: f.id, identity: id, sources: SOURCES, prs: PRS,
+      owner: OWNER, repo: REPO, jiraUrl, existingFiles: [], allowed: allowedFor(id), now: NOW });
+    const dev = build(DEVELOPER);
+    expect(dev.gates.filter((g) => g.waitsOnViewer).map((g) => g.id)).toEqual(["G3", "G5"]);
+    // G3 is moved on the draft PR (/dev-review-plan), not by a feature-level command.
+    expect(dev.gates.find((g) => g.id === "G3")!.actions).toEqual([]);
+    // a Developer never sees the Architect's or Tester's Spec Kit actions
+    expect(dev.gates.flatMap((g) => g.actions).every((a) => a.persona === "developer")).toBe(true);
+    const arch = build(ARCHITECT);
+    const g2 = arch.gates.find((g) => g.id === "G2")!;
+    expect(g2.waitsOnViewer).toBe(false);
+    expect(g2.actions.map((a) => [a.id, a.allowed, a.reason])).toEqual([
+      ["ai:/qa-design-tests", false, "Only a Tester can run this"], ["ai:/qa-push-tests", false, "Only a Tester can run this"]]);
+    // G1 waits on the Architect while it is the next open gate, even before anyone marks it waiting
+    const early = build(ARCHITECT, { ...FEATURES[1], gates: {} });
+    expect(early.gates.filter((g) => g.waitsOnViewer).map((g) => g.id)).toEqual(["G1"]);
+    expect(arch.personas).toEqual(["architect"]);
+    expect(arch.login).toBe("maya-arch");
+  });
+
+  it("story PR state comes from the PR list", () => {
+    expect(M.storyPrState(undefined)).toBeUndefined();
+    expect(M.storyPrState({ ...pr(43) })).toBe("draft");
+    expect(M.storyPrState({ ...pr(42) })).toBe("open");
+    expect(M.storyPrState({ ...pr(42), state: "merged" })).toBe("merged");
+    const s = M.buildFeature({ feature: FEATURES[0], featureId: "001", identity: DEVELOPER, sources: [], prs: PRS, owner: OWNER, repo: REPO,
+      jiraUrl, existingFiles: [], allowed: allowedFor(DEVELOPER), now: NOW });
+    expect(s.stories.map((x) => x.prState)).toEqual(["open", "open", "draft", "open"]);
+  });
+
+  it("gateOfCommand maps feature commands to their gate", () => {
+    expect(M.gateOfCommand("/arch-design")).toBe("G1");
+    expect(M.gateOfCommand("/qa-push-tests")).toBe("G2");
+    expect(M.gateOfCommand("/dev-review-stories")).toBeUndefined();
+    expect(M.gateOfCommand("/arch-review-pr")).toBeUndefined();
+  });
+});

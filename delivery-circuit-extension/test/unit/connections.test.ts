@@ -360,6 +360,19 @@ describe("panel state", () => {
     expect(s.hiddenCount).toBe(0);
     expect(s.groups.flatMap((g) => g.rows).every((r) => r.actionable)).toBe(true);
   });
+  it("rows being checked show checking, keep their labels, and refreshing is passed through", () => {
+    const base = rows();
+    const s = buildPanelState({ identity: id(["architect"], true), statuses: base, links: {}, checking: ["github"], refreshing: true });
+    const gh = s.groups.flatMap((g) => g.rows).find((r) => r.id === "github")!;
+    const before = buildPanelState({ identity: id(["architect"], true), statuses: base, links: {} }).groups.flatMap((g) => g.rows).find((r) => r.id === "github")!;
+    expect(gh.state).toBe("checking");
+    expect(gh.connectLabel).toBe(before.connectLabel);
+    expect(gh.canDisconnect).toBe(before.canDisconnect);
+    expect(s.refreshing).toBe(true);
+    expect(s.groups.flatMap((g) => g.rows).filter((r) => r.state === "checking").map((r) => r.id))
+      .toEqual(base.filter((r) => r.state === "checking" || r.id === "github").map((r) => r.id).filter((x) => s.groups.flatMap((g) => g.rows).some((r) => r.id === x)));
+    expect(buildPanelState({ identity: id(["architect"], true), statuses: base, links: {} }).refreshing).toBe(false);
+  });
   it("project info marks missing, env and expiring secrets", () => {
     const p = buildProjectInfo({ needed: ["CLAUDE_CODE_OAUTH_TOKEN", "SF_JWT_KEY_PROD", "SLACK_WEBHOOK_DEV", "JIRA_API_TOKEN"], envOf: { SF_JWT_KEY_PROD: "production" },
       environments: ["production"], repoSecrets: ["CLAUDE_CODE_OAUTH_TOKEN", "JIRA_API_TOKEN"], envSecrets: { production: ["SF_JWT_KEY_PROD"] },

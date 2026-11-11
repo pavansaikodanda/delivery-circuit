@@ -317,7 +317,7 @@ class ViewsController implements vscode.Disposable, vscode.WebviewViewProvider {
           await this.s.identity.refresh();
           this.schedule();
           return;
-        case "switchPersona": await this.switchPersona(); return;
+        case "switchPersona": await this.switchPersona(sanitizePersona(m.persona)); return;
         case "openSettings": {
           const key = typeof m.setting === "string" && SETTINGS.includes(m.setting) ? m.setting : "deliveryCircuit";
           await vscode.commands.executeCommand("workbench.action.openSettings", key);
@@ -413,7 +413,12 @@ class ViewsController implements vscode.Disposable, vscode.WebviewViewProvider {
     }
   }
 
-  private async switchPersona(): Promise<void> {
+  private async switchPersona(to?: Persona): Promise<void> {
+    // The header chip names the persona: switch straight to it when the identity holds it (never to one it lacks).
+    if (to) {
+      const id = this.s.identity.get();
+      if (id && id.personas.includes(to)) { if (id.active !== to) await this.s.identity.setActive(to); return; }
+    }
     try { await vscode.commands.executeCommand("deliveryCircuit.switchPersona"); return; } catch (e) {
       if (!/not found/i.test(errText(e))) throw e;
     }

@@ -1,0 +1,60 @@
+/* Project Setup page additions to the shared kit (DESIGN.md §6.6). Tokens only; dividers, not boxes. */
+.su-layout { display: grid; grid-template-columns: minmax(200px, 248px) minmax(0, 1fr); gap: var(--dc-s-6); align-items: start; margin-top: var(--dc-s-5); }
+.su-nav { position: sticky; top: 72px; }
+.su-nav .dc-row { padding: 8px 0; min-height: 36px; }
+.su-nav .dc-row.selected { padding-left: 8px; }
+.su-nav .dc-row > .dc-title .dc-num { color: var(--dc-muted); }
+.su-ph-dot { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
+.su-picker { display: none; margin-bottom: var(--dc-s-4); }
+.su-main { min-width: 0; }
+
+.su-phase-h { display: flex; align-items: center; justify-content: space-between; gap: var(--dc-s-3); flex-wrap: wrap; }
+.su-phase-t { display: flex; align-items: baseline; gap: var(--dc-s-3); min-width: 0; flex-wrap: wrap; }
+.su-phase-t h2 { margin: 0; }
+.su-pid { color: var(--dc-muted); font-weight: 500; }
+.su-summary { color: var(--dc-muted); margin: var(--dc-s-1) 0 var(--dc-s-3); max-width: 720px; }
+.su-prog { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--dc-s-3); max-width: 480px; margin-bottom: var(--dc-s-2); }
+.su-record { display: flex; align-items: center; gap: 6px; font-size: var(--dc-meta); color: var(--dc-muted); margin-bottom: var(--dc-s-4);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.su-record > span { overflow: hidden; text-overflow: ellipsis; }
+.su-detail-pane > .dc-list { margin-top: var(--dc-s-4); }
+
+/* expanded step */
+.su-detail { color: var(--dc-muted); margin: 0 0 var(--dc-s-3); max-width: 720px; }
+.su-result-t { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.su-result-t .dc-status { white-space: normal; }
+.su-lines { font-family: var(--dc-mono); font-size: 12px; color: var(--dc-muted); white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0 0; }
+.su-check { display: grid; gap: 6px; }
+.su-check > label { display: flex; align-items: flex-start; gap: var(--dc-s-2); color: var(--dc-fg); font-size: var(--dc-size); cursor: pointer; }
+.su-check > label > input { margin-top: 3px; flex: none; }
+.su-secrets { display: grid; gap: 2px; }
+.su-secret { display: flex; align-items: center; gap: var(--dc-s-2); min-height: 28px; }
+.su-secret > .mono { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* build.config.yml form */
+.su-config { margin-top: var(--dc-s-4); max-width: 880px; }
+.su-fields { border-top: 1px solid var(--dc-border); }
+.su-field { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: var(--dc-s-4); padding: var(--dc-s-3) 0; border-bottom: 1px solid var(--dc-border); align-items: start; }
+.su-field-l label { color: var(--dc-fg); font-size: var(--dc-size); font-weight: 500; }
+.su-field-l .mono { overflow-wrap: anywhere; }
+.su-field-v { display: grid; gap: 4px; max-width: 520px; }
+.su-field-v input, .su-field-v select, .su-field-v textarea { width: 100%; }
+.su-field-v select { width: auto; min-width: 160px; }
+.su-err { display: flex; align-items: center; gap: 6px; font-size: var(--dc-meta); color: var(--dc-err); }
+.su-savebar { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--dc-s-3);
+  margin-top: var(--dc-s-5); padding: var(--dc-s-3) 0; background: var(--dc-surface-0); border-top: 1px solid var(--dc-border); }
+
+@media (max-width: 720px) {
+  .su-layout { grid-template-columns: minmax(0, 1fr); gap: 0; margin-top: var(--dc-s-4); }
+  .su-nav { display: none; }
+  .su-picker { display: block; }
+  .su-field { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+}
+
+/* tooltips of right-aligned controls open leftwards (no horizontal page scroll) */
+.su-phase-h [data-tip]::after, .su-savebar [data-tip]::after, .su-secret [data-tip]::after { left: auto; right: 0; transform: none; }
+.su-savebar [data-tip]::after { top: auto; bottom: calc(100% + 6px); }
+/* phase list: the step count stays on the title line */
+.su-nav .dc-row { grid-template-columns: 16px minmax(0, 1fr) auto; grid-template-areas: "ic title status"; row-gap: 0; }
+.su-nav .dc-row > .dc-strip, .su-nav .dc-row > .dc-primary, .su-nav .dc-row > .dc-chev { display: none; }
+.su-nav .dc-row > .dc-status { opacity: 1 !important; }

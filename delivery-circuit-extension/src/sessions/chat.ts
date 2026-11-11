@@ -37,6 +37,17 @@ export function newChat(persona: Persona, title?: string): ChatState {
   return { persona, title: title ?? `Claude · ${PERSONA_TITLE[persona]}`, items: [], running: false, costUsd: 0, turns: 0, mcpIssues: [] };
 }
 
+/** Footer line under the composer: "claude-sonnet-5-5 · 3 turns · $0.012" (cost only once something was spent). */
+export function chatMeta(s: Pick<ChatState, "model" | "turns" | "costUsd">): string {
+  const turns = Number.isFinite(s.turns) ? s.turns : 0;
+  const cost = Number.isFinite(s.costUsd) ? s.costUsd : 0;
+  return [
+    s.model || null,
+    `${turns} ${turns === 1 ? "turn" : "turns"}`,
+    cost > 0 ? "$" + (cost < 0.01 ? cost.toFixed(4) : cost.toFixed(3)) : null,
+  ].filter(Boolean).join(" · ");
+}
+
 let seq = 0;
 const nid = (p: string) => `${p}${++seq}`;
 

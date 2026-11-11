@@ -47,11 +47,23 @@ Rules:
 - Transcripts never enter git. Uploads are stored encrypted in the extension's global storage; the repo keeps only
   `.circuit/sources.json` (ids, titles, dates). The Circuit MCP gives transcript text only to the Architect persona.
 
-## UI rules (subtle, not exotic)
-- Use `media/shared/base.css` + `media/shared/ui.js` (`window.DC`). VS Code theme colours only; one accent; thin
-  borders; no gradients, glow, big shadows, emoji, or animation beyond the built-in fade.
-- Every card/row that refers to something outside the extension shows `DC.links([...])` to it (GitHub, Jira,
-  Salesforce, Slack, Confluence, Lucid, Fireflies, CodeRabbit, file).
+## UI rules (design v2 "Quiet Circuit", `design/DESIGN.md`)
+- Use `media/shared/base.css` + `media/shared/ui.js` (`window.DC`) only; no framework, no inline styles from data.
+  Surfaces come from the VS Code theme. Exactly three brand colours: primary indigo (actions, selection, focus),
+  secondary teal (progress, the "needs you" count), tertiary slate (text, borders, icons). Status is a 6 px dot plus
+  a word, never a tinted block. No persona-wide tinting, no gradients, glow, card shadows, rails or emoji.
+- A row shows **title · one status · age · one primary action** (`DC.row` and the `DC.*Row` helpers). Everything
+  else is one gesture away: the hover/focus strip (up to three link logos), the "…" overflow menu, or the expanded
+  panel. Lists with 1 px dividers, at most one boxed element per page (the run panel, the chat log).
+- Every row that refers to something outside the extension exposes its links in the hover strip (first three) and
+  in its expanded panel (all): GitHub, Jira, Salesforce, Slack, Confluence, Lucid, Fireflies, CodeRabbit, file.
+- App logos are monochrome `simple-icons` paths via `DC.brand` (generated into `media/shared/brands.js` at build
+  time); Slack, Salesforce and Fireflies are not in the package and use neutral codicons. Concept icons are codicons.
+- Only the action that needs the viewer is a filled primary button; others are secondary or ghost. A disabled
+  action keeps its reason as a tooltip (`data-tip` + `aria-describedby`) and the expanded row repeats it once.
+- Never print `null`/`undefined`: `DC.h` drops `null`/`undefined`/`false`, and pages guard every value they format.
+- Motion is confirmation only (hover 120 ms, expand 200 ms, a changed row flashes once); `prefers-reduced-motion`
+  turns it all off. Updates reconcile by key (`DC.mount`), so scroll, focus and open rows survive a new state.
 - Each page: `media/<module>/<page>.js`, data only via `{type:"state", data}`; page posts `ready`, `openLink`,
   `action` and its own messages. Provide at least one fixture per page in `preview/fixtures/<module>.<page>.<name>.json`
   so it renders in `npm run preview` (http://127.0.0.1:5178).

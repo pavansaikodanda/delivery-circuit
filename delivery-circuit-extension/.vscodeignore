@@ -12,6 +12,10 @@ ARCHITECTURE.md
 **/*.map
 *.ts
 *.vsix
+design/**
+# preview-only kit gallery (preview/fixtures/shared.kit.*.json)
+media/shared/kit.js
+build-brands.mjs
 .gitignore
 .vscodeignore
 

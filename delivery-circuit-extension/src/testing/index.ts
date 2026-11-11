@@ -9,7 +9,7 @@ import { openPanel } from "../core/webview";
 import { setExec } from "./engine/exec";
 import { TestingEngine, type EngineEvent, type EngineSettings } from "./engine/core";
 import type { RunInfo } from "./engine/runs";
-import { buildPageState, initialLive, applyEvent, type LiveRun, type PageContext, type PageView } from "./page";
+import { buildPageState, initialLive, applyEvent, finishToast, type LiveRun, type PageContext, type PageView } from "./page";
 
 const DEFAULT_MODELS = ["claude-haiku-4-5", "claude-sonnet-5-5"];
 
@@ -183,6 +183,10 @@ export function registerTestingUI(s: CircuitServices): void {
     view.notice = { kind, text };
     push();
   };
+  /** Short-lived confirmation (run finished, export written): a toast on the page, not a sticky notice. */
+  const toast = (kind: "ok" | "warn" | "err" | "info", text: string, link?: DeepLink) => {
+    void panel?.webview.postMessage({ type: "toast", kind, text, ...(link ? { link } : {}) });
+  };
 
   if (st) {
     st.listeners.add((e) => {
@@ -249,8 +253,10 @@ export function registerTestingUI(s: CircuitServices): void {
           push();
           try {
             const sum = await st.service.run({ suite: key, caseIds, mode, orgRole });
-            const kind = sum.route === "pass" ? "ok" : sum.route === "dev" ? "err" : "warn";
-            notice(kind, `Run finished: ${sum.counts.passed}/${sum.total} passed, route ${sum.route}.`);
+            const t = finishToast(sum);
+            toast(st.live.cancelled ? "warn" : t.kind, st.live.cancelled ? `Run cancelled after ${st.live.done} case(s)` : t.text,
+              { kind: "report", label: "Open report", target: sum.reportPath });
+            push();
           } catch (e) {
             notice("err", (e as Error).message);
           }
@@ -259,7 +265,9 @@ export function registerTestingUI(s: CircuitServices): void {
         case "cancel":
           if (!guardRun()) return;
           st.engine.cancel();
-          return notice("info", "Cancelling — the current step finishes first.");
+          if (st.live.running) st.live = { ...st.live, cancelled: true };
+          toast("info", "Cancelling — the current step finishes first.");
+          return push();
         case "generate": {
           if (!guardRun()) return;
           view.generate = { busy: true, log: [], result: undefined };
@@ -276,6 +284,7 @@ export function registerTestingUI(s: CircuitServices): void {
             );
             view.generate = { busy: false, log: view.generate?.log ?? [], result: { key: res.key, count: res.cases.length, model: res.model, validation: res.validation } };
             view.selected = res.key;
+            toast(res.validation.ok ? "ok" : "warn", `Wrote ${res.cases.length} case(s) to ${res.key}`, { kind: "file", label: "Open suite", target: res.key });
             st.changed.fire();
           } catch (e) {
             view.generate = { busy: false, log: view.generate?.log ?? [], result: undefined, error: (e as Error).message };
@@ -286,7 +295,8 @@ export function registerTestingUI(s: CircuitServices): void {
           const formats = (Array.isArray(m.formats) ? m.formats : ["xlsx"]).filter((f: string) => f === "xlsx" || f === "pdf");
           const files = await st.engine.export(formats.length ? formats : ["xlsx"]);
           view.exportFiles = files.map((f) => rel(s.root, f));
-          return notice("ok", `Exported ${view.exportFiles.join(", ")}`);
+          toast("ok", `Exported ${view.exportFiles.join(", ")}`, view.exportFiles[0] ? { kind: "file", label: "Open", target: view.exportFiles[0] } : undefined);
+          return push();
         }
         case "openSettings":
           return void vscode.commands.executeCommand("workbench.action.openSettings", "deliveryCircuit.testing");

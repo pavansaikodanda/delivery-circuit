@@ -1,32 +1,20 @@
-/* Views module additions to the shared kit. Same rules: theme colours, one accent, thin borders, nothing loud. */
-.dc-section { margin-top: 20px; }
-.dc-section > h2 { margin-top: 0; display: flex; align-items: baseline; gap: 8px; }
-.dc-section > h2 .count { font-weight: 400; color: var(--dc-muted); font-size: .85em; }
-.dc-meta { color: var(--dc-muted); font-size: .9em; }
-.dc-reason { color: var(--dc-muted); font-size: .85em; }
-.dc-id { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid var(--dc-border); }
-.dc-id .who { font-weight: 600; }
+/* Views pages (Home, Persona, Feature) on top of the shared kit (DESIGN.md §6.1-6.3). Only layout glue lives here:
+   colours, type and rows come from base.css. No persona tint, no boxes, no status backgrounds. */
 
-/* own gates read first; the others step back */
-.step.dc-own { font-weight: 600; }
-.step.dc-other { opacity: .55; }
+/* Home: notices sit together above the queue; "Show all" sits under the list */
+.dc-notices { margin-top: var(--dc-s-2); }
+.dc-more { padding: var(--dc-s-2) 0 0 28px; }
 
-/* navigation rows */
-.dc-nav .item { cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.dc-nav .item:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--dc-accent)); outline-offset: -1px; }
+/* Feature detail: stage line and the next gate under the header */
+.dc-fsum { display: grid; gap: var(--dc-s-2); margin-top: var(--dc-s-4); }
+.dc-fsum-line { display: flex; align-items: center; gap: var(--dc-s-3); }
+.dc-fsum-line > .dc-stage { flex: 1 1 auto; }
+.dc-fsum-line > .dc-stage-n { flex: none; font-size: var(--dc-meta); color: var(--dc-muted); }
+.dc-fsum-next { display: flex; align-items: center; justify-content: space-between; gap: var(--dc-s-3); flex-wrap: wrap; min-height: 28px; }
+.dc-strong { font-weight: 500; }
+.dc-linkbox { padding: var(--dc-s-1) 0; }
+.small { font-size: var(--dc-meta); }
 
-/* feature cards */
-.dc-card-title { font-weight: 600; }
-.dc-strip { margin-top: 6px; }
-.dc-strip .k { color: var(--dc-muted); font-size: .82em; display: inline-block; min-width: 44px; }
-
-/* pull requests */
-.dc-pr .head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.dc-signals { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin-top: 6px; font-size: .92em; }
-.dc-signals .src { color: var(--dc-muted); }
-.dc-signal { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.dc-signal + .dc-signal { margin-top: 2px; }
-
-/* tables */
-tr.dc-own td { font-weight: 600; }
-td .dot { margin-right: 6px; vertical-align: middle; }
+/* compact rows without a status line (Home "Go to"): title and arrow on one centred line */
+.dc-row.compact:not(:has(> .dc-status)) { grid-template-areas: "ic title primary"; align-items: center; }
+.dc-cmd { margin: var(--dc-s-2) 0 0; text-align: left; font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; color: var(--dc-fg); white-space: pre-wrap; overflow-wrap: anywhere; }
