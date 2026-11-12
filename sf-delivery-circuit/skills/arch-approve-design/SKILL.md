@@ -15,12 +15,14 @@ has no per-group control of page status, so the circuit verifies the approver fr
 > 2. Set the page status to **Approved** (status menu at the top of the page). If "Approved" is not offered, a space
 >    admin adds it as a suggested status (Space settings → Content status). Do this yourself, as a member of the
 >    `architects` group.
-> 3. Open **Page history** and note the version number now shown as current. That is the approved version. If you
->    publish anything while approving (for example a last wording fix), use the change message `Approved v<N>`:
->    the extension reads the approved version from that message (otherwise from the current version).
+> 3. Open **Page history** and note the version number now shown as current. That is the approved version. Publish
+>    any last wording fix *before* setting the status. Version messages are free text any editor can write, so
+>    neither the extension nor CI reads the approved version from them.
 > 4. In Jira, on the feature's epic, run the **Approve design** transition (only `architects` can) and enter that
 >    number in *Approved design version*. If the epic doesn't exist yet, run `arch-jira-push NNN-slug` first: it
 >    creates the epic without that field, then do this step.
+>    This field is the approved version of record: `design-gate` (CI) and the extension both read it. Do this step
+>    yourself; the guard blocks AI from running that transition or setting the epic's field.
 > 5. Recommended once per space: restrict edit of approved design pages to the `architects` group (page
 >    restrictions). That is the only native lever that stops others from changing an approved page.
 

@@ -36,7 +36,9 @@ withSqlite("reads what node:sqlite wrote", () => {
     const db = new sqlite.DatabaseSync(f);
     db.exec("CREATE TABLE History (id INTEGER PRIMARY KEY, formattedText TEXT, timestamp INTEGER, app TEXT, score REAL, raw BLOB)");
     const ins = db.prepare("INSERT INTO History (formattedText, timestamp, app, score, raw) VALUES (?, ?, ?, ?, ?)");
+    db.exec("BEGIN"); // one transaction: 1500 autocommits each fsync and can time out on a busy Windows disk
     for (let i = 1; i <= 1500; i++) ins.run(`note ${i} ` + "x".repeat(i % 50 === 0 ? 9000 : 30), 1_762_000_000_000 + i, i % 2 ? "Slack" : null, i / 4, Buffer.from([i % 256]));
+    db.exec("COMMIT");
     db.close();
     const r = read(f);
     const t = r.tables().find((x) => x.name === "History")!;

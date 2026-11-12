@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ActionRef, Identity, PrRef, QueueItem } from "../../src/core/contracts";
 import * as M from "../../src/views/model";
+import { isAllowed } from "../../src/actions/grammar";
 import {
   ARCHITECT, CONNECTIONS, DEVELOPER, FEATURES, NOW, OWNER, PRS, QUEUE, REPO, SOURCES, TEAMS, TESTER, allowedFor, jiraUrl,
 } from "../fixtures/views/sample";
@@ -60,6 +61,17 @@ describe("disabled-action reasons", () => {
   });
   it("never allows anything without an identity", () => {
     expect(M.toActionView(null, a, () => true).allowed).toBe(false);
+  });
+  it("panel actions that pick their argument on click are judged by the persona rules, not the missing argument", () => {
+    // The real action grammar refuses a named action without its story key or PR; the panel asks for it on click.
+    const real = (id: Identity) => (x: ActionRef) => isAllowed(id, x);
+    for (const [id, p] of [[ARCHITECT, "architect"], [DEVELOPER, "developer"], [TESTER, "tester"]] as const) {
+      const own = M.buildPersona({ identity: id, requested: p, queue: [], features: [], prs: [], allowed: real(id), jiraUrl, now: NOW });
+      expect(own.aiActions.filter((x) => !x.allowed).map((x) => `${x.id}: ${x.reason}`)).toEqual([]);
+      expect(own.aiActions.every((x) => M.needsArg(x))).toBe(true); // the stand-in argument never leaks into the action
+    }
+    const view = M.buildPersona({ identity: ARCHITECT, requested: "tester", queue: [], features: [], prs: [], allowed: real(ARCHITECT), jiraUrl, now: NOW });
+    expect(view.aiActions.every((x) => !x.allowed && x.reason === "Only a Tester can run this")).toBe(true);
   });
 });
 
@@ -206,16 +218,18 @@ describe("pull requests", () => {
     expect(M.prGates(PRS[1], "tester").map((g) => `${g.id}:${g.state}`)).toEqual(["G4:done", "G6:waiting"]);
     expect(M.prGates(PRS[1], "architect").map((g) => `${g.id}:${g.state}`)).toEqual(["G7:waiting", "G8:not-started"]);
     expect(M.prGates(PRS[0], "architect").map((g) => `${g.id}:${g.state}`)).toEqual(["G7:done", "G8:done"]); // merged
-    // a v2 spec/ PR (no longer created in v3) still shows G1 from spec-gate to the Architect only
+    // v3 has no spec/ PRs: a leftover v2 spec/ branch is an ordinary PR with no gates (G1 comes from the design page)
     const spec: PrRef = { ...PRS[0], branch: "spec/001-x", state: "open", checks: { "spec-gate": "success" } };
-    expect(M.prGates(spec, "architect").map((g) => `${g.id}:${g.state}`)).toEqual(["G1:done"]);
-    expect(M.prGates(spec, "developer")).toEqual([]);
+    expect(M.prKind(spec)).toBe("other");
+    for (const p of ["architect", "developer", "tester"] as const) expect(M.prGates(spec, p)).toEqual([]);
+    expect(M.prNeedsPersona(spec, "architect")).toBe(false);
   });
   it("relevant PRs per persona, waiting-on-you first", () => {
     const intake: PrRef = { ...PRS[0], number: 40, branch: "intake/acme-sla", updatedAt: "2026-11-11T14:00:00Z" };
     const all = [...PRS, intake];
     expect(M.prsForPersona(all, "architect").map((p) => p.number)).toContain(40);
-    expect(M.prsForPersona(all, "developer").map((p) => p.number)).not.toContain(40);
+    expect(M.prsForPersona(all, "developer").map((p) => p.number)).toContain(40); // a non-story PR, listed but not waiting
+    expect(M.prNeedsPersona(intake, "developer")).toBe(false);
     expect(M.prsForPersona(all, "developer").slice(0, 2).map((p) => p.number)).toEqual([45, 44]); // failing checks, needs-human
     // #44 is needs-human: the Tester queue does not ask for G6 there, so it is not "waiting on you" for the Tester.
     expect(M.prsForPersona(all, "tester").map((p) => p.number)).toEqual([45, 42, 43, 44, 41]);
@@ -345,6 +359,17 @@ describe("design v2 view-model additions", () => {
     expect(cmds(M.prActions(pr(43), "tester"))).toEqual(["/qa-add-tests:ACME-13", "/qa-review-testplan:43"]);
     expect(M.prActions({ ...pr(43), files: ["tests/ACME-13.tc.json", "test-cases/ACME-13.sf-tests.yaml"] } as PrRef, "tester").map((a) => a.id)).toEqual(["ai:/qa-review-testplan"]);
     expect(cmds(M.prActions(pr(42), "tester"))).toEqual(["/qa-explore:42"]);
+    // Step 12 on the PR row (same rule as the queue): Build with AI, then the human Mark ready for review.
+    const T13 = ["tests/ACME-13.tc.json", "test-cases/ACME-13.sf-tests.yaml"];
+    const approved = { ...pr(43), draft: true, labels: ["plan-approved", "testplan-approved"], checks: { guard: "success" as const }, aiAttempt: undefined };
+    const b = M.prActions({ ...approved, files: T13 } as PrRef, "developer");
+    expect(b.map((a) => [a.id, a.label, a.args?.phase, a.args?.storyKey])).toEqual([["dev:start-story", "Build with AI", "build", "ACME-13"]]);
+    expect(M.prActions({ ...approved, files: [] } as PrRef, "developer").map((a) => a.id)).toEqual([]);
+    const r = M.prActions({ ...approved, files: [...T13, "force-app/main/default/classes/Q.cls"] } as PrRef, "developer");
+    expect(r.map((a) => [a.id, a.kind, a.args?.pr])).toEqual([["gate:ready", "gate", 43]]);
+    // Add tests stays offered while the tests are not on the PR, whatever G4 says (same rule as the queue).
+    expect(M.prActions({ ...pr(43), labels: [...pr(43).labels, "testplan-approved"] }, "tester").map((a) => a.id)).toEqual(["qa:add-tests"]);
+    expect(M.prActions({ ...pr(43), labels: [...pr(43).labels, "testplan-approved"], files: ["tests/ACME-13.tc.json", "test-cases/ACME-13.sf-tests.yaml"] } as PrRef, "tester")).toEqual([]);
     expect(cmds(M.prActions(pr(41), "tester"))).toEqual([]);
     expect(cmds(M.prActions(pr(43), "architect"))).toEqual([]);
     expect(cmds(M.prActions(pr(42), "architect"))).toEqual(["/arch-review-pr:42"]);

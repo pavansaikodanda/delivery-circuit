@@ -12,7 +12,7 @@
 # and the plan on the story PR. No jira-map.json, no .specify/specs on main.
 set -euo pipefail
 
-KEY_RE='^[A-Z][A-Z0-9]+-[0-9]+$'
+KEY_RE='^[A-Z][A-Z0-9_]+-[0-9]+$'
 key=""; branch=""; jira=0; out=".ai/story"
 while [ $# -gt 0 ]; do
   case "$1" in

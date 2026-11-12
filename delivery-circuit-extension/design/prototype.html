@@ -514,12 +514,12 @@ body { background: #26282c; color: #d7dbe0; font: 13px/1.5 "Segoe WPC", "Segoe U
     ],
     prs: [
       { number: 44, title: "CE-14 Notify the account owner on escalation", branch: "feature/CE-14-escalation-notify", author: "claude[bot]", aiAttempt: 3, age: "3 h", labels: ["ai-generated", "plan-approved", "testplan-approved", "ai-attempt-3", "needs-human"], needsYou: true,
-        checks: [["guard", "success"], ["static", "failure"], ["qa", "failure"], ["spec-gate", "success"], ["gate/developer", "missing"], ["gate/tester", "missing"]],
+        checks: [["guard", "success"], ["static", "failure"], ["qa", "failure"], ["design-gate", "success"], ["gate/developer", "missing"], ["gate/tester", "missing"]],
         reviews: [["coderabbit", "CodeRabbit", "changes-requested", "SOQL inside loop in NotifyOwnerHandler"], ["ai-reviewer", "AI Reviewer", "block", "VERDICT: BLOCK (bulk safety)"], ["code-analyzer", "Code Analyzer", "block", "2 violations: ApexCRUDViolation, AvoidSoqlInLoops"], ["sf-ai-tester", "SF AI Tester", "block", "S03-TC-01 failed: no email sent"]],
         links: [{ kind: "github", label: "PR #44", target: "https://github.com/acme-org/salesDemoOrg/pull/44" }, { kind: "jira", label: "CE-14", target: "https://acme.atlassian.net/browse/CE-14" }, { kind: "coderabbit", label: "CodeRabbit review", target: "#" }, { kind: "github", label: "Checks", target: "https://github.com/acme-org/salesDemoOrg/pull/44/checks" }],
         actions: [{ label: "Take over", allowed: true }, { label: "AI review", allowed: true }] },
       { number: 42, title: "CE-12 Agent escalates a Case with a reason", branch: "feature/CE-12-escalate-case", author: "claude[bot]", aiAttempt: 1, age: "5 h", labels: ["ai-generated", "plan-approved", "testplan-approved"], needsYou: true,
-        checks: [["guard", "success"], ["static", "success"], ["qa", "success"], ["spec-gate", "success"], ["gate/architect", "missing"], ["gate/developer", "pending"], ["gate/tester", "pending"]],
+        checks: [["guard", "success"], ["static", "success"], ["qa", "success"], ["design-gate", "success"], ["gate/architect", "missing"], ["gate/developer", "pending"], ["gate/tester", "pending"]],
         reviews: [["coderabbit", "CodeRabbit", "commented", "Resolved; 1 nitpick left"], ["ai-reviewer", "AI Reviewer", "pass", "VERDICT: PASS"], ["code-analyzer", "Code Analyzer", "pass", "0 violations (sev 1-2)"], ["sf-ai-tester", "SF AI Tester", "pass", "3/3 ui cases passed on qa"]],
         links: [{ kind: "github", label: "PR #42", target: "https://github.com/acme-org/salesDemoOrg/pull/42" }, { kind: "jira", label: "CE-12", target: "https://acme.atlassian.net/browse/CE-12" }, { kind: "coderabbit", label: "CodeRabbit review", target: "#" }, { kind: "github", label: "Checks", target: "#" }],
         actions: [{ label: "Approve (G5)", allowed: true }, { label: "AI review", allowed: true }] },
@@ -528,7 +528,7 @@ body { background: #26282c; color: #d7dbe0; font: 13px/1.5 "Segoe WPC", "Segoe U
         links: [{ kind: "github", label: "PR #43", target: "#" }, { kind: "jira", label: "CE-13", target: "#" }, { kind: "github", label: "Checks", target: "#" }],
         actions: [{ label: "AI review plan", allowed: true }, { label: "Add plan-approved", allowed: true }] },
       { number: 41, title: "Spec: case escalation stories and test cases", branch: "spec/001-case-escalation", author: "maya-arch", age: "1 d", labels: ["sdd"], needsYou: false,
-        checks: [["guard", "success"], ["spec-gate", "success"]],
+        checks: [["guard", "success"], ["design-gate", "success"]],
         reviews: [["human", "tess-qa", "approved", "Test cases cover every AC"], ["human", "ravi-dev", "approved", "Stories are buildable; Story 00 contract complete"], ["coderabbit", "CodeRabbit", "commented", "2 nitpicks in task_story_03.md"]], missing: ["AI Reviewer", "Code Analyzer", "SF AI Tester"],
         links: [{ kind: "github", label: "PR #41", target: "#" }, { kind: "coderabbit", label: "CodeRabbit review", target: "#" }, { kind: "github", label: "Checks", target: "#" }],
         actions: [{ label: "Open", allowed: true, nav: true }] },
@@ -539,10 +539,10 @@ body { background: #26282c; color: #d7dbe0; font: 13px/1.5 "Segoe WPC", "Segoe U
     login: "dev-one", repo: "acme-org/salesDemoOrg", hidden: 8, checked: "3 min ago",
     groups: [
       { title: "Personal", rows: [
-        { id: "github", label: "GitHub", state: "connected", account: "pavansaikodanda", detail: "Signed in · acme-org/salesDemoOrg · admin", connect: "Reconnect", manage: "https://github.com/settings/applications", links: [{ kind: "github", label: "Repository", target: "https://github.com/acme-org/salesDemoOrg" }] },
+        { id: "github", label: "GitHub", state: "connected", account: "demo-architect", detail: "Signed in · acme-org/salesDemoOrg · admin", connect: "Reconnect", manage: "https://github.com/settings/applications", links: [{ kind: "github", label: "Repository", target: "https://github.com/acme-org/salesDemoOrg" }] },
         { id: "claude", label: "Claude (subscription)", state: "expiring", account: "maintainer@example.com", detail: "Max plan · Conscendo", expiry: "Expires in 19 days", expiresAt: "2026-11-30", connect: "Reconnect", manage: "https://claude.ai/settings/account", canDisconnect: true, links: [{ kind: "url", label: "Account settings", target: "https://claude.ai/settings/account" }] },
         { id: "sf-dev", label: "Salesforce dev org", state: "connected", account: "demo.user@example.com", detail: "alias dev · acme-demo.my.salesforce.com · trial org (per build.config.yml)", connect: "Reconnect", canDisconnect: true, links: [{ kind: "salesforce", label: "Org home", target: "https://acme-demo.my.salesforce.com" }, { kind: "salesforce", label: "Setup", target: "https://acme-demo.my.salesforce.com/lightning/setup/SetupOneHome/home" }] },
-        { id: "jira", label: "Jira", state: "connected", account: "dev.user@example.com", detail: "Pavan Sai · acme.atlassian.net", connect: "Reconnect", manage: "https://id.atlassian.com/manage-profile/security/api-tokens", canDisconnect: true, links: [{ kind: "jira", label: "Project ABC", target: "https://acme.atlassian.net/browse/ABC" }] },
+        { id: "jira", label: "Jira", state: "connected", account: "dev.user@example.com", detail: "Demo User · acme.atlassian.net", connect: "Reconnect", manage: "https://id.atlassian.com/manage-profile/security/api-tokens", canDisconnect: true, links: [{ kind: "jira", label: "Project ABC", target: "https://acme.atlassian.net/browse/ABC" }] },
         { id: "slack", label: "Slack", state: "unknown", detail: "Slack workspace is not set in build.config.yml (slack.workspace).", connect: "Connect", manage: "https://slack.com/signin", links: [{ kind: "url", label: "Sign in", target: "https://slack.com/signin" }] },
       ] },
       { title: "Claude MCP", rows: [
@@ -553,7 +553,7 @@ body { background: #26282c; color: #d7dbe0; font: 13px/1.5 "Segoe WPC", "Segoe U
       { title: "Review tools", rows: [
         { id: "coderabbit", label: "CodeRabbit", state: "unknown", detail: "Config present · no CodeRabbit review seen yet. Install the app on the repo if it is not.", connect: "Install app", admin: true, manage: "https://app.coderabbit.ai/", links: [{ kind: "coderabbit", label: "Dashboard", target: "#" }, { kind: "github", label: "GitHub App", target: "#" }, { kind: "file", label: ".coderabbit.yaml", target: ".coderabbit.yaml" }] },
         { id: "code-analyzer", label: "Salesforce Code Analyzer", state: "connected", detail: "plugin-code-analyzer 5.1.0 locally · runs in CI (pr-checks)", connect: "Install", admin: true, links: [{ kind: "file", label: "pr-checks.yml", target: ".github/workflows/pr-checks.yml" }] },
-        { id: "ai-reviewer", label: "AI Reviewer (CI)", state: "disconnected", detail: "reviewer.md present · repo secret CLAUDE_CODE_OAUTH_TOKEN is missing.", connect: "Set token", admin: true, manage: "https://github.com/acme-org/salesDemoOrg/settings/secrets/actions", links: [{ kind: "file", label: "reviewer.md", target: ".claude/agents/reviewer.md" }, { kind: "github", label: "Actions secrets", target: "#" }] },
+        { id: "ai-reviewer", label: "AI Reviewer (CI)", state: "disconnected", detail: "reviewer.md present · runs on the self-hosted runner (labels self-hosted, circuit), which is offline.", connect: "Set up runner", admin: true, manage: "https://github.com/acme-org/salesDemoOrg/settings/actions/runners", links: [{ kind: "file", label: "reviewer.md", target: ".claude/agents/reviewer.md" }, { kind: "github", label: "Runners", target: "#" }] },
       ] },
     ],
   };
@@ -562,14 +562,14 @@ body { background: #26282c; color: #d7dbe0; font: 13px/1.5 "Segoe WPC", "Segoe U
     suites: [{ name: "Smoke - Account", cases: 2, last: { passed: 2 }, story: "SDO-12", selected: true }, { name: "Lead convert", cases: 3, last: { passed: 1, failed: 1 }, notRun: 1, story: "SDO-14" }],
     cases: [
       { id: "SMOKE-ACC-001", title: "Create a Business Account with a name and type", section: "Smoke", steps: 6, status: "passed", age: "4 h", model: "claude-haiku-4-5", summary: "Replayed 11 recorded actions in 45s; AI checked the results: Account \"AI-TEST Smoke 002\" was created with Type \"Prospect\" and the detail page displays correctly.", links: [{ kind: "jira", label: "SDO-31", target: "#" }] },
-      { id: "SMOKE-ACC-002", title: "The \"GFS Customers\" list view opens on the Accounts tab", section: "Smoke", steps: 2, status: "passed", age: "4 h", model: "claude-haiku-4-5", summary: "The GFS Customers list view opened with the proper header and 13 account records, no errors.", links: [{ kind: "jira", label: "SDO-32", target: "#" }] },
+      { id: "SMOKE-ACC-002", title: "The \"Key Customers\" list view opens on the Accounts tab", section: "Smoke", steps: 2, status: "passed", age: "4 h", model: "claude-haiku-4-5", summary: "The Key Customers list view opened with the proper header and 13 account records, no errors.", links: [{ kind: "jira", label: "SDO-32", target: "#" }] },
     ],
     log: [
       "Run 11/11/2026, 10:02:11 - Smoke - Account: 2 case(s), manual, org qa",
       "Org metadata ready: 1 object(s), 0 active validation rule(s).",
       "Reusing saved session for qa (https://acme-demo.lightning.force.com)",
       "Running 2 case(s) on 2 parallel workers (2 chain(s)).",
-      "[W2] === SMOKE-ACC-002 [manual] The \"GFS Customers\" list view opens on the Accounts tab (model: claude-haiku-4-5)",
+      "[W2] === SMOKE-ACC-002 [manual] The \"Key Customers\" list view opens on the Accounts tab (model: claude-haiku-4-5)",
       "[W2]   -> browser:browser_navigate {\"url\":\"https://acme-demo.lightning.force.com/lightning/o/Account/list\"}",
       "[W2] PASSED SMOKE-ACC-002 (manual) in 38s",
       "[W1]   -> browser:browser_click {\"target\":\"getByRole('button', { name: 'New' })\"}",

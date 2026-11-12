@@ -13,6 +13,8 @@ export interface CircuitConfig {
     prodUrl?: string;
     devAlias: string;
     qaAlias: string;
+    /** salesforce.prod_alias: the org the project names as production (AI never works there) */
+    prodAlias?: string;
     /** The config says dev/qa is a trial / Developer Edition / demo org (so a my.salesforce.com URL is expected). */
     devIsTrial: boolean;
     qaIsTrial: boolean;
@@ -60,6 +62,7 @@ export function parseBuildConfig(text: string): CircuitConfig {
       qaUrl: val(sf.qa_sandbox_url),
       prodUrl: val(sf.prod_url),
       devAlias, qaAlias,
+      ...(typeof sf.prod_alias === "string" && ALIAS.test(sf.prod_alias) ? { prodAlias: sf.prod_alias } : {}),
       devIsTrial: declaredTrial(text, "dev_sandbox_url", sf.dev_org_type ?? sf.trial),
       qaIsTrial: declaredTrial(text, "qa_sandbox_url", sf.qa_org_type ?? sf.trial),
     },

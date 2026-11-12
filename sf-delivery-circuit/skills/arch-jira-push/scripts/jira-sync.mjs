@@ -14,7 +14,7 @@
 //   node jira-sync.mjs record  --plan <jira-plan.json> --ref <ref> --key <KEY> [--map <map.json>]
 //
 // Idempotency: every work item carries the label  cref-<NNN>-<ref>  (e.g. cref-001-02, cref-001-S02-TC-01) and is
-// found by it, so re-running updates instead of duplicating. The local map (default: jira-map.json next to the plan,
+// found by it, so re-running updates instead of duplicating. The local cache (default: jira-cache.json next to the plan,
 // under the gitignored .specify/specs/) is only a cache of ref -> key plus a content hash per item; Jira is the truth.
 // Without --apply nothing is written anywhere (dry run).
 //
@@ -136,7 +136,7 @@ function planPaths() {
   if (!planPath) throw new Error('--plan is required');
   const plan = readJson(planPath);
   if (!plan.project || !plan.feature || !Array.isArray(plan.issues)) throw new Error('plan needs project, feature and issues[]');
-  return { plan, planPath, mapPath: opt('map', join(dirname(planPath), 'jira-map.json')) };
+  return { plan, planPath, mapPath: opt('map', join(dirname(planPath), 'jira-cache.json')) };
 }
 
 // acli runner: array arguments only, never a shell string. CIRCUIT_ACLI points at another binary (tests use a .mjs).

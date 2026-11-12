@@ -49,8 +49,8 @@ cases:
     expected: [The Account is saved]
   - id: SMOKE-ACC-002
     title: List view
-    steps: [Open the Accounts tab, Select the "GFS Customers" list view]
-    expected: [Header shows GFS Customers]
+    steps: [Open the Accounts tab, Select the "Key Customers" list view]
+    expected: [Header shows Key Customers]
 `;
 
 describe("suite loading and validation", () => {

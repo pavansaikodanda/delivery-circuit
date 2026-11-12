@@ -229,8 +229,9 @@ in, and it logs in the same way a person does.
 | `self-hosted, circuit` | QA deploy, Apex tests, SF AI Tester, AI Reviewer, Code Analyzer, design gate | `sf` (alias `qa`), `claude` (a Claude Team seat), `acli` |
 | `self-hosted, circuit-release` | `deploy-prod` (no AI) | `sf` (the production alias only) |
 
-You can put both label sets on one machine for a demo, but a separate release runner keeps the production login away
-from jobs that run AI.
+Register **two runners, on separate machines or separate service users**, one label set each. Never give one runner
+both labels: the `circuit` runner runs code from PR branches (8.6), so it must never be where the production login is.
+The extension's setup check refuses a runner that carries both labels.
 
 ### 8.1 Register the runner
 
@@ -257,6 +258,7 @@ The logins live in that user's home folder, so the service must run as the user 
 ### 8.3 Log in on the runner, as the service user
 
 ```bash
+gh auth login     # as a dedicated service user with read access to <REPO> only (8.6); persona-gates reads teams
 claude            # then /login with the runner's Claude Team seat; make sure ANTHROPIC_API_KEY is not set
 sf org login web --alias qa --instance-url https://acme-demo.my.salesforce.com
 acli jira auth login --web
@@ -286,6 +288,26 @@ open a PR could run code on the runner and use its logins.
    `if: github.event.pull_request.head.repo.full_name == github.repository`.
 4. Runner groups that limit a runner to chosen repos exist only at org level. If you register at org level, restrict
    the group to `<REPO>`.
+
+### 8.6 Every repo writer can run code on the `circuit` runner
+
+For a `pull_request` event GitHub takes the workflow file from the PR branch, so anyone who can push a branch to
+`<REPO>` (people, and the Developer's Claude) can run code on the `circuit` runner with its logins. The circuit limits
+what that reaches:
+
+1. The `circuit` runner holds only the DEV/QA `sf` logins, the `claude` seat and `acli`. The production login lives on
+   the separate `circuit-release` runner, which only `deploy-prod` (push to `main` after G8, environment approval G9)
+   uses.
+2. Gate and guard scripts (`scripts/ci/*`, `protected-paths.txt`, `jira-config.json`) run from the PR's **base commit**
+   (`.circuit-trusted/` in `pr-checks`, `ref: base.sha` in `design-gate`, `persona-gates` and `fix-router`); the PR head
+   is checked out only as data. A branch that edits them cannot weaken its own checks, and the AI guard denies every
+   persona writes to `scripts/`, `.github/` and `.claude/`.
+3. Sign the runner's `gh` in as a **dedicated service user** that is an org member with *read* access to `<REPO>` only
+   (no write, not admin). `gh auth login` always asks for the `repo` scope; on a read-only account it grants nothing
+   more than reading, and `read:org` lets `team-member.sh` read team membership. Jobs write labels, comments and
+   statuses with their own short-lived `GITHUB_TOKEN`.
+4. A PR that changes `force-app/` must come from a story branch (`feature/<KEY>-<slug>`): `guard` and `design-gate`
+   fail it otherwise, so a branch name cannot skip G1/C5 or the protected-path check.
 
 ---
 

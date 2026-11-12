@@ -79,7 +79,9 @@ Two runners, two machines or two service users (see `reference/connect.md` → S
    **HC-2:** the person runs the runner's `config.sh` / `config.cmd` on the machine with
    `--url https://github.com/$ORG/$REPO --token <token> --labels circuit` (or `circuit-release`) and installs it as a
    service. Claude never sees the token in chat: the person pipes it straight from `gh` on the runner machine.
-2. **HC-3:** as the runner's service user, the person signs in once: `gh auth login` (scopes `repo, read:org`),
+2. **HC-3:** as the runner's service user, the person signs in once: `gh auth login` (scopes `repo, read:org`) as a
+   dedicated GitHub service user with *read* access to the repo only (every repo writer can run code on this runner:
+   ConnectionsSetup.md 8.6),
    `claude` (Claude Team seat; then `/mcp` → sign in to the Slack connector if Slack notices use transport `claude`),
    `acli jira auth login --web`, and on `circuit` only `sf org login web --alias dev` / `--alias qa` (or
    `sf org login device` on a headless machine). Install `sf plugins install @salesforce/plugin-code-analyzer` and

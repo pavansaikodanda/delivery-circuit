@@ -5,7 +5,8 @@ name: design-gate
 #       the epic is no longer in a design status (vars.DESIGN_PENDING_STATUSES, default "Backlog,Design Review").
 #   C5  the story's "Approved design version" equals the epic's: otherwise
 #       "Design changed since this story was planned: re-plan or re-approve".
-# Non-story PRs (no feature/<KEY>-* branch) pass: the repo holds code and tests only, the design lives in Confluence.
+# Non-story PRs (no feature/<KEY>-* branch) pass only when they change nothing under force-app/: code changes need a
+# story, so a branch name cannot skip G1/C5. The gate scripts and jira-config come from the base commit, not the PR.
 # Fork PRs are skipped here and fail `guard` in pr-checks, so they can never be merged.
 # When the design is re-approved after this ran, re-run the check (the extension's "Re-run checks" or the Actions tab).
 on:
@@ -15,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: design-gate-${{ github.event.pull_request.number }}
@@ -26,8 +28,9 @@ jobs:
     runs-on: [self-hosted, circuit]
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5            # base commit: the PR cannot change the gate it is checked by
         with:
+          ref: ${{ github.event.pull_request.base.sha }}
           persist-credentials: false
           sparse-checkout: |
             scripts/ci
@@ -35,9 +38,18 @@ jobs:
       - name: Story key
         env:
           BRANCH: ${{ github.head_ref }}
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
         run: |
-          eval "$(bash scripts/ci/resolve-story.sh --branch "$BRANCH")"
-          if [ -z "${KEY:-}" ]; then echo "Not a story PR: no design to check."; else echo "KEY=$KEY" >> "$GITHUB_ENV"; fi
+          out=$(bash scripts/ci/resolve-story.sh --branch "$BRANCH") || exit 1
+          eval "$out"
+          if [ -n "${KEY:-}" ]; then echo "KEY=$KEY" >> "$GITHUB_ENV"; exit 0; fi
+          files=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate --jq '.[].filename') || { echo "::error::Could not list this PR's files"; exit 1; }
+          if grep -q '^force-app/' <<<"$files"; then
+            echo "::error::This PR changes force-app/ but its branch is not a story branch (feature/<KEY>-<slug>): code needs a story with an approved design (G1, C5)."
+            exit 1
+          fi
+          echo "Not a story PR and no force-app changes: no design to check."
       - name: Runner logins
         if: env.KEY != ''
         run: bash scripts/ci/runner-check.sh --acli --tools node

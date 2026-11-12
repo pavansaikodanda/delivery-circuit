@@ -203,6 +203,18 @@ export function acliInstallHelp(platform: NodeJS.Platform, arch: string = "x64")
 // ---------- GitHub: self-hosted runners, app installations, rulesets, environments ----------
 export const RUNNER_LABELS = ["circuit", "circuit-release"] as const;
 
+/** How to register the runners. Always two runners, on separate machines or service users: the PR runner
+ *  (circuit) runs PR-branch code and must never hold the production sf login that the release runner
+ *  (circuit-release, deploy-prod only) has. Never suggest one runner with both labels. */
+export const RUNNER_REGISTER_HINT =
+  ". Register two runners on separate machines or service users: ./config.sh --labels circuit for PR checks, and " +
+  "--labels circuit-release only on the release runner (Add runner opens the page with the commands)";
+export const RUNNER_CONNECT_MESSAGE =
+  "Register two runners, on separate machines or service users. PR-check runner (sf DEV/QA, claude and acli logins): " +
+  "at ./config.sh add --labels circuit. Release runner (deploy-prod only, the production sf login): --labels circuit-release. " +
+  "Never give one runner both labels: PR code must not run where the production login is. Run each as a service; " +
+  "the Setup wizard (step B2) has the exact commands. The row updates when they are online.";
+
 export interface RunnerInfo { id: number; name: string; os?: string; status: string; busy: boolean; labels: string[] }
 
 /** GET /repos/{o}/{r}/actions/runners -> runners (labels lower-cased; GitHub treats them case-insensitively). */

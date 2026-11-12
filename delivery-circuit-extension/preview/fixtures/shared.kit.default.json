@@ -617,7 +617,7 @@
      "cls": "err"
     },
     {
-     "name": "spec-gate",
+     "name": "design-gate",
      "state": "success",
      "cls": "ok"
     },
@@ -789,7 +789,7 @@
      "cls": "ok"
     },
     {
-     "name": "spec-gate",
+     "name": "design-gate",
      "state": "success",
      "cls": "ok"
     },
@@ -1014,7 +1014,7 @@
      "cls": "ok"
     },
     {
-     "name": "spec-gate",
+     "name": "design-gate",
      "state": "success",
      "cls": "ok"
     }
@@ -1119,7 +1119,7 @@
      "cls": "ok"
     },
     {
-     "name": "spec-gate",
+     "name": "design-gate",
      "state": "success",
      "cls": "ok"
     }
@@ -1265,7 +1265,7 @@
     "tester"
    ],
    "manageUrl": "https://github.com/settings/applications",
-   "account": "pavansaikodanda",
+   "account": "demo-architect",
    "detail": "Signed in · acme-org/salesDemoOrg · admin",
    "group": "personal",
    "actionable": true,
@@ -1491,8 +1491,8 @@
    "reason": "Project connections are managed by a repo or org admin"
   },
   {
-   "id": "ai-reviewer",
-   "label": "AI Reviewer (CI)",
+   "id": "runner",
+   "label": "Self-hosted runner",
    "scope": "project",
    "state": "disconnected",
    "neededBy": [
@@ -1500,22 +1500,17 @@
     "developer",
     "tester"
    ],
-   "manageUrl": "https://github.com/acme-org/salesDemoOrg/settings/secrets/actions",
-   "detail": "reviewer.md present · repo secret CLAUDE_CODE_OAUTH_TOKEN is missing.",
-   "group": "review",
+   "manageUrl": "https://github.com/acme-org/salesDemoOrg/settings/actions/runners",
+   "detail": "No online runner with the labels self-hosted, circuit. The AI reviewer, QA and design-gate jobs wait for it.",
+   "group": "project",
    "actionable": true,
    "canDisconnect": false,
-   "connectLabel": "Set token",
+   "connectLabel": "Set up runner",
    "links": [
     {
-     "kind": "file",
-     "label": "reviewer.md",
-     "target": ".claude/agents/reviewer.md"
-    },
-    {
      "kind": "github",
-     "label": "Secrets",
-     "target": "https://github.com/acme-org/salesDemoOrg/settings/secrets/actions"
+     "label": "Runners",
+     "target": "https://github.com/acme-org/salesDemoOrg/settings/actions/runners"
     }
    ]
   },
@@ -1548,30 +1543,6 @@
    ]
   }
  ],
- "secrets": [
-  {
-   "name": "APP_ID",
-   "present": true,
-   "kind": "github-app",
-   "expiring": false
-  },
-  {
-   "name": "APP_PRIVATE_KEY",
-   "present": true,
-   "kind": "github-app",
-   "expiring": false
-  },
-  {
-   "name": "CLAUDE_CODE_OAUTH_TOKEN",
-   "present": false,
-   "kind": "claude",
-   "expiring": false
-  },
-  {
-   "name": "SLACK_WEBHOOK_QA",
-   "kind": "webhook"
-  }
- ],
  "live": {
   "running": true,
   "done": 1,
@@ -1580,7 +1551,7 @@
     "caseId": "SMOKE-ACC-002",
     "mode": "manual",
     "status": "passed",
-    "summary": "List view header shows GFS Customers; table rendered."
+    "summary": "List view header shows Key Customers; table rendered."
    }
   ],
   "log": [
@@ -1589,7 +1560,7 @@
    "Org metadata ready: 1 object(s), 0 active validation rule(s).",
    "Reusing saved session for qa (https://acme-demo.lightning.force.com)",
    "Running 2 case(s) on 2 parallel workers (2 chain(s)).",
-   "[W2] === SMOKE-ACC-002 [manual] The \"GFS Customers\" list view opens on the Accounts tab (model: claude-haiku-4-5)",
+   "[W2] === SMOKE-ACC-002 [manual] The \"Key Customers\" list view opens on the Accounts tab (model: claude-haiku-4-5)",
    "[W2]   -> browser:browser_navigate {\"url\":\"https://acme-demo.lightning.force.com/lightning/o/Account/list\"}",
    "[W1]   -> browser:browser_click {\"target\":\"getByRole('button', { name: 'New' })\"}",
    "[W1]   -> browser:browser_fill_form {\"fields\":[{\"name\":\"Account Name\",\"value\":\"AI-TEST Smoke 1762855331\"}]}"

@@ -21,7 +21,7 @@ const opt = n => { const i = args.indexOf(`--${n}`); const v = i > -1 ? args[i +
 const has = n => args.includes(`--${n}`);
 const problems = [];
 const LEVELS = new Set(['ui', 'unit', 'manual']);
-const KEY_RE = /^[A-Z][A-Z0-9]+-[0-9]+$/;
+const KEY_RE = /^[A-Z][A-Z0-9_]+-[0-9]+$/;
 const TC_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]*-TC-\d{2,3}$/;
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

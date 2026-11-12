@@ -18,11 +18,14 @@ import { GITHUB_SCOPES } from "./identity";
 import {
   acliInstallHelp, APP_SLUGS, browserDir, findCodeAnalyzer, findInstallation, findServerFor, isSubscriptionAuth, MCP_KNOWN, mcpListStateFor,
   parseAcliAuthStatus, parseClaudeAuth, parseEnvironments, parseMcpConfigs, parseMcpList, parseRulesets, parseRunners, parseSfOrgDisplay,
-  parseSfPlugins, requiredBrowsers, summarizeRunners, type AcliAuth, type McpListEntry, type McpRowId, type McpServerEntry, type RunnerInfo,
+  parseSfPlugins, requiredBrowsers, RUNNER_CONNECT_MESSAGE, RUNNER_REGISTER_HINT, summarizeRunners, type AcliAuth, type McpListEntry, type McpRowId, type McpServerEntry, type RunnerInfo,
 } from "./parse";
-import { checkLoginUrl, safeRelPath, sfOrgDecision, terminalCommand } from "./safety";
+import { checkLoginUrl, isNamedProduction, namedProdAliases, safeRelPath, sfConfigProdAlias, sfOrgDecision, terminalCommand } from "./safety";
 import { bannedSecretRefs, isBannedSecret } from "./secrets";
 import { buildProjectInfo, type ProjectInfo } from "./panelState";
+
+/** How long the first list() waits for a full check before answering with what is known so far. */
+export const LIST_WAIT_MS = 4000;
 
 const K = {
   confirmed: (id: string) => `deliveryCircuit.confirmed.${id}`,
@@ -213,10 +216,14 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
   async function sfOrgGuard(role: "dev" | "qa"): Promise<SfOrgGuard> {
     const alias = sfAlias(role);
     if (!alias || !/^[\w.@+-]+$/.test(alias)) return { alias, allowed: false, reason: `No usable sf CLI alias for the ${role} org (got "${alias}").` };
+    let sfConfig: string | undefined;
+    try { sfConfig = fs.readFileSync(path.join(root, ".specify", "extensions", "sf", "sf-config.yml"), "utf8"); } catch { sfConfig = undefined; }
+    const prod = namedProdAliases([config().sf.prodAlias, sfConfigProdAlias(sfConfig)]);
+    if (isNamedProduction(alias, prod)) return { alias, ...sfOrgDecision(alias, undefined, prod) };
     const r = await run("sf", ["org", "display", "--target-org", alias, "--json"], { cwd: root, timeoutMs: 90_000 });
     const p = parseSfOrgDisplay(r.stdout);
     const instanceUrl = p.ok ? p.org?.instanceUrl : undefined;
-    return { alias, instanceUrl, ...sfOrgDecision(alias, instanceUrl) };
+    return { alias, instanceUrl, ...sfOrgDecision(alias, instanceUrl, prod) };
   }
 
   async function checkAcli(): Promise<RowStatus> {
@@ -344,7 +351,7 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
     const sum = summarizeRunners(list);
     let pub = "";
     try { if ((await repoInfo())?.private === false) pub = " · public repo: GitHub advises against self-hosted runners here; require approval for all outside contributors' workflows"; } catch { /* ignore */ }
-    const howTo = sum.state === "disconnected" ? ". Register one with ./config.sh --labels circuit,circuit-release (Add runner opens the page with the commands)" : "";
+    const howTo = sum.state === "disconnected" ? RUNNER_REGISTER_HINT : "";
     return put(st("runner", { state: sum.state, detail: `${sum.detail}${howTo}${pub}` }), l);
   }
 
@@ -617,7 +624,7 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
   async function connectRunner(): Promise<RowStatus> {
     const { owner, repo } = repoRef();
     await vscode.env.openExternal(vscode.Uri.parse(`https://github.com/${owner}/${repo}/settings/actions/runners/new`));
-    void vscode.window.showInformationMessage("Follow GitHub's commands on the machine that has the sf, claude and acli logins. At ./config.sh add --labels circuit,circuit-release, and run it as a service. The row updates when it is online.",
+    void vscode.window.showInformationMessage(RUNNER_CONNECT_MESSAGE,
       { modal: true });
     pollUntilConnected("runner", 900_000, 30_000);
     return check("runner");
@@ -704,7 +711,17 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
     async list() {
       // While a full check runs, answer with what is known so far (rows show "Checking…") instead of waiting.
       if (checkAllInflight) return listNow().map(asContract);
-      if (!lastFull || Date.now() - lastFull > 5 * 60_000) return (await checkAll()).map(asContract);
+      if (!lastFull || Date.now() - lastFull > 5 * 60_000) {
+        // Wait a little for the quick rows (GitHub, Claude); slow CLI checks (sf org display, claude mcp list: up to
+        // 90 s each) keep showing "Checking…" and fire onDidChange as they finish, so the sidebar paints at once.
+        const all = checkAll();
+        let timer: NodeJS.Timeout | undefined;
+        const early = await Promise.race([
+          all.then((rows) => rows),
+          new Promise<undefined>((r) => { timer = setTimeout(() => r(undefined), LIST_WAIT_MS); }),
+        ]).finally(() => clearTimeout(timer));
+        return (early ?? listNow()).map(asContract);
+      }
       return listNow().map(asContract);
     },
     check: async (id) => asContract(await check(id)),

@@ -94,6 +94,66 @@ test('resolve-story.sh maps only feature/<KEY>-* branches', { skip: !hasBash && 
     assert.equal(r.stdout, '', `branch ${b}`);
   }
   assert.notEqual(rs('acme-12').status, 0);
+  // Jira project keys may hold '_': the branch parser and the key check agree, so such a branch is a story branch.
+  const us = rs('--branch', 'feature/ACME_X-12-rates');
+  assert.equal(us.status, 0, us.stderr);
+  assert.match(us.stdout, /^KEY=ACME_X-12$/m);
+});
+
+test('design-gate.mjs accepts the same keys as resolve-story (underscores included)', () => {
+  const d = mkdtempSync(join(tmpdir(), 'dg-'));
+  const s2 = { ...story(3), key: 'ACME_X-12' };
+  writeFileSync(join(d, 's.json'), JSON.stringify(s2));
+  writeFileSync(join(d, 'e.json'), JSON.stringify(epic(3)));
+  const env = { ...process.env, JIRA_FIELD_APPROVED_DESIGN_VERSION: F.approvedVersion, JIRA_FIELD_DESIGN_PAGE: F.designPage };
+  const r = spawnSync(process.execPath, [join(CI, 'design-gate.mjs'), '--key', 'ACME_X-12', '--story', join(d, 's.json'), '--epic', join(d, 'e.json'), '--config', join(d, 'none.json')], { encoding: 'utf8', env });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  rmSync(d, { recursive: true, force: true });
+});
+
+const WF = join(PLUGIN, 'templates', 'workflows');
+const jobsOf = text => text.split(/\n  (?=[a-z][a-z0-9-]*:\n)/).slice(1);
+
+test('gate and guard scripts run from the base commit, never from the PR being checked', () => {
+  for (const w of ['pr-checks.yml', 'design-gate.yml', 'persona-gates.yml', 'fix-router.yml']) {
+    const text = readFileSync(join(WF, w), 'utf8');
+    for (const j of jobsOf(text)) {
+      const name = j.split('\n')[0];
+      // A job that runs scripts/ci from the workspace root must have checked the root out at the base commit.
+      if (/(bash|node) scripts\/ci\//.test(j)) {
+        assert.match(j, /ref: "?\$\{\{ github\.event\.pull_request\.base\.sha/, `${w} ${name} runs scripts/ci from an unpinned checkout`);
+        assert.doesNotMatch(j, /fetch-depth: 0/, `${w} ${name}: a full PR checkout must not be where scripts/ci runs from`);
+      }
+      // A job that checks the PR out as data runs its scripts from .circuit-trusted, checked out at the base commit.
+      if (/\.circuit-trusted\/scripts\/ci/.test(j)) {
+        assert.match(j, /path: \.circuit-trusted/, `${w} ${name}`);
+        assert.match(j, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}\n\s+path: \.circuit-trusted/, `${w} ${name}`);
+      }
+    }
+  }
+});
+
+test('resolve-story failures are fatal wherever its output is eval-ed', () => {
+  for (const w of readdirSync(WF)) {
+    const text = readFileSync(join(WF, w), 'utf8');
+    assert.doesNotMatch(text, /eval "\$\(bash [^)]*resolve-story/, `${w}: eval "$(...)" swallows a resolve-story failure`);
+    for (const m of text.matchAll(/out=\$\(bash \S*resolve-story\.sh[^\n]*/g)) assert.match(m[0], /\|\| exit 1$/, `${w}: ${m[0]}`);
+  }
+});
+
+test('a PR that changes force-app/ must be on a story branch (design-gate and guard)', () => {
+  const dg = readFileSync(join(WF, 'design-gate.yml'), 'utf8');
+  assert.match(dg, /pulls\/\$PR\/files/);
+  assert.match(dg, /grep -q '\^force-app\/'[^\n]*\n[^\n]*::error::/);
+  assert.match(dg, /pull-requests: read/);
+  const guard = jobsOf(readFileSync(join(WF, 'pr-checks.yml'), 'utf8')).find(j => j.startsWith('guard:'));
+  assert.match(guard, /if grep -q '\^force-app\/' "\$RUNNER_TEMP\/changed\.txt"; then\n\s+echo "::error::/);
+});
+
+test('CODEOWNERS gives tests/ and test-cases/ to the testers', () => {
+  const co = readFileSync(join(PLUGIN, 'templates', 'repo', '.github', 'CODEOWNERS'), 'utf8');
+  assert.match(co, /^\/tests\/\s+@ORG\/testers\s*$/m);
+  assert.match(co, /^\/test-cases\/\s+@ORG\/testers\s*$/m);
 });
 
 test('no template workflow or CI script reads a stored credential', () => {

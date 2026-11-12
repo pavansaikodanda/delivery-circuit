@@ -188,7 +188,7 @@ describe("design page, G1 and C5", () => {
     expect(designApproval(edited, cfg.architects)).toMatchObject({ state: "changed", approvedVersion: 3, changedSinceApproval: true });
     expect(designApproval(page("page-222222.json", "222222"), cfg.architects)).toMatchObject({ state: "draft", detail: "Design page status: In progress (v2)" });
     expect(designApproval(undefined, cfg.architects).state).toBe("missing");
-    const byDev: DesignPage = { ...approved, versions: [{ number: 3, by: "someone@example.com", message: "Approved v3" }] };
+    const byDev: DesignPage = { ...approved, statusChange: { by: "someone@example.com", version: 3 } };
     expect(designApproval(byDev, cfg.architects)).toMatchObject({ state: "unverified-approver", approverIsArchitect: false });
     expect(designApproval(byDev, [])).toMatchObject({ state: "approved" });
     expect(designApproval(byDev, []).approverIsArchitect).toBeUndefined();
@@ -196,6 +196,26 @@ describe("design page, G1 and C5", () => {
     expect(isArchitect("Demo.User@example.com", cfg.architects)).toBe(true);
     expect(isArchitect("demo.user", cfg.architects)).toBe(true);
     expect(isArchitect(undefined, cfg.architects)).toBe(false);
+  });
+  it("G1: the approved version comes from Jira or the status-change record, never from a version message", () => {
+    expect(approved.statusChange).toEqual({ by: "demo.user@example.com", at: "2026-11-08T12:05:00Z", version: 3 });
+    expect(designApproval(approved, cfg.architects)).toMatchObject({ approvedVersion: 3, approvedVersionSource: "status-change" });
+    // An editor (or AI through updateConfluencePage) writes "Approved v5": the approval does not move, the drift shows.
+    const faked: DesignPage = { ...approved, version: 5, versions: [{ number: 5, by: "dev@example.com", message: "Approved v5" }, { number: 4, by: "dev@example.com", message: "x" }, ...approved.versions] };
+    expect(designApproval(faked, cfg.architects)).toMatchObject({ state: "changed", approvedVersion: 3, changedSinceApproval: true });
+    expect(designApproval(faked, [])).toMatchObject({ state: "changed", approvedVersion: 3 });
+    // Without any record, a version message still does not count: the current version is assumed and flagged.
+    const noRecord: DesignPage = { ...faked, statusChange: undefined };
+    const n = designApproval(noRecord, []);
+    expect(n).toMatchObject({ state: "approved", approvedVersion: 5, approvedVersionSource: "current", changedSinceApproval: false });
+    expect(n.detail).toMatch(/Approve design transition/);
+    // The epic's Approved design version (architects-only Jira transition, what CI reads) wins over everything.
+    expect(designApproval(faked, cfg.architects, 4)).toMatchObject({ state: "changed", approvedVersion: 4, approvedVersionSource: "jira-epic" });
+    expect(designApproval({ ...approved, statusChange: undefined }, cfg.architects, 3)).toMatchObject({ state: "approved", approvedVersion: 3, approvedVersionSource: "jira-epic" });
+    // A status-change record with only a time: the newest version created at or before it.
+    const timed: DesignPage = { ...faked, statusChange: { by: "demo.user@example.com", at: "2026-11-07T18:00:00Z" } };
+    expect(designApproval(timed, cfg.architects)).toMatchObject({ state: "changed", approvedVersion: 2 });
+    expect(normalizePage({ status: "Approved", statusChange: { by: "x@example.com", at: "not a date", version: "v" } }, "9", "t").statusChange).toEqual({ by: "x@example.com" });
   });
   it("C5: the story's Approved design version against the page's approved version", () => {
     const a = designApproval(approved, cfg.architects);

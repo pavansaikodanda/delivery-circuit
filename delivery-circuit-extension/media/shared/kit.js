@@ -89,8 +89,6 @@
           DC.list(d.prs.map((p) => DC.prRow(p, { viewer, onAction, onFeature: (id) => say("Opens feature " + id) })), { label: "Pull requests" })),
         DC.section("Connections", { count: d.connections.length, action: DC.button("Check all", () => say("Checking " + d.connections.length + " connections"), { kind: "ghost", size: "sm", icon: "sync" }) },
           DC.list(conns, { label: "Connections" })),
-        DC.section("Project secrets", { count: d.secrets.length },
-          DC.list(d.secrets.map((s, i) => DC.secretRow(s, { canSet: i !== 2, reason: "Needs repo admin" })), { label: "Secrets" })),
       ] : null,
 
       local.tab === "components" ? [
@@ -139,7 +137,7 @@
           DC.empty("Nothing here yet."),
           DC.table([{ key: "id", label: "Case" }, { key: "title", label: "Title" }, { key: "status", label: "Status", render: (r) => DC.badge(r.status, DC.stateClass(r.status)) }, { key: "when", label: "When", render: (r) => DC.when(r.at) }],
             [{ id: "SMOKE-ACC-001", title: "Create a Business Account", status: "passed", at: new Date(Date.now() - 4 * 36e5).toISOString() },
-              { id: "SMOKE-ACC-002", title: "GFS Customers list view", status: "failed", at: null }]))) : null,
+              { id: "SMOKE-ACC-002", title: "Key Customers list view", status: "failed", at: null }]))) : null,
 
       h("div.dc-footer", "Updated " + new Date().toTimeString().slice(0, 5)),
     ];

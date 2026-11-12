@@ -268,7 +268,7 @@ score 92`, links list. No gate chips, no ring.
 collapsed │ [pr]  #44 CE-14 Notify the account owner on escalation      ● 2 checks failing · 3 h   [Take over]  ›
 expanded  │ [pr]  #44 CE-14 Notify the account owner on escalation      ● 2 checks failing · 3 h   [Take over]  ˅
           │        feature/CE-14-escalation-notify · claude[bot] · attempt 3 · needs-human
-          │        Checks    ● guard  ● static  ● qa  ● spec-gate  ○ gate/developer  ○ gate/tester
+          │        Checks    ● guard  ● static  ● qa  ● design-gate  ○ gate/developer  ○ gate/tester
           │        Reviews   [cr] CodeRabbit · changes requested · SOQL inside loop in NotifyOwnerHandler
           │                  [an] AI Reviewer · block · VERDICT: BLOCK (bulk safety)
           │                  [sf] Code Analyzer · block · 2 violations
@@ -284,7 +284,7 @@ codicon `person`), author, state word in its tone, summary truncated to one line
 
 ### 5.7 Connection row — `DC.connectionRow(r, {onConnect, onCheck, onDisconnect, onManage})`
 ```
-[gh]  GitHub                                      ● Connected · pavansaikodanda     [Reconnect]  ›
+[gh]  GitHub                                      ● Connected · demo-architect      [Reconnect]  ›
 [cl]  Claude (subscription)                       ● Expires in 19 days               [Reconnect]  ›
 [at]  Atlassian MCP                               ● Problem                          [Sign in]    ›
 ```
@@ -293,8 +293,8 @@ spinner · `Not verified` muted · `Not connected` muted) followed by `· accoun
 `connectLabel`; strip = Check (codicon `sync`) + Manage (logo of the vendor page) ; menu = Disconnect (danger) when
 allowed. Expanded: detail line, links, scope + needed-by personas as muted text, disabled reason. Check puts the row
 in busy state; the result arrives through state → hash changes → flash + `DC.announce`.
-Secret rows (`DC.secretRow`) reuse the row with codicon `key`, mono name, status `set / missing / not visible to you`,
-primary `Set`/`Replace`.
+v3 stores no credentials, so there are no secret rows: the Project section shows read-only repo checks instead
+(rulesets, production environment, "workflows without stored credentials").
 
 ### 5.8 Tabs — `DC.tabs(items, selected, onSelect)`
 Text 13/500, selected `--dc-fg` with 2 px `--dc-primary` underline (one `.tab-ink` that slides 200 ms), others
@@ -415,10 +415,10 @@ actions for other personas live in the gate row's menu, disabled with reason.
 ### 6.4 Connections
 ```
 Connections                                   Act as [Architect|Developer|Tester]   ⟳
-pavan · acme-org/salesDemoOrg · admin
+demo-architect · acme-org/salesDemoOrg · admin
 ─────────────────────────────────────────────────────────────────────
 Personal · 5                                                        Check all
-[gh] GitHub                      ● Connected · pavansaikodanda   [Reconnect] ›
+[gh] GitHub                      ● Connected · demo-architect    [Reconnect] ›
 [cl] Claude (subscription)       ● Expires in 19 days            [Reconnect] ›
 [sf] Salesforce dev org          ● Connected · demo.user@…       [Reconnect] ›
 [ji] Jira                        ● Connected · dev.user@example.com[Reconnect] ›
@@ -429,7 +429,7 @@ Claude MCP · 3
 [sf] Salesforce DX MCP           ● Deprecated                    [Open]      ›
 Review tools · 3
 [cr] CodeRabbit                  ● Not verified                  [Install app]›   (disabled: admin only)
-Project (admin) · secrets as secret rows, grouped by Slack webhooks / CI secrets / Reminders
+Project · runner, GitHub for Jira, CodeRabbit rows, then read-only repo checks and reminders (no secrets in v3)
 8 connections only other personas need are hidden · Checked 3 min ago
 ```
 
@@ -442,7 +442,7 @@ Suites                      │ Smoke - Account · 2 cases                  Vali
 [file] Smoke - Account  ●2  │ Mode [manual|automation|both]  Org [qa|dev]   [Run all]
 [file] Lead convert     ●1●1│ Cases   Results   Runs   Generate
                             │ ☐ SMOKE-ACC-001 Create a Business Account…   ● passed · 4 h  ›
-                            │ ☐ SMOKE-ACC-002 The "GFS Customers" list…    ● passed · 4 h  ›
+                            │ ☐ SMOKE-ACC-002 The "Key Customers" list…    ● passed · 4 h  ›
                             │ ┌ Running · 1 of 2 · SMOKE-ACC-001 manual        [Cancel] ┐
                             │ │ ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ │
                             │ │ ● SMOKE-ACC-002 passed   ◌ SMOKE-ACC-001 running         │
@@ -457,12 +457,12 @@ rows expandable (steps table and evidence inside).
 
 ### 6.6 Setup wizard
 ```
-Project setup                                              B4 of 13 · Admin ▾   ⟳
-Phases                 │ B3 Secrets                           ● partial     [Check all]
-● B0 Prerequisites     │ ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ 3/5 steps
-● B1 Repo settings     │ [key] JIRA_API_TOKEN            ● set              [Replace] ›
-◐ B3 Secrets           │ [key] SLACK_WEBHOOK_QA          ● missing          [Set]     ›
-○ B4 Workflows         │ [person] Approve the GitHub App ● waiting for you  [Done]    ›
+Project setup                                              B2 of 13 · Admin ▾   ⟳
+Phases                 │ B2 Self-hosted runners               ● partial     [Check all]
+● B0 Prerequisites     │ ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ 2/4 steps
+● B1 GitHub repo       │ [server] Runner "circuit" online ● online           [Check]   ›
+◐ B2 Runners           │ [server] Runner "circuit-release" ● missing         [Copy]    ›
+○ B3 Salesforce logins │ [person] Sign in the runner user ● waiting for you  [Done]    ›
 ```
 Phase list = rows with status dot; step cards become rows (kind icon, title, status, one action; detail and
 checklist inside the expanded row). The config form (`build.config.yml`) is a second tab; Save becomes primary

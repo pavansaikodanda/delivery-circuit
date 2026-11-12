@@ -99,6 +99,9 @@ export interface DesignPage {
   version?: number;
   /** recent versions, newest first */
   versions: PageVersion[];
+  /** who set the current content status, when, and at which page version (the status-change record; version messages
+   *  are free text any editor can write, so they never count as approval) */
+  statusChange?: { by?: string; at?: string; version?: number };
   /** headings on the page (to tell spec, plan and data model apart) */
   sections: string[];
   openQuestions: number;
@@ -119,6 +122,9 @@ export interface DesignApproval {
   state: DesignState;
   /** the version that the Approved status refers to */
   approvedVersion?: number;
+  /** where approvedVersion came from: the epic's architects-only Jira field, the page's status-change record, or
+   *  neither (then the current version is assumed and nothing can be said about drift) */
+  approvedVersionSource?: "jira-epic" | "status-change" | "current";
   approvedBy?: string;
   /** true = approver is a configured architect; false = not one; undefined = cannot tell (no architects configured) */
   approverIsArchitect?: boolean;

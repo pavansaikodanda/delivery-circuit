@@ -1133,21 +1133,6 @@
       hash: r, state: r.state, announce: r.label + ": " + st.text,
     });
   }
-  /** DC.secretRow(s, {onSet, canSee}): key icon · mono name · set / missing / not visible to you · Set or Replace. */
-  function secretRow(s, o = {}) {
-    if (!s) return null;
-    const visible = s.present !== undefined && s.present !== null;
-    const st = !visible ? { tone: "", text: "not visible to you" } : s.present ? (s.expiring ? { tone: "warn", text: "expiring" } : { tone: "ok", text: "set" }) : { tone: "err", text: "missing" };
-    const onSet = o.onSet || (() => post({ type: "setSecret", name: s.name, env: s.env }));
-    const dis = o.canSet === false;
-    return row({
-      key: "s-" + (s.env ? s.env + "/" : "") + s.name, icon: icon("key"), title: s.name, mono: true,
-      status: st, titleTip: s.kind ? s.kind + (s.env ? " · environment " + s.env : "") : null,
-      primary: button(s.present ? "Replace" : "Set", () => onSet(s), { kind: s.present ? "secondary" : "primary", size: "sm", disabled: dis, reason: dis ? str(o.reason) || "Needs repo admin" : null }),
-      hash: [s, dis],
-    });
-  }
-
   // =====================================================================================================
   // Page structure (DESIGN.md §5.1, §5.2, §5.8, §5.9)
   // =====================================================================================================
@@ -1439,7 +1424,7 @@
     // structure
     header, personaChip, section, tabs, segmented, row, list, kv, checksLine, reviewList, reasonLine, box,
     // domain rows
-    queueRow, featureRow, stageLine, prRow, connectionRow, secretRow, actionButtons, splitActions,
+    queueRow, featureRow, stageLine, prRow, connectionRow, actionButtons, splitActions,
     // feedback and data
     toast, skeleton, empty, notice, progress, ring, log, logAppend,
     // first-kit names

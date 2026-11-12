@@ -18,12 +18,15 @@ const SETTINGS = ["deliveryCircuit.personaOverride", "deliveryCircuit.githubTeam
 export interface ViewsHandle {
   /** True once VS Code has resolved the sidebar webview ("deliveryCircuit.home"). */
   homeResolved(): boolean;
+  /** The sidebar and persona-panel models the webviews render (used by the integration test). */
+  homeState(): Promise<M.HomeState>;
+  personaState(requested?: Persona | null): Promise<M.PersonaState>;
 }
 
 export function registerViews(s: CircuitServices): ViewsHandle {
   const c = new ViewsController(s);
   s.ctx.subscriptions.push(c);
-  return { homeResolved: () => c.homeResolved() };
+  return { homeResolved: () => c.homeResolved(), homeState: () => c.homeState(), personaState: (p) => c.personaState(p ?? null) };
 }
 
 class ViewsController implements vscode.Disposable, vscode.WebviewViewProvider {
@@ -67,7 +70,7 @@ class ViewsController implements vscode.Disposable, vscode.WebviewViewProvider {
       }),
     );
     const watcher = vscode.workspace.createFileSystemWatcher(
-      new vscode.RelativePattern(s.root, "{.specify/*,.claude/hooks/circuit-guard.mjs}"), false, true, false);
+      new vscode.RelativePattern(s.root, ".claude/hooks/circuit-guard.mjs"), false, true, false);
     watcher.onDidCreate(() => this.schedule());
     watcher.onDidDelete(() => this.schedule());
     this.subs.push(watcher);
@@ -83,6 +86,8 @@ class ViewsController implements vscode.Disposable, vscode.WebviewViewProvider {
   }
 
   homeResolved(): boolean { return !!this.home; }
+  homeState(): Promise<M.HomeState> { return this.loadHome(); }
+  personaState(requested: Persona | null): Promise<M.PersonaState> { return this.loadPersona(requested); }
 
   // ---------- sidebar ----------
   resolveWebviewView(view: vscode.WebviewView): void {

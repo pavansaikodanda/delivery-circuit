@@ -9,7 +9,7 @@ set -euo pipefail
 cmd="${1:-}"; key="${2:-}"
 command -v acli >/dev/null 2>&1 || { echo "jira.sh: acli is not installed on this runner" >&2; exit 3; }
 if [ "$cmd" = status ]; then acli jira auth status >/dev/null 2>&1; exit $?; fi
-[[ "$key" =~ ^[A-Z][A-Z0-9]+-[0-9]+$ ]] || { echo "jira.sh: bad key" >&2; exit 1; }
+[[ "$key" =~ ^[A-Z][A-Z0-9_]+-[0-9]+$ ]] || { echo "jira.sh: bad key" >&2; exit 1; }
 case "$cmd" in
   get)
     acli jira workitem view "$key" --json --fields '*all' ;;

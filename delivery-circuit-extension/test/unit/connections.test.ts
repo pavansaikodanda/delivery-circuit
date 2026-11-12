@@ -5,7 +5,7 @@ import type { Persona } from "../../src/core/contracts";
 import { actionable, baseStatus, CONNECTIONS, visibleRows, type RowStatus } from "../../src/connections/catalog";
 import { isPlaceholder, normalizeSite, parseBuildConfig, parseDate, parseReminders, slackWorkspaceUrl } from "../../src/connections/config";
 import { applyExpiry, claudeTokenExpiry, expiryState, expiryText } from "../../src/connections/expiry";
-import { checkLoginUrl, classifySfUrl, safeRelPath, sfOrgDecision, terminalCommand } from "../../src/connections/safety";
+import { checkLoginUrl, classifySfUrl, isNamedProduction, namedProdAliases, safeRelPath, sfConfigProdAlias, sfOrgDecision, terminalCommand } from "../../src/connections/safety";
 import {
   findCodeAnalyzer, findServerFor, isSubscriptionAuth, mcpListStateFor, parseClaudeAuth, parseMcpConfigs, parseMcpList,
   parseSfOrgDisplay, parseSfPlugins, requiredBrowsers, browserDir,
@@ -93,6 +93,17 @@ describe("Salesforce URL safety", () => {
     const none = sfOrgDecision("qa", undefined);
     expect(none.allowed).toBe(false);
     expect(none.reason).toMatch(/does not resolve/);
+  });
+  it("refuses only the alias the project names as production, never by org type", () => {
+    const prod = namedProdAliases(["client-live", sfConfigProdAlias('project:\n  org_aliases:\n    prod: "acme-release"  # the release org\n')], "rel1, Rel2");
+    for (const a of ["prod", "production", "live", "PRD", "client-live", "acme-release", "rel1", "REL2", "acme-prod"]) {
+      expect(isNamedProduction(a, prod), a).toBe(true);
+      expect(sfOrgDecision(a, "https://acme-demo.my.salesforce.com", prod)).toMatchObject({ allowed: false, reason: expect.stringMatching(/names as production/) });
+    }
+    // An SDO / production-edition demo org under a DEV or QA alias is fine.
+    for (const a of ["qa", "dev", "salesOrgSDO", "productivity"]) expect(sfOrgDecision(a, "https://acme-demo.my.salesforce.com", prod), a).toEqual({ allowed: true });
+    expect(sfConfigProdAlias("prod: none")).toBeUndefined();
+    expect(sfConfigProdAlias(undefined)).toBeUndefined();
   });
   it("defaults to login.salesforce.com", () => {
     expect(checkLoginUrl(undefined)).toEqual({ allowed: true, url: "https://login.salesforce.com" });

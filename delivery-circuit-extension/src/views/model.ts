@@ -171,9 +171,15 @@ export function disabledReason(id: Identity | null, a: ActionRef, allowed: boole
   return a.kind === "gate" ? "This gate is not ready yet" : "Not available right now";
 }
 
+/** A well-formed stand-in for an argument the panel asks for on click, so the persona rules can be checked first. */
+const SAMPLE_ARG: Record<string, string | number> = { story: "ABC-1", pr: 1, feature: "ABC-1", source: "source" };
+
 export function toActionView(id: Identity | null, a: ActionRef, allowed: (a: ActionRef) => boolean): ActionView {
   let ok = false;
-  try { ok = !!id && allowed(a); } catch { ok = false; }
+  // An action still missing its argument (picked on click, then validated again by actions.run) is allowed when the
+  // persona rules allow it with a valid argument; otherwise a named action would read as "Not available right now".
+  const probe = needsArg(a) ? withArg(a, SAMPLE_ARG[String(a.args?.argKind)]) : a;
+  try { ok = !!id && allowed(probe); } catch { ok = false; }
   return { ...a, allowed: ok, reason: disabledReason(id, a, ok) };
 }
 
@@ -398,12 +404,11 @@ export function groupSignals(reviews: ReviewSignal[]): { groups: SignalGroup[]; 
   return { groups, missing };
 }
 
-export type PrKind = "build" | "spec" | "intake" | "other";
+/** v3 has one PR kind with gates: the story PR on feature/<KEY>-<slug>. Design and intake live in Confluence, so
+ *  there are no spec/ or intake/ PRs and no spec-gate (G1 is read from the design page). */
+export type PrKind = "build" | "other";
 export function prKind(pr: PrRef): PrKind {
-  if (pr.branch.startsWith("feature/")) return "build";
-  if (pr.branch.startsWith("spec/")) return "spec";
-  if (pr.branch.startsWith("intake/")) return "intake";
-  return "other";
+  return pr.branch.startsWith("feature/") ? "build" : "other";
 }
 
 function checkGate(c: CheckState | undefined, draft: boolean): GateState {
@@ -442,11 +447,6 @@ export function prGates(pr: PrRef, persona: Persona): StepView[] {
   const kind = prKind(pr);
   const mk = (g: GateId, state: GateState): StepView =>
     ({ id: g, label: g, state, own: true, title: `${g} ${GATES[g].label} · ${state}` });
-  if (kind === "spec" || kind === "intake") {
-    if (persona !== "architect") return [];
-    const sg = pr.checks["spec-gate"];
-    return [mk("G1", sg === "success" ? "done" : sg === "failure" ? "blocked" : "waiting")];
-  }
   if (kind !== "build") return [];
   if (persona === "developer") {
     return [...(isAiPr(pr) ? [mk("G3", planGate(pr, "plan-approved"))] : []), mk("G5", checkGate(pr.checks["gate/developer"], pr.draft))];
@@ -462,9 +462,7 @@ export function prGates(pr: PrRef, persona: Persona): StepView[] {
  *  whose own PRs are not theirs to review. */
 export function prNeedsPersona(pr: PrRef, persona: Persona, login?: string): boolean {
   if (isDone(pr)) return false;
-  const kind = prKind(pr);
-  if (kind === "spec" || kind === "intake") return persona === "architect" && prGates(pr, persona).some((g) => g.state === "waiting" || g.state === "blocked");
-  if (kind !== "build") return false;
+  if (prKind(pr) !== "build") return false;
   const mine = !!login && pr.author === login;
   const open = (c: string) => pr.checks[c] !== "success";
   switch (persona) {
@@ -484,13 +482,11 @@ export function prNeedsPersona(pr: PrRef, persona: Persona, login?: string): boo
   }
 }
 
-/** PRs relevant to a persona: Architect all; Developer build, spec and other PRs; Tester build and spec PRs. */
+/** PRs relevant to a persona: Architect and Developer all; Tester story (build) PRs only. */
 export function prsForPersona(prs: PrRef[], persona: Persona, login?: string): PrRef[] {
   const keep = (p: PrRef) => {
-    const k = prKind(p);
-    if (persona === "architect") return true;
-    if (persona === "developer") return k !== "intake";
-    return k === "build" || k === "spec";
+    if (persona === "tester") return prKind(p) === "build";
+    return true;
   };
   return prs.filter(keep).sort((a, b) =>
     Number(prNeedsPersona(b, persona, login)) - Number(prNeedsPersona(a, persona, login)) || b.updatedAt.localeCompare(a.updatedAt));
@@ -538,14 +534,24 @@ export function prActions(pr: PrRef, persona: Persona): ActionRef[] {
       out.push(named("dev:fix", { attempt: attempt + 1, checks: failed.join(",") }));
     }
     if (pr.draft && isAiPr(pr) && !has(pr, "plan-approved")) out.push(pick("/dev-review-plan"));
-    if (kind !== "intake" && !pr.draft) out.push(pick("/dev-review-pr"));
+    // Step 12 (same rule as the queue): G3 + G4 and the tests on the branch -> build; built and green -> mark ready.
+    const files = (pr as PrRef & { files?: string[] }).files;
+    const built = Array.isArray(files) && files.some((f) => f.startsWith("force-app/"));
+    const greenNow = Object.entries(pr.checks ?? {}).every(([k, v]) => k.startsWith("gate/") || v === "success" || v === "missing");
+    if (kind === "build" && pr.draft && !stuck && pr.storyKey && has(pr, "plan-approved") && has(pr, "testplan-approved") && !failed.length) {
+      const build = testsOn(pr) && !built ? named("dev:start-story", { arg: `${pr.storyKey} build`, storyKey: pr.storyKey, pr: pr.number, phase: "build" }) : undefined;
+      if (build) out.push({ ...build, label: "Build with AI" });
+      // The action pins to the PR's head at confirmation time (it reads it with the person's login).
+      if (built && greenNow) out.push({ id: "gate:ready", label: "Mark ready for review", persona, kind: "gate", args: { pr: pr.number } });
+    }
+    if (!pr.draft) out.push(pick("/dev-review-pr"));
     // Review room (steps 15-16): open it once checks are green; record the verdict once it is open.
     const green = Object.entries(pr.checks ?? {}).every(([k, v]) => k.startsWith("gate/") || v === "success" || v === "missing");
     if (kind === "build" && !pr.draft && !stuck && green && !has(pr, REVIEW_ROOM)) out.push(named("review:open-room"));
     if (kind === "build" && !stuck && has(pr, REVIEW_ROOM) && !has(pr, REVIEW_VERDICT)) out.push(named("review:record-verdict"));
   } else if (persona === "tester") {
     const filesKnown = Array.isArray((pr as PrRef & { files?: string[] }).files);
-    if (kind === "build" && pr.storyKey && !has(pr, "testplan-approved") && !testsOn(pr) && (pr.draft || filesKnown)) out.push(named("qa:add-tests", { arg: pr.storyKey, storyKey: pr.storyKey }));
+    if (kind === "build" && pr.storyKey && !testsOn(pr) && (pr.draft || filesKnown)) out.push(named("qa:add-tests", { arg: pr.storyKey, storyKey: pr.storyKey }));
     if (pr.draft && isAiPr(pr) && !has(pr, "testplan-approved")) out.push(pick("/qa-review-testplan"));
     if (kind === "build" && (has(pr, "needs-qa") || !pr.draft)) out.push(pick("/qa-explore"));
   } else if (!pr.draft) {

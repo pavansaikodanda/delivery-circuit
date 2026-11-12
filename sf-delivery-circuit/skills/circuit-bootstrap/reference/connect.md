@@ -60,6 +60,10 @@ reference); Confluence goes through the Atlassian Rovo MCP server.
   ui, unit, manual), *AC id* (short text), *Testability confirmed* (checkbox or select).
 - Epic workflow: Backlog → Design Review → **Approve design** → Design Approved. Restrict the Approve design
   transition to group `architects` (condition "User is in group") and show *Approved design version* on its screen.
+  Keep *Approved design version* **off the Epic edit screen** (stories keep it on theirs): then only that transition can
+  set the epic's value, which is what `design-gate` and the extension read as G1. Record the transition id in
+  `.specify/extensions/jira/jira-config.json` as `"transitions": { "Approve design": { "id": "<id>" } }` so the AI
+  guard also refuses it by id.
   If the design is reopened, transition the epic back to Design Review (design-gate then fails every story).
 - Story workflow: Backlog → **Ready for Dev** (condition: group `testers`, *Testability confirmed* set, label
   `ai-ready`: G2) → In Build → Code Review → QA → Done. Optional automation: on "Pull request merged" → Done.

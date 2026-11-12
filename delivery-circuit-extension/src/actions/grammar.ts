@@ -5,6 +5,7 @@
 //   gate:label        args {pr, label}  (or id "gate:label:<label>")  label in plan-approved | testplan-approved | ai-ready
 //   gate:review       args {pr, event: APPROVE | REQUEST_CHANGES, sha?}   sha = head commit the person reviewed
 //   gate:merge        args {pr, sha?}
+//   gate:ready        args {pr, sha?}   the human Developer takes their own story PR out of draft (AI never does)
 //   gate:deploy       args {runId}
 //   nav:feature       args {featureId}
 //   nav:testing       args {suite?}
@@ -27,6 +28,7 @@ export type ParsedAction =
   | { type: "label"; pr: number; label: GateLabel; gate: GateId }
   | { type: "review"; pr: number; event: ReviewEvent; gate: GateId; sha?: string }
   | { type: "merge"; pr: number; gate: GateId; sha?: string }
+  | { type: "ready"; pr: number; sha?: string }
   | { type: "deploy"; runId: number; gate: GateId }
   | { type: "nav-feature"; featureId?: string }
   | { type: "nav-testing"; suite?: string }
@@ -197,6 +199,10 @@ export function parseAction(a: ActionRef): ParsedAction {
       }
       case "deploy":
         return { type: "deploy", runId: num(args.runId, "Run id"), gate: "G9" };
+      case "ready": {
+        const head = sha(args.sha);
+        return { type: "ready", pr: num(args.pr, "PR number"), ...(head ? { sha: head } : {}) };
+      }
       default:
         throw new ActionError(`Unknown gate action ${id}`);
     }
@@ -234,6 +240,7 @@ export function denyReason(id: Identity | null, a: ActionRef): string | null {
   }
   if (!id.personas.includes(a.persona)) return `Only the ${a.persona} persona can do this`;
   if (!canAct(id, a.persona)) return `Switch to the ${a.persona} persona to do this (you are acting as ${id.active ?? "no persona"})`;
+  if (p.type === "ready" && a.persona !== "developer") return "Marking a story PR ready for review is the Developer's step";
   const gate = gateOf(p);
   if (gate && GATES[gate].owner !== a.persona) return `${gate} (${GATES[gate].label}) belongs to the ${GATES[gate].owner}`;
   return null;
@@ -279,6 +286,7 @@ export function confirmText(p: ParsedAction, c: ConfirmContext): string {
       ? `Approve PR #${p.pr}${at(c)} in ${repo} as ${c.login} (${p.gate}: ${GATES[p.gate].label}).`
       : `Request changes on PR #${p.pr}${at(c)} in ${repo} as ${c.login}.`;
     case "merge": return `Merge PR #${p.pr}${at(c)} in ${repo} with the ${c.mergeMethod ?? "repository default"} method as ${c.login} (G8).`;
+    case "ready": return `Mark PR #${p.pr}${at(c)} in ${repo} ready for review as ${c.login}. Code, QA and design reviews (G5-G7), the AI Reviewer and the merge path start from here.`;
     case "deploy": return `Approve the deployment of workflow run #${p.runId} in ${repo} to ${(c.environments ?? ["production"]).join(", ")} as ${c.login} (G9).`;
     case "ai": return `Start Claude with "${p.prompt}".`;
     case "approve-design": return `Open the design page${p.key ? ` of ${p.key}` : ""} in Confluence. An architect sets its status to Approved there; the circuit records that page version for the stories (G1). AI never approves.`;

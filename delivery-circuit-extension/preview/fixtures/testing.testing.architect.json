@@ -1,6 +1,6 @@
 {
   "persona": {
-    "login": "pavansaikodanda",
+    "login": "demo-architect",
     "active": "architect",
     "canSee": true,
     "canRun": false,
@@ -118,14 +118,14 @@
       },
       {
         "id": "SMOKE-ACC-002",
-        "title": "The \"GFS Customers\" list view opens on the Accounts tab",
+        "title": "The \"Key Customers\" list view opens on the Accounts tab",
         "section": "Smoke",
         "target": "salesforce",
         "steps": 2,
         "jiraKey": "SDO-32",
         "manual": {
           "status": "passed",
-          "summary": "Test case SMOKE-ACC-002 passed successfully. The GFS Customers list view opened correctly with proper header display and 13 account records shown with no errors.",
+          "summary": "Test case SMOKE-ACC-002 passed successfully. The Key Customers list view opened correctly with proper header display and 13 account records shown with no errors.",
           "at": "2026-11-11T07:28:45.556Z",
           "model": "claude-haiku-4-5",
           "defects": 0,
@@ -141,7 +141,7 @@
         ],
         "latest": {
           "status": "passed",
-          "summary": "Test case SMOKE-ACC-002 passed successfully. The GFS Customers list view opened correctly with proper header display and 13 account records shown with no errors.",
+          "summary": "Test case SMOKE-ACC-002 passed successfully. The Key Customers list view opened correctly with proper header display and 13 account records shown with no errors.",
           "at": "2026-11-11T07:28:45.556Z",
           "model": "claude-haiku-4-5",
           "defects": 0,
@@ -258,10 +258,10 @@
       },
       {
         "id": "SMOKE-ACC-002",
-        "title": "The \"GFS Customers\" list view opens on the Accounts tab",
+        "title": "The \"Key Customers\" list view opens on the Accounts tab",
         "mode": "manual",
         "status": "passed",
-        "summary": "Test case SMOKE-ACC-002 passed successfully. The GFS Customers list view opened correctly with proper header display and 13 account records shown with no errors.",
+        "summary": "Test case SMOKE-ACC-002 passed successfully. The Key Customers list view opened correctly with proper header display and 13 account records shown with no errors.",
         "model": "claude-haiku-4-5",
         "durationSec": 135,
         "costUsd": 0.21,
@@ -272,9 +272,9 @@
             "actual": "Accounts tab opened successfully at /lightning/o/Account/list displaying the Recently Viewed list view with 5 items"
           },
           {
-            "step": "Select the \"GFS Customers\" list view",
+            "step": "Select the \"Key Customers\" list view",
             "status": "passed",
-            "actual": "GFS Customers list view opened successfully. Header displays 'Accounts GFS Customers'. Table shows 13 customer accounts (Atlas Maritime Lines, Cedar Forwarders, CMA CGM Mediterranean, Cosco Shipping Lines UAE, DSV Air & Sea UAE, Emirates Shipping Lines, Falcon Lines LLC, Hapag-Lloyd Middle East, Kuehne+Nagel UAE, Maersk Line UAE, MSC Gulf, ONE Network UAE, Sahara Logistics) with no error messages"
+            "actual": "Key Customers list view opened successfully. Header displays 'Accounts Key Customers'. Table shows 13 customer accounts (Atlas Maritime Lines, Cedar Forwarders, CMA CGM Mediterranean, Cosco Shipping Lines UAE, DSV Air & Sea UAE, Emirates Shipping Lines, Falcon Lines LLC, Hapag-Lloyd Middle East, Kuehne+Nagel UAE, Maersk Line UAE, MSC Gulf, ONE Network UAE, Sahara Logistics) with no error messages"
           }
         ],
         "attempts": [

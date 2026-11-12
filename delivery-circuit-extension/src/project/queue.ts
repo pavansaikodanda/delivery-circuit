@@ -7,6 +7,8 @@
 //   arch:approve-design {featureId, pageId, url}   opens the Confluence page; the person sets the status there (G1)
 //   decision:record {featureId, pageId?}           Claude session: /record-decision <featureId> (C1)
 //   dev:start-story {storyKey, featureId}          Claude session: /dev-start-story <KEY> (plan, branch, draft PR)
+//   dev:start-story {storyKey, featureId, pr, phase: "build"}   /dev-start-story <KEY> build (step 12, after G3 + G4)
+//   gate:ready {pr, sha?}                          the human Developer marks their own story PR ready (own login)
 //   dev:fix {pr, checks, attempt}                  Claude session: /dev-fix <pr> with the failure prefilled
 //   qa:add-tests {pr, storyKey, suite, tcIndex}    Claude session: /qa-add-tests <KEY> (commit suite + tc index to the PR)
 //   review:open-room {pr}                          Claude session: /review-room open <pr> (Slack kick-off, C2/C8)
@@ -113,6 +115,14 @@ export const failingChecks = (pr: PrInfo) => Object.entries(pr.checks).filter(([
 const pendingChecks = (pr: PrInfo) => Object.entries(pr.checks).filter(([k, v]) => v === "pending" && !k.startsWith("gate/")).map(([k]) => k);
 const mine = (pr: PrInfo, env: QueueEnv) => !env.login || pr.author === env.login;
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+/** Suite + tc index on the PR: true / false, or undefined when the file list cannot tell (files(first: 100)). */
+export function testsOnPr(pr: PrInfo, key: string): boolean | undefined {
+  if (!pr.files) return undefined;
+  const both = pr.files.includes(tcIndexPath(key)) && pr.files.includes(suitePath(key));
+  return pr.files.length < 100 || both ? both : undefined;
+}
+/** The story PR already holds code (force-app/): the build ran. undefined when the file list is unknown. */
+const hasCode = (pr: PrInfo) => (pr.files ? pr.files.some((f) => f.startsWith("force-app/")) : undefined);
 
 function prItemBase(persona: Persona, kind: V3QueueKind, pr: PrInfo, f: FeatureInfo | undefined): Omit<V3QueueItem, "title" | "links" | "actions"> {
   const base: Omit<V3QueueItem, "title" | "links" | "actions"> = { id: `${persona}:${kind}:pr-${pr.number}`, persona, kind, prNumber: pr.number, since: pr.updatedAt };
@@ -280,6 +290,22 @@ export function buildQueue(persona: Persona, input: QueueInput): QueueItem[] {
         continue;
       }
       const green = fails.length === 0 && pendingChecks(pr).length === 0;
+      // Step 12: after G3 + G4 and the Tester's tests on the branch, the Developer's Claude builds; then the human
+      // Developer takes the PR out of draft (reviews G5-G7, the AI Reviewer and merge all wait for that).
+      if (mine(pr, env) && pr.draft && has(pr, "testplan-approved") && fails.length === 0 && pr.storyKey) {
+        const tests = testsOnPr(pr, pr.storyKey);
+        if (tests !== false && !hasCode(pr)) {
+          items.push({ ...prItemBase(persona, "build", pr, f), title: `#${pr.number} ${pr.title}`,
+            detail: "Plans approved (G3, G4) and the tests are on the branch: build with AI, prove it with a check-only validate on DEV, push",
+            links: prLinks(pr, f, env, ["PLAN.md", "TESTPLAN.md"]),
+            actions: [v3Action("dev:start-story", persona, "Build with AI", `${pr.storyKey} build`, { storyKey: pr.storyKey, ...(f ? { featureId: f.id } : {}), pr: pr.number, phase: "build" })] });
+        } else if (hasCode(pr) && green) {
+          items.push({ ...prItemBase(persona, "mark-ready", pr, f), title: `#${pr.number} ${pr.title}`,
+            detail: "Built and checks green: mark it ready for review (code, QA and design reviews start)",
+            links: prLinks(pr, f, env, ["PLAN.md"]),
+            actions: [{ id: "gate:ready", label: "Mark ready for review", persona, kind: "gate", args: { pr: pr.number, ...headArg(pr.headSha) } }] });
+        }
+      }
       if (mine(pr, env) && !pr.draft && green && !has(pr, REVIEW_ROOM_LABEL)) {
         items.push({ ...prItemBase(persona, "review-room", pr, f), title: `#${pr.number} ${pr.title}`,
           detail: "Checks green: open the review room in Slack (CodeRabbit and Claude debate the PR)",
@@ -335,9 +361,7 @@ export function buildQueue(persona: Persona, input: QueueInput): QueueItem[] {
         continue;
       }
       // files(first: 100): a longer list may simply not show the tests, so only a short list proves they are missing.
-      const testsOnPr = pr.files && (pr.files.length < 100 || (pr.files.includes(tcIndexPath(key)) && pr.files.includes(suitePath(key))))
-        ? pr.files.includes(tcIndexPath(key)) && pr.files.includes(suitePath(key)) : undefined;
-      if (testsOnPr === false) {
+      if (testsOnPr(pr, key) === false) {
         items.push({ ...prItemBase(persona, "add-tests", pr, f), title: `Add tests to ${key}`,
           detail: `Commit ${suitePath(key)} and ${tcIndexPath(key)} to PR #${pr.number}`,
           links: prLinks(pr, f, env, ["TESTPLAN.md"]),

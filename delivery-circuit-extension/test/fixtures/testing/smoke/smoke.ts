@@ -4,7 +4,9 @@
 //   node test/fixtures/testing/smoke/smoke.cjs <workspace> <suite> [qa|dev] [manual|automation|both]
 // Uses the sf CLI alias of the role (no passwords) and the Claude subscription login (ANTHROPIC_API_KEY is stripped).
 import { execFile } from "child_process";
+import * as fs from "fs";
 import * as path from "path";
+import { isNamedProduction, namedProdAliases, sfConfigProdAlias } from "../../../../src/connections/safety";
 import { setExec } from "../../../../src/testing/engine/exec";
 import { TestingEngine } from "../../../../src/testing/engine/core";
 import { verdictFor } from "../../../../src/testing/engine/verdict";
@@ -25,10 +27,14 @@ async function main() {
     toolRoot: path.resolve(__dirname, "../../../.."),
     settings: () => ({ headless: true, models: ["claude-haiku-4-5", "claude-sonnet-5-5"], workers: 2, maxTurns: 80 }),
     sfAlias: (r) => r,
-    // Smoke runs only against sandboxes / scratch orgs (no build.config.yml trial declaration here).
+    // Any connected org may be DEV/QA (sandbox, scratch, Developer Edition, SDO or another demo org): no org-type
+    // check (CIRCUIT-V3 principle 4). Only the alias the project names as production is refused, as in the extension.
     guardOrg: async (r) => {
+      let sfConfig: string | undefined;
+      try { sfConfig = fs.readFileSync(path.join(path.resolve(ws), ".specify", "extensions", "sf", "sf-config.yml"), "utf8"); } catch { sfConfig = undefined; }
+      if (isNamedProduction(r, namedProdAliases([sfConfigProdAlias(sfConfig)]))) return { allowed: false, reason: `Alias ${r} is the org the project names as production.` };
       const o = await describeOrg(r);
-      return o?.connected && o.isSandbox ? { allowed: true } : { allowed: false, reason: `Alias ${r} is not a connected sandbox.` };
+      return o?.connected ? { allowed: true } : { allowed: false, reason: `Alias ${r} is not a connected org.` };
     },
   });
   const started = Date.now();

@@ -118,7 +118,7 @@ describe("features from Jira epics and Confluence design pages", () => {
     expect(features[2].gates).toMatchObject({ G1: "waiting", G2: "not-started" });
   });
   it("G1 is blocked when someone outside architects set Approved, and unknown before the page is read", () => {
-    const { features: bad } = build({ pageEdit: (p) => { p["123456"] = { ...p["123456"], versions: [{ number: 3, by: "dev.person@example.com", message: "Approved v3" }] }; } });
+    const { features: bad } = build({ pageEdit: (p) => { p["123456"] = { ...p["123456"], statusChange: { by: "dev.person@example.com", version: 3 } }; } });
     expect(bad[0].gates.G1).toBe("blocked");
     expect(bad[0].stages.signoff).toBe("blocked");
     const { features: unread } = build({ pageEdit: (p) => { delete p["123456"]; } });
@@ -224,6 +224,34 @@ describe("developer queue", () => {
     expect(verdict.actions[0]).toMatchObject({ id: "review:record-verdict", args: { pr: 42, command: "/review-room", arg: "verdict 42" } });
     pr(green, 42).labels.push("review-verdict");
     expect(queue("developer", { prs: green, env: { login: "dev1" } }).some((i) => i.prNumber === 42 && ["review-room", "record-verdict"].includes(i.kind))).toBe(false);
+  });
+  it("Build with AI after G3 + G4 and the tests, then Mark ready for review (human, own login)", () => {
+    const TESTS = ["tests/ABC-12.tc.json", "test-cases/ABC-12.sf-tests.yaml"];
+    const setup = (edit: (p: PrInfo) => void) => withPr((prs) => { const p = pr(prs, 42); p.author = "dev1"; p.labels.push("plan-approved"); p.checks = { guard: "success" }; edit(p); });
+    const items = (prs: PrInfo[], login = "dev1") => queue("developer", { prs, env: { login } }).filter((i) => i.prNumber === 42);
+
+    const ready = setup((p) => { p.files = [...p.files!, ...TESTS]; });
+    const build = items(ready).find((i) => i.kind === "build")!;
+    expect(build.actions).toEqual([{ id: "dev:start-story", label: "Build with AI", persona: "developer", kind: "ai",
+      args: { storyKey: "ABC-12", featureId: "ABC-10", pr: 42, phase: "build", command: "/dev-start-story", arg: "ABC-12 build" } }]);
+    expect(items(ready).some((i) => i.kind === "mark-ready")).toBe(false);
+    // no build before the tests are on the branch, before G4, on a failing PR, or on someone else's PR
+    expect(items(setup(() => {})).some((i) => i.kind === "build")).toBe(false);
+    expect(items(setup((p) => { p.files = [...p.files!, ...TESTS]; p.labels = p.labels.filter((l) => l !== "testplan-approved"); })).some((i) => i.kind === "build")).toBe(false);
+    expect(items(setup((p) => { p.files = [...p.files!, ...TESTS]; p.checks = { static: "failure" }; })).some((i) => i.kind === "build")).toBe(false);
+    expect(items(ready, "dev2").some((i) => i.kind === "build")).toBe(false);
+    // a file list too long to tell: the build skill checks the tests itself
+    expect(items(setup((p) => { p.files = Array.from({ length: 100 }, (_, n) => `docs/x${n}.md`); })).some((i) => i.kind === "build")).toBe(true);
+
+    // built (force-app on the branch) and green: the human Developer marks it ready
+    const built = setup((p) => { p.files = [...p.files!, ...TESTS, "force-app/main/default/classes/Escalate.cls"]; p.headSha = "a".repeat(40); });
+    const mark = items(built).find((i) => i.kind === "mark-ready")!;
+    expect(mark.actions).toEqual([{ id: "gate:ready", label: "Mark ready for review", persona: "developer", kind: "gate", args: { pr: 42, sha: "a".repeat(40) } }]);
+    expect(items(built).some((i) => i.kind === "build")).toBe(false);
+    pr(built, 42).checks.qa = "pending";
+    expect(items(built).some((i) => i.kind === "mark-ready")).toBe(false);
+    pr(built, 42).checks.qa = "success"; pr(built, 42).draft = false;
+    expect(items(built).map((i) => i.kind)).toEqual(["review-room"]);
   });
   it("code review (G5) on teammates' ready PRs", () => {
     const prs = withPr((list) => { pr(list, 43).checks["gate/developer"] = "missing"; pr(list, 43).labels = pr(list, 43).labels.filter((l) => l !== "ai-attempt-2"); });

@@ -41,6 +41,14 @@ export function normalizePage(raw: any, pageId: string, readAt = new Date().toIS
     .filter((v: PageVersion | undefined): v is PageVersion => !!v)
     .sort((a: PageVersion, b: PageVersion) => b.number - a.number);
   if (!page.version && page.versions.length) page.version = page.versions[0].number;
+  const sc = raw.statusChange;
+  if (sc && typeof sc === "object") {
+    const o: NonNullable<DesignPage["statusChange"]> = {};
+    const by = str(sc.by ?? sc.author ?? sc.accountId); if (by) o.by = by;
+    const at = str(sc.at ?? sc.when, 60); if (at && !Number.isNaN(Date.parse(at))) o.at = at;
+    const n = int(sc.version ?? sc.number); if (n) o.version = n;
+    if (Object.keys(o).length) page.statusChange = o;
+  }
   page.sections = strList(raw.sections, 100);
   page.openQuestions = int(raw.openQuestions) ?? 0;
   page.decisions = (Array.isArray(raw.decisions) ? raw.decisions : []).map((d: any): Decision | undefined => {
@@ -79,25 +87,38 @@ export function isArchitect(by: string | undefined, architects: string[]): boole
 
 export const isApprovedStatus = (s: string | undefined) => /^\s*approved\s*$/i.test(s ?? "");
 
+/** The page version the status change refers to: the record's version, else the newest version created at or before
+ *  the status was set. Undefined when the reader returned no status-change record. */
+function statusChangeVersion(page: DesignPage): number | undefined {
+  const sc = page.statusChange;
+  if (!sc) return undefined;
+  if (sc.version) return sc.version;
+  const t = sc.at ? Date.parse(sc.at) : NaN;
+  if (Number.isNaN(t)) return undefined;
+  return page.versions.find((v) => v.at && !Number.isNaN(Date.parse(v.at)) && Date.parse(v.at) <= t)?.number;
+}
+
 /**
- * G1. The page is approved when its status is "Approved". The approved version is the newest version whose message
- * says "approved" (the arch-approve-design skill and the extension write "Approved v<N>"), otherwise the current
- * version. A newer current version means the design changed after approval: re-approve.
+ * G1. The page is approved when its status is "Approved". The approved version comes from a record people cannot
+ * fake by editing the page: first the epic's "Approved design version" in Jira (set only by the architects-only
+ * "Approve design" transition, the same record design-gate reads in CI), else the page's status-change record.
+ * Version messages ("Approved v5") are free text any editor, including AI, can write: they never count.
+ * A newer current version means the design changed after approval: re-approve.
  */
-export function designApproval(page: DesignPage | undefined, architects: string[]): DesignApproval {
+export function designApproval(page: DesignPage | undefined, architects: string[], epicApprovedVersion?: number): DesignApproval {
   if (!page) return { state: "missing", changedSinceApproval: false, detail: "No Confluence design page linked to the epic" };
   if (page.error && !page.status) return { state: "unknown", changedSinceApproval: false, detail: page.error };
   if (!isApprovedStatus(page.status)) {
     return { state: "draft", changedSinceApproval: false, detail: `Design page status: ${page.status || "none"}${page.version ? ` (v${page.version})` : ""}` };
   }
-  const marked = page.versions.find((v) => /\bapproved\b/i.test(v.message ?? ""));
-  const current = page.version ?? marked?.number;
-  const approvedVersion = marked?.number ?? current;
-  const at = page.versions.find((v) => v.number === approvedVersion);
-  const approvedBy = at?.by;
+  const recorded = statusChangeVersion(page);
+  const current = page.version ?? epicApprovedVersion ?? recorded;
+  const source: DesignApproval["approvedVersionSource"] = epicApprovedVersion ? "jira-epic" : recorded ? "status-change" : "current";
+  const approvedVersion = epicApprovedVersion ?? recorded ?? current;
+  const approvedBy = page.statusChange?.by ?? page.versions.find((v) => v.number === approvedVersion)?.by;
   const approverIsArchitect = isArchitect(approvedBy, architects);
   const changed = !!(approvedVersion && current && current > approvedVersion);
-  const out: DesignApproval = { state: "approved", changedSinceApproval: changed, detail: "" };
+  const out: DesignApproval = { state: "approved", changedSinceApproval: changed, detail: "", approvedVersionSource: source };
   if (approvedVersion) out.approvedVersion = approvedVersion;
   if (approvedBy) out.approvedBy = approvedBy;
   if (approverIsArchitect !== undefined) out.approverIsArchitect = approverIsArchitect;
@@ -108,7 +129,9 @@ export function designApproval(page: DesignPage | undefined, architects: string[
     out.state = "unverified-approver";
     out.detail = `Status Approved was set by ${approvedBy ?? "someone"} who is not in the architects list`;
   } else {
-    out.detail = `Approved v${approvedVersion ?? "?"}${approvedBy ? ` by ${approvedBy}` : ""}${approverIsArchitect === undefined ? " (approver not verified: no architects in build.config.yml)" : ""}`;
+    out.detail = `Approved v${approvedVersion ?? "?"}${approvedBy ? ` by ${approvedBy}` : ""}` +
+      (source === "current" ? " (approved version not recorded: run the epic's Approve design transition in Jira)" : "") +
+      (approverIsArchitect === undefined ? " (approver not verified: no architects in build.config.yml)" : "");
   }
   return out;
 }

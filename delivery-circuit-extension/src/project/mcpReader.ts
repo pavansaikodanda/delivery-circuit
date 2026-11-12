@@ -48,6 +48,7 @@ export function designPagePrompt(pageId: string): string {
       id: pageId, title: "", url: "https://<site>.atlassian.net/wiki/spaces/<KEY>/pages/<id>", spaceKey: "",
       status: "<content status name, e.g. Approved | Rough draft | In progress | Ready for review | empty>",
       version: 0, versions: [{ number: 0, by: "<author email, else display name>", at: "<ISO date>", message: "<version message>" }],
+      statusChange: { by: "<who set the current content status: email, else display name>", at: "<ISO date it was set>", version: 0 },
       sections: ["<each h1/h2 heading>"],
       openQuestions: 0,
       decisions: [{ date: "", decision: "", who: "", why: "", source: "<link or fireflies:<id> / upload:<id>>" }],
@@ -55,6 +56,7 @@ export function designPagePrompt(pageId: string): string {
       orgSnapshot: { pageId: "", url: "", title: "Org snapshot", version: 0, objects: ["<API names>"], fields: ["<Object.Field__c>"], flows: [""], permissionSets: [""] },
       error: "",
     }),
+    "statusChange = the content-status record (who set the current status, when, and the page version then), from the content state or page history; leave fields empty when the API does not say. Never infer it from version messages.",
     "openQuestions = unanswered rows of an \"Open questions\" section plus [NEEDS CLARIFICATION] markers. decisions = the rows of the \"Decisions\" section, in page order.",
   ].join("\n");
 }

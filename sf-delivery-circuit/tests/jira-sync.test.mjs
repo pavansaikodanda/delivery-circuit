@@ -18,7 +18,7 @@ const ok = (name, cond, extra = '') => { if (cond) { pass++; console.log(`ok   $
 const dir = mkdtempSync(join(tmpdir(), 'jira-sync-'));
 const planPath = join(dir, 'jira-plan.json');
 const statePath = join(dir, 'acli-state.json');
-const mapPath = join(dir, 'jira-map.json');
+const mapPath = join(dir, 'jira-cache.json');
 const plan = {
   project: 'ACME', feature: '001-shipping-rates', labels: ['circuit', 'feature-001'],
   design: { pageId: '123456', url: 'https://acme.atlassian.net/wiki/spaces/ACME/pages/123456', approvedVersion: 7 },

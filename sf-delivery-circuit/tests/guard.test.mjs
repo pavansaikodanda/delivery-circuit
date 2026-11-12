@@ -14,6 +14,11 @@ mkdirSync(join(proj, '.specify', 'extensions', 'sf'), { recursive: true });
 writeFileSync(join(proj, '.specify', 'extensions', 'sf', 'sf-config.yml'), 'project:\n  org_aliases:\n    dev: "dev"\n    qa: "qa"\n    prod: "client-live"\n');
 mkdirSync(join(proj, '.specify', 'specs', '001-x'), { recursive: true });
 writeFileSync(join(proj, '.specify', 'specs', '001-x', 'plan.md'), '## Architect Sign-Off\n- Overall Sign-Off: [ ] APPROVED\n');
+// The Architect's jira-sync cache names the epic; jira-config names the G1 field and transition ids.
+writeFileSync(join(proj, '.specify', 'specs', '001-x', 'jira-cache.json'), JSON.stringify({ refs: { epic: 'ACME-1', '00': 'ACME-2' } }));
+mkdirSync(join(proj, '.specify', 'extensions', 'jira'), { recursive: true });
+writeFileSync(join(proj, '.specify', 'extensions', 'jira', 'jira-config.json'), JSON.stringify({ fields: { 'Approved design version': { id: 'customfield_10050' } }, transitions: { 'Approve design': { id: '31' } } }));
+writeFileSync(join(proj, 'mutation.graphql'), 'mutation { mergePullRequest(input: { pullRequestId: "PR_x" }) { clientMutationId } }');
 
 const B = (command) => ({ tool_name: 'Bash', tool_input: { command } });
 const W = (file_path, content = 'x') => ({ tool_name: 'Write', tool_input: { file_path, content } });
@@ -113,6 +118,79 @@ const cases = [
   ['tester', { tool_name: 'mcp__atlassian__addOrEditJiraIssueComment', tool_input: { issueIdOrKey: 'ACME-12', body: 'Testability looks fine' } }, 'allow'],
   ['tester', B('acli jira workitem edit --key ACME-12 --labels ai-ready --yes'), 'deny'],
   ['developer', { tool_name: 'mcp__slack__slack_send_message', tool_input: { channel: 'review-room', text: 'Review room for ACME-12' } }, 'allow'],
+  // v3 review fixes: PR creation aliases, GraphQL and true draft flags
+  ['architect', B('gh pr new --title x --body y'), 'deny'],
+  ['tester', B('gh pr new --draft --title x --body y'), 'deny'],
+  ['architect', B(`gh api graphql -f query='mutation{createPullRequest(input:{repositoryId:"R_1",baseRefName:"main",headRefName:"feature/ACME-12-x",title:"x"}){pullRequest{number}}}'`), 'deny'],
+  ['developer', B(`gh api graphql -f query='mutation{createPullRequest(input:{repositoryId:"R_1",baseRefName:"main",headRefName:"feature/ACME-12-x",title:"x",draft:true}){pullRequest{number}}}'`), 'allow'],
+  ['developer', B(`gh api graphql -f query='mutation{createPullRequest(input:{repositoryId:"R_1",baseRefName:"main",headRefName:"feature/ACME-12-x",title:"x"}){pullRequest{number}}}'`), 'deny'],
+  ['developer', B('gh pr create --draft=false --title "ACME-12 x" --body x'), 'deny'],
+  ['developer', B('gh pr create -d=false --title "ACME-12 x" --body x'), 'deny'],
+  ['developer', B('gh pr create --draft=true --title "ACME-12 x" --body x'), 'allow'],
+  ['developer', B('gh pr new --draft --title "ACME-12 x" --body x'), 'allow'],
+  ['developer', B('gh pr new --title "ACME-12 x" --body x'), 'deny'],
+  ['developer', B('gh api -X POST repos/acme-org/acme-shipping/pulls -f title=x -F draft=false'), 'deny'],
+  ['developer', B('gh api -X POST repos/acme-org/acme-shipping/pulls -f title=x -f head=feature/ACME-12-x'), 'deny'],
+  // ready for review is the human Developer's step
+  ['developer', B('gh pr ready 12'), 'deny'],
+  ['developer', B('gh pr ready 12 --undo'), 'allow'],
+  ['', B('gh pr ready 12'), 'allow'],
+  ['developer', B(`gh api graphql -f query='mutation{markPullRequestReadyForReview(input:{pullRequestId:"PR_x"}){clientMutationId}}'`), 'deny'],
+  ['developer', B('gh api -X PATCH repos/acme-org/acme-shipping/pulls/12 -F draft=false'), 'deny'],
+  ['developer', B('gh api -X PATCH repos/acme-org/acme-shipping/pulls/12 -f title="ACME-12 better title"'), 'allow'],
+  // approvals and merges through GraphQL / other REST routes
+  ['architect', B(`gh api graphql -f query='mutation{addPullRequestReview(input:{pullRequestId:"PR_x",event:APPROVE}){clientMutationId}}'`), 'deny'],
+  ['developer', B(`gh api graphql -f query='mutation{submitPullRequestReview(input:{pullRequestReviewId:"PRR_x",event:APPROVE}){clientMutationId}}'`), 'deny'],
+  ['developer', B(`gh api graphql -f query='mutation{addPullRequestReview(input:{pullRequestId:"PR_x",event:COMMENT,body:"nit"}){clientMutationId}}'`), 'allow'],
+  ['architect', B(`gh api graphql -f query='mutation{mergePullRequest(input:{pullRequestId:"PR_x"}){clientMutationId}}'`), 'deny'],
+  ['', B(`gh api graphql -f query='mutation{enablePullRequestAutoMerge(input:{pullRequestId:"PR_x"}){clientMutationId}}'`), 'deny'],
+  ['architect', B('gh api graphql -F query=@mutation.graphql'), 'deny'],
+  ['architect', B('gh api -X POST repos/acme-org/acme-shipping/merges -f base=main -f head=feature/ACME-12-x'), 'deny'],
+  ['architect', B(`gh api graphql -f query='query{repository(owner:"acme-org",name:"acme-shipping"){pullRequest(number:12){reviewDecision}}}'`), 'allow'],
+  ['architect', B('gh api -X POST repos/acme-org/acme-shipping/pulls/12/reviews -f event=APPROVE'), 'deny'],
+  // gate labels G3/G4 through any gh route
+  ['developer', B('gh issue edit 42 --add-label plan-approved'), 'deny'],
+  ['tester', B('gh api repos/acme-org/acme-shipping/issues/12/labels -f "labels[]=testplan-approved"'), 'deny'],
+  ['tester', B('gh api -X POST repos/acme-org/acme-shipping/issues/12/labels --input labels.json -f x=testplan-approved'), 'deny'],
+  ['developer', B('gh label create plan-approved --color 0e8a16'), 'deny'],
+  ['developer', B(`gh api graphql -f query='mutation{addLabelsToLabelable(input:{labelableId:"PR_x",labelIds:["LA_1"]}){clientMutationId}}'`), 'deny'],
+  ['developer', B('gh pr edit 12 --add-label needs-human'), 'allow'],
+  ['developer', B('gh pr list --label plan-approved'), 'allow'],
+  ['developer', B('gh api repos/acme-org/acme-shipping/issues/12/labels --jq ".[].name"'), 'allow'],
+  // G1 in Jira: the Approve design transition and the epic's Approved design version stay human
+  ['architect', { tool_name: 'mcp__atlassian__transitionJiraIssue', tool_input: { issueIdOrKey: 'ACME-1', transition: { name: 'Approve design' }, fields: { customfield_10050: '4' } } }, 'deny'],
+  ['architect', { tool_name: 'mcp__atlassian__transitionJiraIssue', tool_input: { issueIdOrKey: 'ACME-1', transition: { id: '31' } } }, 'deny'],
+  ['architect', { tool_name: 'mcp__claude_ai_Atlassian__transitionJiraIssue', tool_input: { issueIdOrKey: 'ACME-1', transition: { name: 'approve_design' } } }, 'deny'],
+  ['architect', { tool_name: 'mcp__atlassian__transitionJiraIssue', tool_input: { issueIdOrKey: 'ACME-9', transition: { id: '21' }, fields: { customfield_10050: 4 } } }, 'deny'],
+  ['architect', { tool_name: 'mcp__atlassian__transitionJiraIssue', tool_input: { issueIdOrKey: 'ACME-1', transition: { id: '11', name: 'Design Review' } } }, 'allow'],
+  ['architect', { tool_name: 'mcp__atlassian__editJiraIssue', tool_input: { issueIdOrKey: 'ACME-1', fields: { customfield_10050: 4 } } }, 'deny'],
+  ['architect', { tool_name: 'mcp__atlassian__editJiraIssue', tool_input: { issueIdOrKey: 'ACME-77', fields: { issuetype: { name: 'Epic' }, 'Approved design version': 4 } } }, 'deny'],
+  ['architect', { tool_name: 'mcp__atlassian__createJiraIssue', tool_input: { projectKey: 'ACME', issueTypeName: 'Epic', summary: '[001] Shipping rates', additional_fields: { customfield_10050: 3 } } }, 'deny'],
+  ['architect', { tool_name: 'mcp__atlassian__createJiraIssue', tool_input: { projectKey: 'ACME', issueTypeName: 'Epic', summary: '[001] Shipping rates' } }, 'allow'],
+  ['architect', { tool_name: 'mcp__atlassian__editJiraIssue', tool_input: { issueIdOrKey: 'ACME-2', fields: { customfield_10050: 3 } } }, 'allow'],
+  ['architect', { tool_name: 'mcp__atlassian__createJiraIssue', tool_input: { projectKey: 'ACME', issueTypeName: 'Story', summary: '[001-S02] x', additional_fields: { customfield_10050: 3 } } }, 'allow'],
+  // A version message never stands in for G1
+  ['developer', { tool_name: 'mcp__atlassian__updateConfluencePage', tool_input: { pageId: '123456', body: 'x', versionMessage: 'Approved v5' } }, 'deny'],
+  ['architect', { tool_name: 'mcp__claude_ai_Atlassian__updateConfluencePage', tool_input: { pageId: '123456', body: 'x', version: { message: 'approved by arch' } } }, 'deny'],
+  ['architect', { tool_name: 'mcp__atlassian__updateConfluencePage', tool_input: { pageId: '123456', body: 'Decision: approved vendor list', versionMessage: 'Decisions D4' } }, 'allow'],
+  ['architect', { tool_name: 'mcp__atlassian__getConfluenceContentState', tool_input: { contentId: '123456', note: 'approved?' } }, 'allow'],
+  // Shell writes follow the file rules: the Developer cannot write tests/; nobody writes scripts/ or .github/
+  ['developer', B('echo x > tests/ACME-12.tc.json'), 'deny'],
+  ['developer', B("cat > tests/ACME-12.tc.json <<'EOF'\n{}\nEOF"), 'deny'],
+  ['developer', B('echo cases | tee test-cases/ACME-12.sf-tests.yaml'), 'deny'],
+  ['developer', B('cp /tmp/x.yaml test-cases/ACME-12.sf-tests.yaml'), 'deny'],
+  ['developer', B("sed -i 's/a/b/' tests/ACME-12.tc.json"), 'deny'],
+  ['developer', B('git checkout origin/qa -- tests/ACME-12.tc.json'), 'deny'],
+  ['developer', { tool_name: 'PowerShell', tool_input: { command: 'Set-Content -Path tests/ACME-12.tc.json -Value "{}"' } }, 'deny'],
+  ['developer', B('echo "process.exit(0)" > scripts/ci/design-gate.mjs'), 'deny'],
+  ['architect', B('printf "" > scripts/ci/protected-paths.txt'), 'deny'],
+  ['tester', B('echo x >> .github/workflows/pr-checks.yml'), 'deny'],
+  ['developer', W('scripts/ci/design-gate.mjs'), 'deny'],
+  ['tester', B('echo x > tests/ACME-12.tc.json'), 'allow'],
+  ['developer', B('echo x > force-app/main/default/classes/Foo.cls'), 'allow'],
+  ['developer', B('sf project deploy validate --target-org dev 2>&1 > .ai/validate.log'), 'allow'],
+  ['developer', B('npm test > /dev/null 2>&1'), 'allow'],
+  ['', B('echo x > tests/ACME-12.tc.json'), 'allow'],
 ];
 
 let fail = 0;

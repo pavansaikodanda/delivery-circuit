@@ -6,7 +6,7 @@ import * as path from "path";
 import { CONNECTIONS } from "../../src/connections/catalog";
 import {
   acliInstallHelp, APP_SLUGS, findInstallation, mcpListStateFor, parseAcliAuthStatus, parseEnvironments, parseMcpList, parseRulesets, parseRunners,
-  summarizeRunners,
+  RUNNER_CONNECT_MESSAGE, RUNNER_REGISTER_HINT, summarizeRunners,
 } from "../../src/connections/parse";
 import { bannedSecretRefs, isBannedSecret } from "../../src/connections/secrets";
 
@@ -152,5 +152,34 @@ describe("MCP rows from claude mcp list", () => {
     expect(mcpListStateFor("mcp-slack", undefined, list, true)).toMatchObject({ state: "failed", reason: "timeout" });
     expect(mcpListStateFor("mcp-slack", undefined, list, false)).toBeUndefined();
     expect(mcpListStateFor("mcp-atlassian", undefined, list, true)).toMatchObject({ state: "needs-auth" });
+  });
+});
+
+describe("runner registration help", () => {
+  // The PR runner runs PR-branch code; it must never hold the production login of the release runner.
+  const BOTH = /circuit\s*,\s*circuit-release|circuit-release\s*,\s*circuit\b/;
+  it("the Connections page tells admins to register two runners, one label each", () => {
+    for (const msg of [RUNNER_REGISTER_HINT, RUNNER_CONNECT_MESSAGE]) {
+      expect(msg).not.toMatch(BOTH);
+      expect(msg).toMatch(/--labels circuit(?![-\w])/);
+      expect(msg).toMatch(/--labels circuit-release/);
+      expect(msg).toMatch(/two runners/);
+    }
+  });
+  it("no user-facing string in the extension or plugin suggests one runner with both labels", () => {
+    const roots = [path.join(__dirname, "..", "..", "src"), path.join(__dirname, "..", "..", "media"),
+      path.join(__dirname, "..", "..", "..", "sf-delivery-circuit")];
+    const hits: string[] = [];
+    const walk = (d: string) => {
+      if (!fs.existsSync(d)) return;
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        if (e.name === "node_modules" || e.name === ".git" || e.name === "codicons") continue;
+        const f = path.join(d, e.name);
+        if (e.isDirectory()) walk(f);
+        else if (/\.(ts|js|mjs|md|yml|yaml|sh|json|html)$/.test(e.name) && BOTH.test(fs.readFileSync(f, "utf8"))) hits.push(f);
+      }
+    };
+    roots.forEach(walk);
+    expect(hits).toEqual([]);
   });
 });

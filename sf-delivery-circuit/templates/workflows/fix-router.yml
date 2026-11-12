@@ -40,8 +40,8 @@ jobs:
       pull-requests: write
       issues: write
     steps:
-      - uses: actions/checkout@v5
-        with: { persist-credentials: false, sparse-checkout: scripts/ci }
+      - uses: actions/checkout@v5            # base commit (review) or default branch (workflow_run): never PR scripts
+        with: { ref: "${{ github.event.pull_request.base.sha || github.sha }}", persist-credentials: false, sparse-checkout: scripts/ci }
       - name: Runner logins
         run: bash scripts/ci/runner-check.sh --gh --tools jq
       - name: Route, label and notify
@@ -75,7 +75,8 @@ jobs:
 
           INFO=$(gh pr view "$PR" --repo "$R" --json headRefName,headRefOid,labels,comments)
           has_label() { jq -e --arg l "$1" 'any(.labels[]; .name == $l)' >/dev/null <<<"$INFO"; }
-          eval "$(bash scripts/ci/resolve-story.sh --branch "$(jq -r .headRefName <<<"$INFO")")"
+          out=$(bash scripts/ci/resolve-story.sh --branch "$(jq -r .headRefName <<<"$INFO")") || exit 1
+          eval "$out"
           [ -n "${KEY:-}" ] || { echo "Not a story branch"; exit 0; }
           [ "$(jq -r .headRefOid <<<"$INFO")" = "$EVENT_SHA" ] || { echo "Stale event (the branch moved on)"; exit 0; }
 

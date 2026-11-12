@@ -120,6 +120,12 @@ const toInt = (v: unknown): number | undefined => {
   return Number.isInteger(n) && n > 0 ? n : undefined;
 };
 
+/** G1 record in Jira: the epic's "Approved design version", set only by the architects-only "Approve design"
+ *  transition. Only the field counts: an epic's labels and description are free text anyone (or AI) can edit. */
+export function epicApprovedVersionOf(epic: JiraIssue | undefined, fields: JiraFieldMap): number | undefined {
+  return epic && fields.approvedDesignVersion ? toInt(epic.fields[fields.approvedDesignVersion]) : undefined;
+}
+
 export function approvedDesignVersionOf(issue: JiraIssue, fields: JiraFieldMap): number | undefined {
   if (fields.approvedDesignVersion) {
     const n = toInt(issue.fields[fields.approvedDesignVersion]);

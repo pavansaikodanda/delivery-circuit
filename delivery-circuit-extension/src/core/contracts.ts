@@ -252,7 +252,8 @@ export interface QueueItem {
   kind: "sign-off" | "clarify" | "review-stories" | "design-tests" | "testability" | "approve-plan" | "approve-testplan"
     | "review-pr" | "qa-pr" | "needs-human" | "needs-qa" | "merge" | "deploy-approval" | "connect"
     // v3
-    | "create-stories" | "design-changed" | "start-story" | "add-tests" | "fix" | "review-room" | "record-verdict";
+    | "create-stories" | "design-changed" | "start-story" | "add-tests" | "fix" | "review-room" | "record-verdict"
+    | "build" | "mark-ready";
   title: string;
   detail?: string;
   featureId?: string;

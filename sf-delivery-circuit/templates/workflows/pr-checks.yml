@@ -5,6 +5,11 @@ name: pr-checks
 #                                     code-analyzer, qa (QA deploy, Apex tests, SF AI Tester), ai-reviewer, evidence
 # Fork PRs never reach the runner: guard fails them (required check) and every self-hosted job needs guard and
 # skips forks. Keep the repo private, or require approval for all outside contributors (circuit-bootstrap B1).
+# Trust: the PR head is checked out as data (code to analyse, deploy to QA and review). Every gate and guard script
+# runs from the base commit (.circuit-trusted/scripts/ci), so a branch that edits scripts/ci or protected-paths.txt
+# cannot weaken its own checks. GitHub still takes this workflow file from the PR, so anyone who can push a branch
+# can run code on the circuit runner: only DEV/QA, claude and acli logins live there (never production), and its gh
+# login is a service user with read access only (ConnectionsSetup.md 8.6).
 # Required checks: guard, static, code-analyzer, qa (+ design-gate from design-gate.yml). No path filters: every
 # job always reports and decides inside whether it has work (a skipped job counts as success for required checks).
 on:
@@ -33,6 +38,15 @@ jobs:
           fi
       - uses: actions/checkout@v5
         with: { fetch-depth: 0, persist-credentials: false }
+      - name: Trusted CI scripts (from the base commit, never the PR's own copy)
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .circuit-trusted
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/ci
+            .specify/extensions/jira
       - name: Story PRs change only their own story files and code
         env:
           BRANCH: ${{ github.head_ref }}
@@ -40,9 +54,16 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           git diff --name-only "$BASE...$HEAD" > "$RUNNER_TEMP/changed.txt"
-          eval "$(bash scripts/ci/resolve-story.sh --branch "$BRANCH")"
-          if [ -z "${KEY:-}" ]; then echo "Not a story branch: code owners review protected files."; exit 0; fi
-          bash scripts/ci/check-protected-paths.sh "$RUNNER_TEMP/changed.txt" "$PLAN_DIR/" "$TC_INDEX" "$SUITE"
+          out=$(bash .circuit-trusted/scripts/ci/resolve-story.sh --branch "$BRANCH") || exit 1
+          eval "$out"
+          if [ -z "${KEY:-}" ]; then
+            if grep -q '^force-app/' "$RUNNER_TEMP/changed.txt"; then
+              echo "::error::This PR changes force-app/ but its branch is not a story branch (feature/<KEY>-<slug>). Code changes need a Jira story, so that G1/C5 and the protected-path check apply."
+              exit 1
+            fi
+            echo "Not a story branch and no force-app changes: code owners review protected files."; exit 0
+          fi
+          bash .circuit-trusted/scripts/ci/check-protected-paths.sh "$RUNNER_TEMP/changed.txt" "$PLAN_DIR/" "$TC_INDEX" "$SUITE"
 
   static:
     needs: guard
@@ -50,6 +71,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with: { fetch-depth: 0, persist-credentials: false }
+      - name: Trusted CI scripts (from the base commit, never the PR's own copy)
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .circuit-trusted
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/ci
+            .specify/extensions/jira
       - uses: actions/setup-node@v5
         with: { node-version: 22 }
       - name: Lint and Jest
@@ -71,11 +101,12 @@ jobs:
                 if [ -f "$f" ] && [ -f "$VALIDATOR" ]; then python3 "$VALIDATOR" "$f"; fi ;;
             esac
           done < "$RUNNER_TEMP/changed.txt"
-          eval "$(bash scripts/ci/resolve-story.sh --branch "$BRANCH")"
+          out=$(bash .circuit-trusted/scripts/ci/resolve-story.sh --branch "$BRANCH") || exit 1
+          eval "$out"
           if [ -z "${KEY:-}" ]; then echo "Not a story branch: no story test cases to check."; exit 0; fi
-          if [ -f "$TC_INDEX" ]; then node scripts/ci/check-tc-coverage.mjs --key "$KEY" --design; fi
-          if [ -f "$TC_INDEX" ] && [ -f "$PLAN_DIR/TESTPLAN.md" ]; then node scripts/ci/check-tc-coverage.mjs --key "$KEY" --testplan; fi
-          if grep -q '^force-app/' "$RUNNER_TEMP/changed.txt"; then node scripts/ci/check-tc-coverage.mjs --key "$KEY" --code; fi
+          if [ -f "$TC_INDEX" ]; then node .circuit-trusted/scripts/ci/check-tc-coverage.mjs --key "$KEY" --design; fi
+          if [ -f "$TC_INDEX" ] && [ -f "$PLAN_DIR/TESTPLAN.md" ]; then node .circuit-trusted/scripts/ci/check-tc-coverage.mjs --key "$KEY" --testplan; fi
+          if grep -q '^force-app/' "$RUNNER_TEMP/changed.txt"; then node .circuit-trusted/scripts/ci/check-tc-coverage.mjs --key "$KEY" --code; fi
 
   code-analyzer:
     needs: guard
@@ -84,8 +115,17 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with: { fetch-depth: 0, persist-credentials: false }
+      - name: Trusted CI scripts (from the base commit, never the PR's own copy)
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .circuit-trusted
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/ci
+            .specify/extensions/jira
       - name: Runner logins
-        run: bash scripts/ci/runner-check.sh --tools sf,jq --sf-plugin code-analyzer
+        run: bash .circuit-trusted/scripts/ci/runner-check.sh --tools sf,jq --sf-plugin code-analyzer
       - name: Code Analyzer (0 sev 1, 0 sev 2)
         run: |
           if [ ! -d force-app ]; then echo "No force-app folder."; exit 0; fi
@@ -114,6 +154,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with: { fetch-depth: 0, persist-credentials: false }
+      - name: Trusted CI scripts (from the base commit, never the PR's own copy)
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .circuit-trusted
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/ci
+            .specify/extensions/jira
       - name: Anything to deploy?
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
@@ -123,7 +172,7 @@ jobs:
         if: env.RUN == '1'
         run: |
           case "$QA_ALIAS" in prod|production|live|"$PROD_ALIAS") echo "::error::CIRCUIT_QA_ALIAS names the production org"; exit 1 ;; esac
-          bash scripts/ci/runner-check.sh --tools sf,jq,node --sf "$QA_ALIAS" --not-sf "$PROD_ALIAS"
+          bash .circuit-trusted/scripts/ci/runner-check.sh --tools sf,jq,node --sf "$QA_ALIAS" --not-sf "$PROD_ALIAS"
       - name: Deploy branch to the QA org
         if: env.RUN == '1'
         run: sf project deploy start --source-dir force-app --target-org "$QA_ALIAS" --test-level NoTestRun --wait 60
@@ -142,18 +191,19 @@ jobs:
         run: |
           [[ "$SF_AI_TESTER_MODE" =~ ^(manual|automation|both)$ ]] || { echo "SF_AI_TESTER_MODE must be manual, automation or both"; exit 1; }
           RUNLIST=()
-          eval "$(bash scripts/ci/resolve-story.sh --branch "$BRANCH")"
+          out=$(bash .circuit-trusted/scripts/ci/resolve-story.sh --branch "$BRANCH") || exit 1
+          eval "$out"
           if [ -n "${KEY:-}" ] && [ -f "$SUITE" ]; then RUNLIST+=("$SUITE"); fi
           for f in test-cases/regression-*.sf-tests.yaml; do if [ -f "$f" ]; then RUNLIST+=("$f"); fi; done
           if [ ${#RUNLIST[@]} -eq 0 ]; then echo '{"route":"pass","total":0,"note":"no suites"}' > verdict.json; exit 0; fi
-          bash scripts/ci/runner-check.sh --claude
-          TOOL=$(bash scripts/ci/install-sf-ai-tester.sh | tail -1)
+          bash .circuit-trusted/scripts/ci/runner-check.sh --claude
+          TOOL=$(bash .circuit-trusted/scripts/ci/install-sf-ai-tester.sh | tail -1)
           # The CLI opens the org through the runner's sf CLI login (SF_ALIAS) and drives it with the runner's
           # logged-in claude CLI. Exit code 1 means "not all passed"; the verdict below decides the route.
           for s in "${RUNLIST[@]}"; do
             node "$TOOL/dist/cli.js" run "$s" --mode "$SF_AI_TESTER_MODE" --login headless --workers 2 || true
           done
-          node scripts/ci/ai-tester-verdict.mjs .sf-ai-tester/runs --expect "${#RUNLIST[@]}" > verdict.json
+          node .circuit-trusted/scripts/ci/ai-tester-verdict.mjs .sf-ai-tester/runs --expect "${#RUNLIST[@]}" > verdict.json
           cat verdict.json
           [ "$(jq -r .route verdict.json)" = "pass" ]
       - if: always() && env.RUN == '1'
@@ -180,15 +230,25 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with: { fetch-depth: 0, persist-credentials: false }
+      - name: Trusted CI scripts (from the base commit, never the PR's own copy)
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .circuit-trusted
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/ci
+            .specify/extensions/jira
       - name: Runner logins
-        run: bash scripts/ci/runner-check.sh --claude --tools jq,gh
+        run: bash .circuit-trusted/scripts/ci/runner-check.sh --claude --tools jq,gh
       - name: Story from Jira
         run: |
           mkdir -p .ai
-          eval "$(bash scripts/ci/resolve-story.sh --branch "$BRANCH")"
+          out=$(bash .circuit-trusted/scripts/ci/resolve-story.sh --branch "$BRANCH") || exit 1
+          eval "$out"
           if [ -z "${KEY:-}" ]; then echo "STORY_CONTEXT=none" >> "$GITHUB_ENV"; exit 0; fi
           echo "KEY=$KEY" >> "$GITHUB_ENV"
-          if bash scripts/ci/runner-check.sh --acli >/dev/null && eval "$(bash scripts/ci/resolve-story.sh "$KEY" --jira --out .ai/story)"; then
+          if bash .circuit-trusted/scripts/ci/runner-check.sh --acli >/dev/null && story=$(bash .circuit-trusted/scripts/ci/resolve-story.sh "$KEY" --jira --out .ai/story) && eval "$story"; then
             echo "STORY_CONTEXT=$STORY_JSON" >> "$GITHUB_ENV"
           else
             echo "::warning::Could not read $KEY from Jira (acli); reviewing without the story."
@@ -232,8 +292,8 @@ jobs:
       (needs.ai-reviewer.result == 'success' || needs.ai-reviewer.result == 'skipped') && !github.event.pull_request.draft
     runs-on: [self-hosted, circuit]
     steps:
-      - uses: actions/checkout@v5
-        with: { persist-credentials: false, sparse-checkout: scripts/ci }
+      - uses: actions/checkout@v5            # base commit: only the trusted scripts are needed here
+        with: { ref: "${{ github.event.pull_request.base.sha }}", persist-credentials: false, sparse-checkout: scripts/ci }
       - name: Checks green notice to the QA channel
         env:
           CHANNEL: ${{ vars.SLACK_CHANNEL_QA || 'qa-gate' }}
@@ -242,6 +302,7 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           BRANCH: ${{ github.head_ref }}
         run: |
-          eval "$(bash scripts/ci/resolve-story.sh --branch "$BRANCH")"
+          out=$(bash scripts/ci/resolve-story.sh --branch "$BRANCH") || exit 1
+          eval "$out"
           URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/pull/$PR"
           bash scripts/ci/slack.sh "$CHANNEL" "Checks green on PR #$PR ${KEY:-} $URL - Tester: explore on QA and approve (G6). Developer: review (G5). Architect: review (G7)."

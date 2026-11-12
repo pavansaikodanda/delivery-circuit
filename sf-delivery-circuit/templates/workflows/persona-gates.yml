@@ -31,8 +31,8 @@ jobs:
       pull-requests: write
       issues: write
     steps:
-      - uses: actions/checkout@v5
-        with: { persist-credentials: false, sparse-checkout: scripts/ci }
+      - uses: actions/checkout@v5            # base commit: never the PR's own scripts
+        with: { ref: "${{ github.event.pull_request.base.sha }}", persist-credentials: false, sparse-checkout: scripts/ci }
       - name: Runner logins
         run: bash scripts/ci/runner-check.sh --gh --tools jq
       - name: Check who set the gate label
@@ -51,7 +51,8 @@ jobs:
             gh pr comment "$PR" --repo "$R" --body "Removed \`$LABEL\`: @$ACTOR is not in team \`$TEAM\`. Only $TEAM can set $GATE."
             exit 0
           fi
-          eval "$(bash scripts/ci/resolve-story.sh --branch "$BRANCH")"
+          out=$(bash scripts/ci/resolve-story.sh --branch "$BRANCH") || exit 1
+          eval "$out"
           if [ -z "${KEY:-}" ]; then echo "Not a story branch"; exit 0; fi
           if [ "$LABEL" = plan-approved ]; then MSG="Developer approved the plan"; else MSG="Tester approved the test plan"; fi
           bash scripts/ci/jira.sh comment "$KEY" "$MSG (@$ACTOR, PR #$PR)" || echo "::warning::Jira comment skipped (runner acli login?)"
@@ -70,8 +71,8 @@ jobs:
       contents: read
       statuses: write
     steps:
-      - uses: actions/checkout@v5
-        with: { persist-credentials: false, sparse-checkout: scripts/ci }
+      - uses: actions/checkout@v5            # base commit: never the PR's own scripts
+        with: { ref: "${{ github.event.pull_request.base.sha }}", persist-credentials: false, sparse-checkout: scripts/ci }
       - name: Runner logins
         run: bash scripts/ci/runner-check.sh --gh
       - name: Set gate statuses for the reviewer's persona team

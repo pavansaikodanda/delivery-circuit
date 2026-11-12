@@ -10,6 +10,24 @@ const ident = (personas: Persona[], active: Persona | null, login = "pat"): Iden
 const A = (id: string, persona: Persona, args?: Record<string, string | number>): ActionRef =>
   ({ id, label: id, persona, kind: id.split(":")[0] as ActionRef["kind"], args });
 
+describe("Mark ready for review (gate:ready)", () => {
+  const A1 = "a".repeat(40);
+  it("parses, pins the head and stays a Developer action", () => {
+    expect(parseAction(A("gate:ready", "developer", { pr: 42 }))).toEqual({ type: "ready", pr: 42 });
+    expect(parseAction(A("gate:ready", "developer", { pr: 42, sha: A1 }))).toEqual({ type: "ready", pr: 42, sha: A1 });
+    expect(() => parseAction(A("gate:ready", "developer", {}))).toThrow(/PR number/);
+    expect(denyReason(ident(["developer"], "developer"), A("gate:ready", "developer", { pr: 42 }))).toBeNull();
+    expect(denyReason(ident(["tester"], "tester"), A("gate:ready", "tester", { pr: 42 }))).toMatch(/Developer's step/);
+    expect(denyReason(ident(["developer", "tester"], "tester"), A("gate:ready", "developer", { pr: 42 }))).toMatch(/Switch to the developer/);
+    expect(confirmText(parseAction(A("gate:ready", "developer", { pr: 42 })), { login: "pat", owner: "acme", repo: "crm", headSha: A1 }))
+      .toBe("Mark PR #42 at commit aaaaaaa in acme/crm ready for review as pat. Code, QA and design reviews (G5-G7), the AI Reviewer and the merge path start from here.");
+  });
+  it("Build with AI starts the build phase of dev-start-story", () => {
+    expect(parseAction({ id: "dev:start-story", label: "Build with AI", persona: "developer", kind: "ai", args: { storyKey: "ACME-12", pr: 7, phase: "build" } }))
+      .toMatchObject({ type: "ai", prompt: "/dev-start-story ACME-12 build" });
+  });
+});
+
 describe("action grammar", () => {
   it("parses AI actions into a prompt", () => {
     expect(parseAction(A("ai:/dev-review-plan", "developer", { command: "/dev-review-plan", arg: "42" }))).toEqual({ type: "ai", skill: "/dev-review-plan", prompt: "/dev-review-plan 42" });

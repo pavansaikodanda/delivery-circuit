@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 
 export const C5_MESSAGE = 'Design changed since this story was planned: re-plan or re-approve';
-const KEY_RE = /^[A-Z][A-Z0-9]+-[0-9]+$/;
+const KEY_RE = /^[A-Z][A-Z0-9_]+-[0-9]+$/;
 
 const fieldsOf = item => (item && typeof item.fields === 'object' && item.fields) ? item.fields : (item || {});
 

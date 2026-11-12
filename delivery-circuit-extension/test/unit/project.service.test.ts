@@ -273,8 +273,11 @@ describe("createProject (v3: Jira via acli, Confluence via the read-only reader,
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));
     let calls = 0;
+    let started!: () => void;
+    const pollStarted = new Promise<void>((r) => (started = r));
     const graphql = async () => {
       calls++;
+      if (calls === 1) started();
       const d = JSON.parse(JSON.stringify(resp.data));
       if (calls === 1) { await gate; return d; } // the poll's read, started before the gate action
       d.repository.open.nodes = d.repository.open.nodes.filter((n: any) => n.number !== 46); // state after the action
@@ -282,6 +285,7 @@ describe("createProject (v3: Jira via acli, Confluence via the read-only reader,
     };
     const { svc } = make({ graphql });
     const before = svc.prs();
+    await pollStarted; // the refresh is requested only once the poll's read is in flight
     const refreshed = svc.refresh();
     release();
     await Promise.all([before, refreshed]);

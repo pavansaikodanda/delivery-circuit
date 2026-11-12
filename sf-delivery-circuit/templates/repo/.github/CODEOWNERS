@@ -6,6 +6,7 @@
 /.specify/                          @ORG/architects
 /.specify/specs/*/tests/            @ORG/testers
 /test-cases/                        @ORG/testers
+/tests/                             @ORG/testers
 /docs/plans/                        @ORG/developers @ORG/testers
 /inputs/                            @ORG/architects
 /.claude/                           @ORG/architects

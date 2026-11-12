@@ -22,7 +22,7 @@ Updated by Claude after every step. Resume from here after an interruption.
 2026-11-10: git 2.53.0, gh 2.73.0, node 22.23.3, npm 10.9.9, python 3.13.1, uv 0.13.0, sf 2.157.8 (code-analyzer 5.1.0), claude 2.1.318, openssl 3.5.5, jq 1.7.1, actionlint 1.7.7, specify 1.3.4.dev0
 
 ## Facts re-checked (date, source)
-- 2026-11-10 SF AI Tester (github.com/pavansaikodanda/sf-ai-tester @ 8a5b5c2): CLI `dist/cli.js run <suite> --mode --login --workers`; `SF_ALIAS` login through the sf CLI; keeps CLAUDE_CODE_OAUTH_TOKEN and removes ANTHROPIC_API_KEY; exits 1 unless all cases pass; writes .sf-ai-tester/runs/<ts>/results.json { suite, org, results[] }. Live check on the trial org: run 1 had 1 blocked case (Region not on the layout; a test problem, route qa); after fixing the suite, run 2 passed 2/2 (route pass).
+- 2026-11-10 SF AI Tester (github.com/acme-org/sf-ai-tester @ 8a5b5c2): CLI `dist/cli.js run <suite> --mode --login --workers`; `SF_ALIAS` login through the sf CLI; uses the logged-in claude CLI; exits 1 unless all cases pass; writes .sf-ai-tester/runs/<ts>/results.json { suite, org, results[] }. Live check on the trial org: run 1 had 1 blocked case (Region not on the layout; a test problem, route qa); after fixing the suite, run 2 passed 2/2 (route pass).
 - 2026-11-10 `specify init --help`: --here, --force, --non-interactive, --integration, --integration-options, --script, --ignore-agent-tools exist. `specify extension add --from <url>` asks to confirm untrusted URLs.
 - 2026-11-10 GitHub API: spec-kit-sf latest release is still v2.0.1. It installed 19 commands and 2 optional hooks (after_tasks → review, after_implement → verify).
 
@@ -35,6 +35,5 @@ Updated by Claude after every step. Resume from here after an interruption.
 - Jira site/project, Confluence space, Slack workspace, and the people per team are not provided yet.
 
 ## Reminders
-- CLAUDE_CODE_OAUTH_TOKEN expires: <date + 1 year>
-- Jira PAT for Rule A expires: <date>
-- Salesforce JWT certificates expire: <date>
+- acli version support ends: <date + 6 months>
+- Runner service user: re-check claude, sf and acli logins: <date>

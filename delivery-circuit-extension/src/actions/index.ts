@@ -89,6 +89,20 @@ export function createActions(base: ModuleBase, deps: Deps): ActionsService {
         vscode.window.showInformationMessage(`PR #${p.pr} merged (${method}).`);
         break;
       }
+      case "ready": {
+        // The person's own GitHub login, never AI: only the PR's author takes it out of draft.
+        const info = await connections.githubRequest<any>("GET", `${repo}/pulls/${p.pr}`);
+        const head = pinnedHead(p.pr, p.sha, info?.head?.sha);
+        if (info?.draft === false) { vscode.window.showInformationMessage(`PR #${p.pr} is already ready for review.`); return; }
+        if (info?.user?.login && info.user.login !== id.login) throw new ActionError(`PR #${p.pr} is ${info.user.login}'s; its author marks it ready for review`);
+        if (typeof info?.node_id !== "string") throw new ActionError(`Could not read PR #${p.pr}`);
+        const text = confirmText(p, ctxFor(id, { headSha: head }));
+        if (!(await confirm(text, "Mark ready"))) return log(`cancelled: ${text}`);
+        await connections.githubGraphql("mutation($id: ID!) { markPullRequestReadyForReview(input: { pullRequestId: $id }) { pullRequest { isDraft } } }", { id: info.node_id });
+        log(`done: ${text}`);
+        vscode.window.showInformationMessage(`PR #${p.pr} is ready for review.`);
+        break;
+      }
       case "deploy": {
         const pending = await connections.githubRequest<any[]>("GET", `${repo}/actions/runs/${p.runId}/pending_deployments`);
         const { approvable, blocked } = approvableEnvironments(pending ?? []);
@@ -122,7 +136,8 @@ export function createActions(base: ModuleBase, deps: Deps): ActionsService {
     const detail = [
       "1. Read the page (and its Org snapshot child page) as it is now.",
       "2. Set the page status to Approved (status menu next to the title). Only members of the architects group may do this; the circuit checks who set it from the page history.",
-      "3. Refresh Delivery Circuit: the approved version number is recorded on the epic's stories, and any later page change fails design-gate until it is re-approved (C5).",
+      "3. In Jira, run the epic's Approve design transition (architects only) with that page version. That field is the approved version of record for design-gate and this extension; a version message does not count.",
+      "4. Refresh Delivery Circuit: any later page change shows as changed and fails design-gate until it is re-approved (C5).",
       "Claude cannot approve a design.",
     ].join("\n");
     if (!url) {

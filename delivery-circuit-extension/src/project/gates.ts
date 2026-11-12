@@ -3,7 +3,7 @@
 import type { DeepLink, Feature, GateId, GateState, StageState } from "../core/contracts";
 import { designApproval, designSync } from "./design";
 import {
-  acceptanceCriteriaOf, AI_READY, approvedDesignVersionOf, blockedByOf, designPageOf, storyNumbers, storyTitleOf,
+  acceptanceCriteriaOf, AI_READY, approvedDesignVersionOf, epicApprovedVersionOf, blockedByOf, designPageOf, storyNumbers, storyTitleOf,
   testabilityOf, testCasesFor,
 } from "./jira";
 import type { CircuitConfig, DeployInfo, DesignApproval, FeatureInfo, FeatureSource, PrInfo, RepoRef, StoryInfo } from "./model";
@@ -146,7 +146,7 @@ export const pageFeatureId = (pageId: string) => `page-${pageId}`;
 function buildFeature(src: FeatureSource, cfg: CircuitConfig, opt: BuildOptions): FeatureInfo {
   const { epic, page } = src;
   const approval = src.pageId
-    ? page ? designApproval(page, cfg.architects) : { state: "unknown" as const, changedSinceApproval: false, detail: "Design page not read yet (sign in to the Atlassian MCP in Claude Code: /mcp)" }
+    ? page ? designApproval(page, cfg.architects, epicApprovedVersionOf(epic, cfg.fields)) : { state: "unknown" as const, changedSinceApproval: false, detail: "Design page not read yet (sign in to the Atlassian MCP in Claude Code: /mcp)" }
     : designApproval(undefined, cfg.architects);
   const nums = storyNumbers(src.stories);
   const stories: StoryInfo[] = src.stories.map((st) => {
