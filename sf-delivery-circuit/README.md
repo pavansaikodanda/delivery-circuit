@@ -7,7 +7,7 @@ production, merges and approvals.
 Install:
 
 ```
-/plugin marketplace add pavansaikodanda/agentic-implementation-circuit
+/plugin marketplace add pavansaikodanda/delivery-circuit
 /plugin install sf-delivery-circuit@conscendo-delivery
 ```
 
