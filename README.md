@@ -76,6 +76,7 @@ AI attempts.
 | [`delivery-circuit-extension/`](delivery-circuit-extension/) | **The VS Code extension**: persona views, connections (including the review tools), Circuit MCP, AI testing and the setup wizard in one place ([details](delivery-circuit-extension/README.md)) |
 | [`AgenticImplementation.md`](AgenticImplementation.md) | The build runbook: phases B0–B12 and human checkpoints HC-1…HC-9 |
 | [`CredentialsSetup.md`](CredentialsSetup.md) | Step-by-step screens for every credential (GitHub App, Salesforce JWT, Jira, Slack, Claude token) |
+| [`ReviewRoom.md`](ReviewRoom.md) | Slack `#review-room`: CodeRabbit and Claude Tag review and debate each PR; setup, test and planned integration |
 | [`AgenticImplementation.v1.md`](AgenticImplementation.v1.md) | The original pipeline design (history) |
 | `.claude-plugin/marketplace.json` | Lets Claude Code install the plugin straight from this repo |
 
