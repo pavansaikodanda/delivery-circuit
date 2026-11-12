@@ -1,51 +1,68 @@
-// ConnectionsService: checks, connect / disconnect flows, GitHub API access and Actions secrets.
-// Secrets live only in SecretStorage or go straight to GitHub (sealed). Nothing secret is logged or rendered.
+// ConnectionsService (v3, docs/CIRCUIT-V3.md): every connection is a login the person already has. GitHub (VS Code
+// sign-in), Claude (the logged-in claude CLI), Salesforce (sf CLI), Atlassian (acli web login for the extension and the
+// runner; Atlassian MCP OAuth for Claude), Fireflies and Slack (their MCP servers' OAuth). Nothing here asks for, stores
+// or forwards an API token. Project rows read the repo through the person's GitHub login: the self-hosted runner, the
+// GitHub for Jira and CodeRabbit apps, rulesets and the production environment.
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
-import type { ConnectionId, ConnectionStatus, ConnectionsService, DeepLink, Identity, JiraCredentials, Persona, SfOrgGuard } from "../core/contracts";
+import type { ConnectionId, ConnectionsService, DeepLink, Identity, Persona, SfOrgGuard } from "../core/contracts";
 import { PERSONAS } from "../core/contracts";
 import { run, type ModuleBase } from "../core/util";
-import { baseStatus, CONNECTIONS, def } from "./catalog";
-import { EMPTY_CONFIG, normalizeSite, parseBuildConfig, parseReminders, slackWorkspaceUrl, type CircuitConfig, type Reminder } from "./config";
-import { applyExpiry, claudeTokenExpiry } from "./expiry";
+import { asContract, baseStatus, CONNECTIONS, def, type RowId, type RowStatus } from "./catalog";
+import { EMPTY_CONFIG, parseBuildConfig, parseReminders, slackWorkspaceUrl, type CircuitConfig, type Reminder } from "./config";
+import { applyExpiry } from "./expiry";
 import { GitHubClient } from "./github";
 import { GITHUB_SCOPES } from "./identity";
 import {
-  browserDir, findCodeAnalyzer, findServerFor, isSubscriptionAuth, MCP_KNOWN, mcpListStateFor, parseClaudeAuth, parseMcpConfigs,
-  parseMcpList, parseSfOrgDisplay, parseSfPlugins, requiredBrowsers, type McpListEntry, type McpRowId, type McpServerEntry,
+  acliInstallHelp, APP_SLUGS, browserDir, findCodeAnalyzer, findInstallation, findServerFor, isSubscriptionAuth, MCP_KNOWN, mcpListStateFor,
+  parseAcliAuthStatus, parseClaudeAuth, parseEnvironments, parseMcpConfigs, parseMcpList, parseRulesets, parseRunners, parseSfOrgDisplay,
+  parseSfPlugins, requiredBrowsers, summarizeRunners, type AcliAuth, type McpListEntry, type McpRowId, type McpServerEntry, type RunnerInfo,
 } from "./parse";
 import { checkLoginUrl, safeRelPath, sfOrgDecision, terminalCommand } from "./safety";
-import { isFileSecret, scanWorkflows } from "./secrets";
+import { bannedSecretRefs, isBannedSecret } from "./secrets";
 import { buildProjectInfo, type ProjectInfo } from "./panelState";
 
 const K = {
-  jira: "deliveryCircuit.jira",
-  fireflies: "deliveryCircuit.fireflies",
-  claudeTokenSetAt: "deliveryCircuit.claudeTokenSetAt",
   confirmed: (id: string) => `deliveryCircuit.confirmed.${id}`,
+  // v2 kept these; v3 stores no credentials, so they are removed on start
+  legacySecrets: ["deliveryCircuit.jira", "deliveryCircuit.fireflies"],
+  legacyState: ["deliveryCircuit.claudeTokenSetAt"],
 };
 const SF_MCP_EOL = "2026-11-02";
-const UA = "delivery-circuit";
 
 export interface ConnectionsInternals extends ConnectionsService {
-  links(): Partial<Record<ConnectionId, DeepLink[]>>;
-  cached(): ConnectionStatus[];
+  links(): Partial<Record<RowId, DeepLink[]>>;
+  cached(): RowStatus[];
   config(): CircuitConfig;
   projectInfo(): Promise<ProjectInfo>;
-  setProjectSecret(name: string, env?: string): Promise<void>;
-  checkAll(): Promise<ConnectionStatus[]>;
+  checkAll(): Promise<RowStatus[]>;
+  /** check/connect/disconnect for any row id this module knows (the contract methods take ConnectionId only). */
+  checkRow(id: RowId): Promise<RowStatus>;
+  connectRow(id: RowId): Promise<RowStatus>;
+  disconnectRow(id: RowId): Promise<void>;
+  /** Atlassian site the acli login uses (from `acli jira auth status`), else build.config.yml jira.site. */
+  atlassianSite(): string | undefined;
 }
 
 export function createConnections(base: ModuleBase, getIdentity: () => Identity | null): { service: ConnectionsInternals; gh: GitHubClient } {
   const { ctx, root, log } = base;
   const ev = new vscode.EventEmitter<void>();
   ctx.subscriptions.push(ev);
-  const statuses = new Map<ConnectionId, ConnectionStatus>();
-  const links: Partial<Record<ConnectionId, DeepLink[]>> = {};
+  const statuses = new Map<RowId, RowStatus>();
+  const links: Partial<Record<RowId, DeepLink[]>> = {};
   let lastFull = 0;
   let mcpListCache: { at: number; entries: McpListEntry[] } | undefined;
+  let acliAuth: AcliAuth | undefined;
+
+  // v3: remove what v2 stored (Atlassian / Fireflies API tokens, the CI token date). Never read, never logged.
+  void (async () => {
+    let removed = 0;
+    for (const k of K.legacySecrets) { try { if (await ctx.secrets.get(k)) { await ctx.secrets.delete(k); removed++; } } catch { /* ignore */ } }
+    for (const k of K.legacyState) if (ctx.globalState.get(k) !== undefined) await ctx.globalState.update(k, undefined);
+    if (removed) log(`connections: removed ${removed} stored API token${removed === 1 ? "" : "s"} left by an older version (v3 uses logins only)`);
+  })();
 
   // ---------- config ----------
   let cfgCache: { mtime: number; cfg: CircuitConfig } | undefined;
@@ -61,6 +78,7 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
     try { return parseReminders(fs.readFileSync(path.join(root, "build-state.md"), "utf8")); } catch { return []; }
   }
   const exists = (rel: string) => fs.existsSync(path.join(root, rel));
+  const atlassianSite = () => (acliAuth?.site ? `https://${acliAuth.site}` : config().jiraSite);
 
   // ---------- GitHub ----------
   async function githubToken(): Promise<string> {
@@ -76,18 +94,31 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
     if (c.githubOrg && c.githubRepo) return { owner: c.githubOrg, repo: c.githubRepo };
     throw new Error("No GitHub repository known for this workspace (git remote origin or build.config.yml github.org/repo).");
   }
+  const repoUrlOrUndefined = () => { try { const { owner, repo } = repoRef(); return `https://github.com/${owner}/${repo}`; } catch { return undefined; } };
+  const enc = encodeURIComponent;
 
-  // ---------- secrets (VS Code SecretStorage) ----------
-  async function jira(): Promise<JiraCredentials | undefined> {
-    const raw = await ctx.secrets.get(K.jira);
-    if (!raw) return undefined;
-    try { const j = JSON.parse(raw); return j.site && j.email && j.token ? j : undefined; } catch { return undefined; }
+  // Short caches so one "Check all" asks GitHub once for things two rows need.
+  const memo = new Map<string, { at: number; p: Promise<any> }>();
+  function cached<T>(key: string, f: () => Promise<T>, ttl = 60_000): Promise<T> {
+    const m = memo.get(key);
+    if (m && Date.now() - m.at < ttl) return m.p;
+    const p = f(); memo.set(key, { at: Date.now(), p });
+    p.catch(() => memo.delete(key));
+    return p;
   }
-  const firefliesKey = async () => (await ctx.secrets.get(K.fireflies)) || undefined;
+  const repoInfo = () => { const { owner, repo } = repoRef(); return cached(`repo:${owner}/${repo}`, () => gh.request<any>("GET", `/repos/${enc(owner)}/${enc(repo)}`)); };
+  /** Org app installations; undefined when the repo is personal or the person may not list them (org owners only). */
+  async function orgInstallations(): Promise<unknown | undefined> {
+    const id = getIdentity();
+    const { owner } = repoRef();
+    if (id && !id.orgOwned) return undefined;
+    try { return await cached(`inst:${owner}`, () => gh.request<any>("GET", `/orgs/${enc(owner)}/installations?per_page=100`)); }
+    catch { return undefined; }
+  }
 
   // ---------- helpers ----------
   const now = () => new Date();
-  function put(s: ConnectionStatus, l?: DeepLink[]): ConnectionStatus {
+  function put(s: RowStatus, l?: DeepLink[]): RowStatus {
     s.state = applyExpiry(s.state, s.expiresAt, now());
     const prev = statuses.get(s.id);
     statuses.set(s.id, s);
@@ -95,21 +126,15 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
     if (JSON.stringify(prev) !== JSON.stringify(s)) ev.fire();
     return s;
   }
-  const st = (id: ConnectionId, patch: Partial<ConnectionStatus>, extra: Persona[] = []): ConnectionStatus => ({ ...baseStatus(id, extra), ...patch });
+  const st = (id: RowId, patch: Partial<RowStatus>, extra: Persona[] = []): RowStatus => ({ ...baseStatus(id, extra), ...patch });
   function terminal(name: string, cwd = root): vscode.Terminal {
     const t = vscode.window.terminals.find((x) => x.name === name) ?? vscode.window.createTerminal({ name, cwd });
     t.show();
     return t;
   }
-  async function fetchText(url: string, init: { method?: string; headers: Record<string, string>; body?: string }, timeoutMs = 20_000) {
-    const ac = new AbortController(); const tm = setTimeout(() => ac.abort(), timeoutMs);
-    try {
-      const r = await fetch(url, { ...init, signal: ac.signal, headers: { "User-Agent": UA, ...init.headers } });
-      return { status: r.status, ok: r.ok, text: await r.text() };
-    } finally { clearTimeout(tm); }
-  }
   const errMsg = (e: unknown) => (e as any)?.name === "AbortError" ? "timed out" : String((e as any)?.message ?? e);
-  function pollUntilConnected(id: ConnectionId, totalMs = 180_000, everyMs = 15_000) {
+  const httpStatus = (e: unknown): number | undefined => (e as any)?.status;
+  function pollUntilConnected(id: RowId, totalMs = 180_000, everyMs = 15_000) {
     const started = Date.now();
     const tick = async () => {
       const s = await check(id).catch(() => undefined);
@@ -121,9 +146,16 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
   async function confirm(message: string, detail: string | undefined, yes: string): Promise<boolean> {
     return (await vscode.window.showWarningMessage(message, { modal: true, detail }, yes)) === yes;
   }
+  function workflowFiles(): { file: string; text: string }[] {
+    const dir = path.join(root, ".github", "workflows");
+    try {
+      return fs.readdirSync(dir).filter((f) => /\.ya?ml$/.test(f))
+        .map((f) => ({ file: `.github/workflows/${f}`, text: fs.readFileSync(path.join(dir, f), "utf8") }));
+    } catch { return []; }
+  }
 
-  // ---------- checks ----------
-  async function checkGithub(): Promise<ConnectionStatus> {
+  // ---------- personal ----------
+  async function checkGithub(): Promise<RowStatus> {
     const s = await vscode.authentication.getSession("github", GITHUB_SCOPES, { createIfNone: false });
     if (!s) return put(st("github", { state: "disconnected", detail: "Sign in with GitHub (scopes repo, read:org, workflow)." }));
     const id = getIdentity();
@@ -132,9 +164,9 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
       repo ? [{ kind: "github", label: "Repo", target: `https://github.com/${repo}` }, { kind: "github", label: "Account", target: "https://github.com/settings/applications" }] : undefined);
   }
 
-  async function checkClaude(): Promise<ConnectionStatus> {
+  async function checkClaude(): Promise<RowStatus> {
     if (process.env.ANTHROPIC_API_KEY) {
-      return put(st("claude", { state: "error", detail: "ANTHROPIC_API_KEY is set in VS Code's environment. The circuit uses your Claude subscription only; remove that variable and restart VS Code." }));
+      return put(st("claude", { state: "error", detail: "ANTHROPIC_API_KEY is set in VS Code's environment. The circuit uses your logged-in Claude only; remove that variable and restart VS Code." }));
     }
     const r = await run("claude", ["auth", "status", "--json"], { cwd: root, timeoutMs: 30_000 });
     const a = parseClaudeAuth(r.stdout);
@@ -144,7 +176,7 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
       return put(st("claude", { state: missing ? "disconnected" : "error",
         detail: missing ? "Claude Code is not installed (npm i -g @anthropic-ai/claude-code)." : "Could not read Claude's login status." }), docs);
     }
-    if (!a.loggedIn) return put(st("claude", { state: "disconnected", detail: "Not signed in. Connect signs in with your Claude subscription." }), docs);
+    if (!a.loggedIn) return put(st("claude", { state: "disconnected", detail: "Not signed in. Connect runs claude auth login with your Claude subscription." }), docs);
     if (!isSubscriptionAuth(a)) {
       return put(st("claude", { state: "error", account: a.email, detail: `Signed in with ${a.authMethod ?? "another method"} (${a.apiProvider ?? "?"}). The circuit needs a claude.ai subscription login.` }), docs);
     }
@@ -155,7 +187,7 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
 
   function sfAlias(role: "dev" | "qa"): string { return role === "dev" ? config().sf.devAlias : config().sf.qaAlias; }
 
-  async function checkSf(id: "sf-dev" | "sf-qa"): Promise<ConnectionStatus> {
+  async function checkSf(id: "sf-dev" | "sf-qa"): Promise<RowStatus> {
     const role = id === "sf-dev" ? "dev" : "qa";
     const alias = sfAlias(role);
     const c = config();
@@ -173,8 +205,7 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
     // Any connected org is fine: SDO / demo orgs are production-edition orgs, so the org type is not checked.
     const inst = p.org.instanceUrl;
     const host = inst ? new URL(inst).hostname : "";
-    return put(st(id, { state: "connected", account: p.org.username, expiresAt: p.org.expirationDate,
-      detail: `alias ${alias} · ${host}` }),
+    return put(st(id, { state: "connected", account: p.org.username, expiresAt: p.org.expirationDate, detail: `alias ${alias} · ${host}` }),
       inst ? [{ kind: "salesforce", label: "Org", target: inst }, { kind: "salesforce", label: "Setup", target: `${inst.replace(/\/+$/, "")}/lightning/setup/SetupOneHome/home` }] : undefined);
   }
 
@@ -182,74 +213,38 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
   async function sfOrgGuard(role: "dev" | "qa"): Promise<SfOrgGuard> {
     const alias = sfAlias(role);
     if (!alias || !/^[\w.@+-]+$/.test(alias)) return { alias, allowed: false, reason: `No usable sf CLI alias for the ${role} org (got "${alias}").` };
-    const c = config();
     const r = await run("sf", ["org", "display", "--target-org", alias, "--json"], { cwd: root, timeoutMs: 90_000 });
     const p = parseSfOrgDisplay(r.stdout);
     const instanceUrl = p.ok ? p.org?.instanceUrl : undefined;
-    return { alias, instanceUrl, ...sfOrgDecision(alias, instanceUrl, role === "dev" ? c.sf.devIsTrial : c.sf.qaIsTrial) };
+    return { alias, instanceUrl, ...sfOrgDecision(alias, instanceUrl) };
   }
 
-  async function atlassianGet(creds: JiraCredentials, apiPath: string) {
-    const auth = Buffer.from(`${creds.email}:${creds.token}`).toString("base64");
-    return fetchText(`${creds.site}${apiPath}`, { headers: { Authorization: `Basic ${auth}`, Accept: "application/json" } });
+  async function checkAcli(): Promise<RowStatus> {
+    const r = await run("acli", ["jira", "auth", "status"], { cwd: root, timeoutMs: 45_000 });
+    const a = parseAcliAuthStatus(r);
+    acliAuth = a;
+    const c = config();
+    const site = atlassianSite();
+    const l: DeepLink[] = [];
+    if (site) l.push({ kind: "jira", label: c.jiraProjectKey ? `Jira ${c.jiraProjectKey}` : "Jira", target: c.jiraProjectKey ? `${site}/browse/${c.jiraProjectKey}` : `${site}/jira` });
+    if (site && c.confluenceSpace) l.push({ kind: "confluence", label: `Space ${c.confluenceSpace}`, target: `${site}/wiki/spaces/${c.confluenceSpace}` });
+    l.push({ kind: "url", label: "acli guide", target: def("acli").manageUrl! });
+    if (a.state === "missing") {
+      return put(st("acli", { state: "disconnected", detail: `The Atlassian CLI (acli) is not installed. ${acliInstallHelp(process.platform, process.arch).text}` }), l);
+    }
+    if (a.state === "logged-out") {
+      return put(st("acli", { state: "disconnected", detail: `Not logged in${a.note ? ` (${a.note})` : ""}. Connect runs acli jira auth login --web in a terminal.` }), l);
+    }
+    const wrongSite = a.site && c.jiraSite && new URL(c.jiraSite).hostname !== a.site;
+    if (a.state === "unknown") return put(st("acli", { state: "unknown", detail: `acli answered without a site: ${a.note ?? "no output"}.` }), l);
+    return put(st("acli", {
+      state: wrongSite ? "error" : "connected", account: a.email ?? a.site,
+      detail: wrongSite ? `Logged in to ${a.site}, but build.config.yml names ${new URL(c.jiraSite!).hostname}. Switch with acli jira auth switch.`
+        : `Jira via acli${a.site ? ` · ${a.site}` : ""}. Confluence goes through the Atlassian MCP. Keep acli updated: each version is supported for 6 months.`,
+    }), l);
   }
 
-  async function verifyJira(creds: JiraCredentials): Promise<{ ok: boolean; account?: string; detail: string }> {
-    try {
-      const r = await atlassianGet(creds, "/rest/api/3/myself");
-      if (r.status === 401 || r.status === 403) return { ok: false, detail: "Atlassian rejected the email or API token (401/403). Create a new token and connect again." };
-      if (!r.ok) return { ok: false, detail: `Jira answered ${r.status} for /rest/api/3/myself. Check the site URL.` };
-      const j = JSON.parse(r.text);
-      return { ok: true, account: j.emailAddress || creds.email, detail: `${j.displayName ?? creds.email} · ${new URL(creds.site).hostname}` };
-    } catch (e) { return { ok: false, detail: `Could not reach ${creds.site}: ${errMsg(e)}` }; }
-  }
-
-  async function checkJira(): Promise<ConnectionStatus> {
-    const c = config(); const creds = await jira();
-    const site = creds?.site ?? c.jiraSite;
-    const l: DeepLink[] = site ? [{ kind: "jira", label: c.jiraProjectKey ? `Jira ${c.jiraProjectKey}` : "Jira", target: c.jiraProjectKey ? `${site}/browse/${c.jiraProjectKey}` : `${site}/jira` }] : [];
-    l.push({ kind: "url", label: "API tokens", target: "https://id.atlassian.com/manage-profile/security/api-tokens" });
-    if (!creds) return put(st("jira", { state: "disconnected", detail: "Add your Atlassian site, email and API token." }), l);
-    const v = await verifyJira(creds);
-    return put(st("jira", { state: v.ok ? "connected" : "error", account: v.account, detail: v.detail }), l);
-  }
-
-  async function checkConfluence(): Promise<ConnectionStatus> {
-    const c = config(); const creds = await jira();
-    const site = creds?.site ?? c.jiraSite;
-    const l: DeepLink[] = site ? [{ kind: "confluence", label: c.confluenceSpace ? `Space ${c.confluenceSpace}` : "Confluence", target: c.confluenceSpace ? `${site}/wiki/spaces/${c.confluenceSpace}` : `${site}/wiki` }] : [];
-    if (!creds) return put(st("confluence", { state: "disconnected", detail: "Uses your Atlassian (Jira) credentials. Connect Jira or connect here." }), l);
-    try {
-      const r = await atlassianGet(creds, "/wiki/rest/api/space?limit=1");
-      if (r.status === 401 || r.status === 403) return put(st("confluence", { state: "error", account: creds.email, detail: "Atlassian rejected the token for Confluence, or you have no Confluence access on this site." }), l);
-      if (r.status === 404) return put(st("confluence", { state: "error", account: creds.email, detail: `Confluence is not enabled on ${new URL(creds.site).hostname}.` }), l);
-      if (!r.ok) return put(st("confluence", { state: "error", account: creds.email, detail: `Confluence answered ${r.status}.` }), l);
-      return put(st("confluence", { state: "connected", account: creds.email, detail: `${new URL(creds.site).hostname}${c.confluenceSpace ? ` · space ${c.confluenceSpace}` : ""}` }), l);
-    } catch (e) { return put(st("confluence", { state: "error", detail: `Could not reach Confluence: ${errMsg(e)}` }), l); }
-  }
-
-  async function verifyFireflies(key: string): Promise<{ ok: boolean; account?: string; detail: string }> {
-    try {
-      const r = await fetchText("https://api.fireflies.ai/graphql", { method: "POST",
-        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ query: "query { user { email name } }" }) });
-      if (r.status === 401 || r.status === 403) return { ok: false, detail: "Fireflies rejected the API key." };
-      const j = JSON.parse(r.text);
-      if (j.errors?.length) return { ok: false, detail: `Fireflies: ${String(j.errors[0]?.message ?? "error")}` };
-      if (!r.ok || !j.data?.user) return { ok: false, detail: `Fireflies answered ${r.status}.` };
-      return { ok: true, account: j.data.user.email, detail: j.data.user.name ?? j.data.user.email };
-    } catch (e) { return { ok: false, detail: `Could not reach Fireflies: ${errMsg(e)}` }; }
-  }
-
-  async function checkFireflies(): Promise<ConnectionStatus> {
-    const key = await firefliesKey();
-    const src = config().transcriptsSource;
-    const l: DeepLink[] = [{ kind: "fireflies", label: "Fireflies", target: "https://app.fireflies.ai/" }, { kind: "fireflies", label: "API key", target: "https://app.fireflies.ai/integrations/custom/fireflies" }];
-    if (!key) return put(st("fireflies", { state: "disconnected", detail: src === "file" ? "Optional: transcripts come from files in this repo (build.config.yml). Add a key to index meetings." : "Add your Fireflies API key." }), l);
-    const v = await verifyFireflies(key);
-    return put(st("fireflies", { state: v.ok ? "connected" : "error", account: v.account, detail: v.detail }), l);
-  }
-
-  function checkConfirmed(id: "slack" | "lucid"): ConnectionStatus {
+  function checkConfirmed(id: "slack" | "lucid"): RowStatus {
     const c = config();
     const at = ctx.globalState.get<string>(K.confirmed(id));
     if (id === "slack") {
@@ -280,7 +275,7 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
     return { browsersJson: fs.existsSync(bj) ? bj : undefined, cli: fs.existsSync(cli) ? cli : undefined, cacheDir };
   }
 
-  function checkBrowsers(): ConnectionStatus {
+  function checkBrowsers(): RowStatus {
     const p = playwrightPaths();
     const l: DeepLink[] = [{ kind: "url", label: "Playwright browsers", target: "https://playwright.dev/docs/browsers" }];
     if (!p.browsersJson) return put(st("testing-browsers", { state: "unknown", detail: "Playwright is not bundled with this build of the extension." }), l);
@@ -291,65 +286,117 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
     return put(st("testing-browsers", { state: "connected", detail: `${need.map((b) => `${b.title ?? b.name} r${b.revision}`).join(" + ")} in ${p.cacheDir}` }), l);
   }
 
-  async function checkCodeAnalyzer(): Promise<ConnectionStatus> {
+  // ---------- review tools ----------
+  async function checkCodeAnalyzer(): Promise<RowStatus> {
     const r = await run("sf", ["plugins", "--json"], { cwd: root, timeoutMs: 60_000 });
     const plugin = findCodeAnalyzer(parseSfPlugins(r.stdout));
-    const inCi = workflowTexts().some((t) => /run-code-analyzer|code-analyzer run/.test(t));
-    const ci = inCi ? " · runs in CI (pr-checks)" : " · not in CI workflows yet";
+    const inCi = workflowFiles().some((w) => /run-code-analyzer|code-analyzer run/.test(w.text));
+    const ci = inCi ? " · runs in CI on the self-hosted runner" : " · not in CI workflows yet";
     const l: DeepLink[] = [{ kind: "url", label: "Docs", target: def("code-analyzer").manageUrl! }];
     if (exists(".github/workflows/pr-checks.yml")) l.push({ kind: "file", label: "pr-checks.yml", target: ".github/workflows/pr-checks.yml" });
     if (!plugin) return put(st("code-analyzer", { state: "disconnected", detail: `sf plugin @salesforce/plugin-code-analyzer is not installed locally${ci}.` }), l);
     return put(st("code-analyzer", { state: "connected", detail: `${plugin.name.replace("@salesforce/", "")} ${plugin.version ?? ""} locally${ci}` }), l);
   }
 
-  async function checkCodeRabbit(): Promise<ConnectionStatus> {
+  /** v3: the AI Reviewer runs in pr-checks on [self-hosted, circuit] with the runner's own claude login (no token). */
+  async function checkAiReviewer(): Promise<RowStatus> {
+    const hasAgent = exists(".claude/agents/reviewer.md");
+    const files = workflowFiles();
+    const reviewerFiles = files.filter((w) => /reviewer/i.test(w.text));
+    const onRunner = reviewerFiles.some((w) => /runs-on:\s*\[\s*self-hosted\s*,\s*circuit\s*\]/i.test(w.text));
+    const banned = bannedSecretRefs(reviewerFiles);
+    const l: DeepLink[] = [];
+    if (hasAgent) l.push({ kind: "file", label: "reviewer.md", target: ".claude/agents/reviewer.md" });
+    for (const w of reviewerFiles.slice(0, 2)) l.push({ kind: "file", label: path.basename(w.file), target: w.file });
+    const repoUrl = repoUrlOrUndefined();
+    if (repoUrl) l.push({ kind: "github", label: "Runners", target: `${repoUrl}/settings/actions/runners` });
+    if (!hasAgent) return put(st("ai-reviewer", { state: "disconnected", detail: ".claude/agents/reviewer.md is missing (the circuit's bootstrap adds it)." }), l);
+    if (banned.length) {
+      return put(st("ai-reviewer", { state: "error", detail: `${banned.map((b) => `${b.file} reads ${b.names.join(", ")}`).join("; ")}. v3 runs the reviewer on the self-hosted runner with its claude login; update the workflow.` }), l);
+    }
+    if (!onRunner) return put(st("ai-reviewer", { state: "disconnected", detail: "No workflow runs the AI Reviewer on runs-on: [self-hosted, circuit] yet." }), l);
+    const runner = statuses.get("runner") ?? await checkRunner();
+    if (runner.state === "connected") return put(st("ai-reviewer", { state: "connected", detail: "reviewer.md · runs in pr-checks on the self-hosted runner (its claude login)" }), l);
+    return put(st("ai-reviewer", { state: runner.state === "error" ? "error" : "unknown",
+      detail: `reviewer.md · runs on the self-hosted runner, which is ${runner.state === "error" ? "offline" : "not confirmed online"} (${runner.detail ?? "see the runner row"}).` }), l);
+  }
+
+  // ---------- project ----------
+  async function checkRunner(): Promise<RowStatus> {
+    let owner: string, repo: string;
+    try { ({ owner, repo } = repoRef()); } catch (e) { return put(st("runner", { state: "unknown", detail: errMsg(e) })); }
+    const repoUrl = `https://github.com/${owner}/${repo}`;
+    const l: DeepLink[] = [{ kind: "github", label: "Runners", target: `${repoUrl}/settings/actions/runners` }, { kind: "url", label: "Docs", target: def("runner").manageUrl! },
+      { kind: "github", label: "Actions", target: `${repoUrl}/actions` }];
+    let list: RunnerInfo[] = [];
+    let repoErr: number | undefined;
+    try { list = parseRunners(await gh.request("GET", `/repos/${enc(owner)}/${enc(repo)}/actions/runners?per_page=100`)); }
+    catch (e) { repoErr = httpStatus(e) ?? 0; }
+    // org runners shared with the repo are not in the repo list; org admins can read them
+    if (getIdentity()?.orgOwned !== false) {
+      try { list = [...list, ...parseRunners(await gh.request("GET", `/orgs/${enc(owner)}/actions/runners?per_page=100`))]; } catch { /* not an org admin */ }
+    }
+    if (repoErr !== undefined && !list.length) {
+      return put(st("runner", { state: "unknown", detail: repoErr === 403 || repoErr === 404
+        ? "Only repo admins can list runners. The labels the workflows need are circuit and circuit-release."
+        : `Could not list runners (HTTP ${repoErr}).` }), l);
+    }
+    const sum = summarizeRunners(list);
+    let pub = "";
+    try { if ((await repoInfo())?.private === false) pub = " · public repo: GitHub advises against self-hosted runners here; require approval for all outside contributors' workflows"; } catch { /* ignore */ }
+    const howTo = sum.state === "disconnected" ? ". Register one with ./config.sh --labels circuit,circuit-release (Add runner opens the page with the commands)" : "";
+    return put(st("runner", { state: sum.state, detail: `${sum.detail}${howTo}${pub}` }), l);
+  }
+
+  async function checkGithubJira(): Promise<RowStatus> {
+    const site = atlassianSite();
+    const l: DeepLink[] = [{ kind: "url", label: "Setup guide", target: def("github-jira").manageUrl! }];
+    if (site) l.push({ kind: "jira", label: "Jira", target: `${site}/jira` });
+    let inst: unknown;
+    try { inst = await orgInstallations(); } catch { inst = undefined; }
+    if (inst !== undefined) {
+      const app = findInstallation(inst, APP_SLUGS.githubForJira);
+      if (app?.url) l.unshift({ kind: "github", label: "Installation", target: app.url });
+      if (!app) return put(st("github-jira", { state: "disconnected", detail: "Not installed on this GitHub org. A Jira site admin installs GitHub for Atlassian from Jira (Apps > Explore more apps) and a GitHub org owner approves it." }), l);
+      if (app.suspended) return put(st("github-jira", { state: "error", detail: "Installed but suspended on this GitHub org." }), l);
+      return put(st("github-jira", { state: "connected", detail: `Installed (${app.selection === "all" ? "all repositories" : "selected repositories: make sure this one is included"}). Branch feature/<KEY>-…, PR title "<KEY> …" link work to Jira.` }), l);
+    }
+    const at = ctx.globalState.get<string>(K.confirmed("github-jira"));
+    if (at) return put(st("github-jira", { state: "connected", detail: `Confirmed installed by you on ${at.slice(0, 10)} (only org owners can list installed apps).` }), l);
+    return put(st("github-jira", { state: "unknown", detail: "Only GitHub org owners can see installed apps. If a PR shows in a Jira work item's Development panel, it is installed." }), l);
+  }
+
+  async function checkCodeRabbit(): Promise<RowStatus> {
     const hasCfg = exists(".coderabbit.yaml") || exists(".coderabbit.yml");
     const l: DeepLink[] = [{ kind: "coderabbit", label: "CodeRabbit", target: "https://app.coderabbit.ai/" }, { kind: "github", label: "GitHub App", target: "https://github.com/apps/coderabbitai" }];
     if (hasCfg) l.push({ kind: "file", label: ".coderabbit.yaml", target: exists(".coderabbit.yaml") ? ".coderabbit.yaml" : ".coderabbit.yml" });
+    const cfgNote = hasCfg ? "" : " · no .coderabbit.yaml (CodeRabbit defaults apply)";
     let seen: { pr: number; url: string; at: string } | undefined;
-    let apiNote = "";
+    let repoName = "this repo";
     try {
-      const { owner, repo } = repoRef();
-      const prs = await gh.request<any[]>("GET", `/repos/${owner}/${repo}/pulls?state=all&sort=updated&direction=desc&per_page=8`);
-      for (const pr of prs.slice(0, 8)) {
-        const reviews = await gh.request<any[]>("GET", `/repos/${owner}/${repo}/pulls/${pr.number}/reviews?per_page=50`);
+      const { owner, repo } = repoRef(); repoName = repo;
+      const prs = await gh.request<any[]>("GET", `/repos/${enc(owner)}/${enc(repo)}/pulls?state=all&sort=updated&direction=desc&per_page=6`);
+      for (const pr of prs.slice(0, 6)) {
+        const reviews = await gh.request<any[]>("GET", `/repos/${enc(owner)}/${enc(repo)}/pulls/${pr.number}/reviews?per_page=50`);
         const r = reviews.reverse().find((x) => x?.user?.login === "coderabbitai[bot]");
         if (r) { seen = { pr: pr.number, url: r.html_url ?? pr.html_url, at: r.submitted_at }; break; }
-        const comments = await gh.request<any[]>("GET", `/repos/${owner}/${repo}/issues/${pr.number}/comments?per_page=50`);
+        const comments = await gh.request<any[]>("GET", `/repos/${enc(owner)}/${enc(repo)}/issues/${pr.number}/comments?per_page=50`);
         const c = comments.reverse().find((x) => x?.user?.login === "coderabbitai[bot]");
         if (c) { seen = { pr: pr.number, url: c.html_url ?? pr.html_url, at: c.created_at }; break; }
       }
-      if (!prs.length) apiNote = " · no pull requests yet";
-    } catch (e) { apiNote = ` · could not read PRs (${errMsg(e)})`; }
+    } catch { /* PR read failed: rely on the installation */ }
     if (seen) l.push({ kind: "github", label: `PR #${seen.pr}`, target: seen.url });
-    if (!hasCfg) return put(st("coderabbit", { state: "disconnected", detail: `.coderabbit.yaml is missing from the repo${seen ? `; last review on PR #${seen.pr}` : ""}.` }), l);
-    if (seen) return put(st("coderabbit", { state: "connected", account: "coderabbitai[bot]", detail: `Config present · last review on PR #${seen.pr}${seen.at ? ` (${seen.at.slice(0, 10)})` : ""}` }), l);
-    return put(st("coderabbit", { state: "unknown", detail: `Config present · no CodeRabbit review seen yet${apiNote}. Install the app on the repo if it is not.` }), l);
-  }
-
-  async function repoSecretNames(): Promise<string[]> { const { owner, repo } = repoRef(); return gh.secretNames(owner, repo); }
-
-  async function checkAiReviewer(): Promise<ConnectionStatus> {
-    const hasAgent = exists(".claude/agents/reviewer.md");
-    let repoUrl: string | undefined; let secret: boolean | undefined; let note = "";
-    try {
-      const { owner, repo } = repoRef(); repoUrl = `https://github.com/${owner}/${repo}`;
-      secret = (await repoSecretNames()).includes("CLAUDE_CODE_OAUTH_TOKEN");
-    } catch (e) {
-      const s = (e as any)?.status;
-      note = s === 403 || s === 404 ? "Only repo admins can see Actions secrets." : `Could not list secrets (${errMsg(e)}).`;
-    }
-    const l: DeepLink[] = [];
-    if (hasAgent) l.push({ kind: "file", label: "reviewer.md", target: ".claude/agents/reviewer.md" });
-    if (repoUrl) l.push({ kind: "github", label: "Secrets", target: `${repoUrl}/settings/secrets/actions` });
-    const setAt = ctx.globalState.get<string>(K.claudeTokenSetAt);
-    const reminder = reminders().find((r) => /claude/i.test(r.label))?.date;
-    const expiresAt = setAt ? claudeTokenExpiry(setAt) : reminder;
-    const manageUrl = repoUrl ? `${repoUrl}/settings/secrets/actions` : undefined;
-    if (!hasAgent) return put(st("ai-reviewer", { state: "disconnected", manageUrl, detail: ".claude/agents/reviewer.md is missing (the circuit's bootstrap adds it)." }), l);
-    if (secret === undefined) return put(st("ai-reviewer", { state: "unknown", manageUrl, expiresAt, detail: `reviewer.md present · ${note}` }), l);
-    if (!secret) return put(st("ai-reviewer", { state: "disconnected", manageUrl, detail: "reviewer.md present · repo secret CLAUDE_CODE_OAUTH_TOKEN is missing." }), l);
-    return put(st("ai-reviewer", { state: "connected", manageUrl, expiresAt, detail: `reviewer.md + CLAUDE_CODE_OAUTH_TOKEN${expiresAt ? "" : " (expiry unknown: set it from here to track it)"}` }), l);
+    const seenText = seen ? ` · last review on PR #${seen.pr}${seen.at ? ` (${seen.at.slice(0, 10)})` : ""}` : "";
+    let inst: unknown;
+    try { inst = await orgInstallations(); } catch { inst = undefined; }
+    const app = inst !== undefined ? findInstallation(inst, APP_SLUGS.coderabbit) : undefined;
+    if (app?.url) l.unshift({ kind: "github", label: "Repository access", target: app.url });
+    if (inst !== undefined && !app && !seen) return put(st("coderabbit", { state: "disconnected", detail: `The CodeRabbit app is not installed on this GitHub org${cfgNote}.` }), l);
+    if (app?.suspended) return put(st("coderabbit", { state: "error", detail: `Installed but suspended on this GitHub org${cfgNote}.` }), l);
+    if (seen) return put(st("coderabbit", { state: "connected", account: "coderabbitai[bot]", detail: `Has access to ${repoName}${seenText}${cfgNote}` }), l);
+    if (app?.selection === "all") return put(st("coderabbit", { state: "connected", detail: `Installed for all repositories of the org${cfgNote}; no review seen yet.` }), l);
+    if (app) return put(st("coderabbit", { state: "unknown", detail: `Installed for selected repositories; add ${repoName} under Repository access if it is not listed${cfgNote}.` }), l);
+    return put(st("coderabbit", { state: "unknown", detail: `No CodeRabbit review seen on recent PRs${cfgNote}. Only org owners can see installed apps; give the app access to ${repoName}.` }), l);
   }
 
   // ---------- MCP ----------
@@ -366,50 +413,55 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
     return mcpListCache.entries;
   }
 
-  async function checkMcp(id: McpRowId, force = false): Promise<ConnectionStatus> {
+  async function checkMcp(id: McpRowId, force = false): Promise<RowStatus> {
     const active = getIdentity()?.active ?? null;
     const holders = PERSONAS.filter((p) => findServerFor(id, personaServers(p)));
     const persona = active && holders.includes(active) ? active : holders[0];
     const l: DeepLink[] = [{ kind: def(id).linkKind, label: "Docs", target: def(id).manageUrl! }];
-    if (!persona) return put(st(id, { state: "disconnected", detail: "Not in any persona's MCP config (.claude/personas/<persona>.mcp.json)." }), l);
-    const file = personaConfigFiles(persona)[0];
-    l.push({ kind: "file", label: `${persona}.mcp.json`, target: file });
-    const entry = findServerFor(id, personaServers(persona))!;
+    const entry = persona ? findServerFor(id, personaServers(persona)) : undefined;
+    if (persona) l.push({ kind: "file", label: `${persona}.mcp.json`, target: personaConfigFiles(persona)[0] });
     const who = holders.length > 1 ? ` (${holders.join(", ")})` : "";
-    if (entry.placeholder) {
+    if (entry?.placeholder) {
       const known = MCP_KNOWN[id].url;
-      return put(st(id, { state: "error", detail: `URL in ${file} is a placeholder${known ? `; documented URL is ${known}` : ""}. Connect can fix it.` }, holders), l);
+      return put(st(id, { state: "error", detail: `URL in ${personaConfigFiles(persona!)[0]} is a placeholder${known ? `; documented URL is ${known}` : ""}. Connect can fix it.` }, holders), l);
     }
-    if (entry.type === "stdio") {
+    if (entry?.type === "stdio") {
       const orgs = (entry.args ?? [])[(entry.args ?? []).indexOf("--orgs") + 1];
       const eol = id === "mcp-salesforce" && new Date() >= new Date(SF_MCP_EOL);
       return put(st(id, { state: eol ? "expiring" : "connected",
         detail: `Local server (${entry.command} ${MCP_KNOWN[id].stdioPackage ?? ""}${orgs ? ` --orgs ${orgs}` : ""})${who}${eol ? `. @salesforce/mcp reached end of life on ${SF_MCP_EOL}; plan the move to forcedotcom/sf-skills.` : ""}` }, holders), l);
     }
     let listed: McpListEntry | undefined;
-    try { listed = mcpListStateFor(id, entry, await mcpList(force)); } catch { listed = undefined; }
-    const slackNote = id === "mcp-slack" ? " Slack's server has no dynamic client registration; if /mcp sign-in fails, ask an admin to add the claude.ai Slack connector." : "";
-    if (listed?.state === "connected") return put(st(id, { state: "connected", account: listed.name, detail: `Signed in (Claude reports "${listed.name}" connected)${who}` }, holders), l);
-    if (listed?.state === "needs-auth") return put(st(id, { state: "disconnected", detail: `Configured${who}; sign in once in Claude with /mcp.${slackNote}` }, holders), l);
-    if (listed?.state === "failed") return put(st(id, { state: "error", detail: `Claude could not connect: ${listed.reason ?? "failed"}.${slackNote}` }, holders), l);
-    return put(st(id, { state: "unknown", detail: `Configured${who} (${new URL(entry.url!).hostname}); sign-in state shows in Claude's /mcp.${slackNote}` }, holders), l);
+    try { listed = mcpListStateFor(id, entry, await mcpList(force), true); } catch { listed = undefined; }
+    const slackNote = id === "mcp-slack" ? " Slack's server has no dynamic client registration: use the claude.ai Slack connector (a workspace admin approves it)." : "";
+    const where = listed ? ` as "${listed.name}"` : "";
+    if (listed?.state === "connected") return put(st(id, { state: "connected", account: listed.name, detail: `Signed in (Claude reports${where} connected)${who}` }, holders), l);
+    if (listed?.state === "needs-auth") return put(st(id, { state: "disconnected", detail: `Configured${where}${who}; sign in once in Claude with /mcp.${slackNote}` }, holders), l);
+    if (listed?.state === "failed") return put(st(id, { state: "error", detail: `Claude could not connect${where}: ${listed.reason ?? "failed"}.${slackNote}` }, holders), l);
+    if (!entry && !listed) {
+      const how = id === "mcp-slack" ? "Add the Slack connector in claude.ai (Settings > Connectors); it then shows up in Claude Code."
+        : MCP_KNOWN[id].url ? `Connect adds ${MCP_KNOWN[id].url} to Claude Code for your user, then you sign in with /mcp (or add the claude.ai connector).`
+          : "Not in Claude's MCP list or any persona's MCP config.";
+      return put(st(id, { state: "disconnected", detail: how }, holders), l);
+    }
+    return put(st(id, { state: "unknown", detail: `Configured${who}${entry?.url ? ` (${new URL(entry.url).hostname})` : where}; sign-in state shows in Claude's /mcp.${slackNote}` }, holders), l);
   }
 
   // ---------- dispatch ----------
-  async function check(id: ConnectionId): Promise<ConnectionStatus> {
+  async function check(id: RowId): Promise<RowStatus> {
     try {
       switch (id) {
         case "github": return await checkGithub();
         case "claude": return await checkClaude();
         case "sf-dev": case "sf-qa": return await checkSf(id);
-        case "jira": return await checkJira();
-        case "confluence": return await checkConfluence();
+        case "acli": return await checkAcli();
         case "slack": case "lucid": return checkConfirmed(id);
-        case "fireflies": return await checkFireflies();
         case "testing-browsers": return checkBrowsers();
         case "code-analyzer": return await checkCodeAnalyzer();
         case "coderabbit": return await checkCodeRabbit();
         case "ai-reviewer": return await checkAiReviewer();
+        case "runner": return await checkRunner();
+        case "github-jira": return await checkGithubJira();
         default: return await checkMcp(id as McpRowId, true);
       }
     } catch (e) {
@@ -419,89 +471,71 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
   }
 
   // One full check at a time: views call list() on every change event, and checkAll() itself fires change events.
-  let checkAllInflight: Promise<ConnectionStatus[]> | undefined;
-  function checkAll(): Promise<ConnectionStatus[]> {
+  let checkAllInflight: Promise<RowStatus[]> | undefined;
+  function checkAll(): Promise<RowStatus[]> {
     checkAllInflight ??= doCheckAll().finally(() => { checkAllInflight = undefined; });
     return checkAllInflight;
   }
-
-  async function doCheckAll(): Promise<ConnectionStatus[]> {
-    mcpListCache = undefined;
+  async function doCheckAll(): Promise<RowStatus[]> {
+    mcpListCache = undefined; memo.clear();
     const ids = CONNECTIONS.map((c) => c.id);
     for (const id of ids) if (!statuses.has(id)) statuses.set(id, st(id, { state: "checking", detail: "Checking…" }));
     ev.fire();
-    await Promise.all(ids.map((id) => (id.startsWith("mcp-") ? checkMcp(id as McpRowId).catch(() => check(id)) : check(id))));
+    // the runner first: the AI Reviewer row reads its result
+    await check("runner");
+    await Promise.all(ids.filter((id) => id !== "runner").map((id) => (id.startsWith("mcp-") ? checkMcp(id as McpRowId).catch(() => check(id)) : check(id))));
     lastFull = Date.now();
     return ids.map((id) => statuses.get(id)!);
   }
 
   // ---------- connect flows ----------
-  async function promptAtlassian(): Promise<JiraCredentials | undefined> {
-    const prev = await jira(); const c = config();
-    const siteIn = await vscode.window.showInputBox({ title: "Atlassian site (1/3)", prompt: "Your Jira / Confluence site", value: prev?.site ?? c.jiraSite ?? "https://", ignoreFocusOut: true,
-      validateInput: (v) => (normalizeSite(v) ? undefined : "Enter an https URL such as https://acme.atlassian.net") });
-    const site = normalizeSite(siteIn); if (!site) return undefined;
-    const email = await vscode.window.showInputBox({ title: "Atlassian email (2/3)", value: prev?.email ?? "", ignoreFocusOut: true,
-      validateInput: (v) => (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()) ? undefined : "Enter your Atlassian account email") });
-    if (!email) return undefined;
-    void vscode.env.openExternal(vscode.Uri.parse("https://id.atlassian.com/manage-profile/security/api-tokens"));
-    const token = await vscode.window.showInputBox({ title: "Atlassian API token (3/3)", prompt: "Create one at id.atlassian.com (opened in your browser) and paste it here. It is kept in VS Code's secret storage.", password: true, ignoreFocusOut: true,
-      validateInput: (v) => (v.trim().length >= 10 ? undefined : "Paste the API token") });
-    if (!token) return undefined;
-    return { site, email: email.trim(), token: token.trim() };
-  }
-
-  async function connectAtlassian(id: "jira" | "confluence"): Promise<ConnectionStatus> {
-    const creds = await promptAtlassian();
-    if (!creds) return statuses.get(id) ?? st(id, {});
-    const v = await verifyJira(creds);
-    if (!v.ok) { void vscode.window.showErrorMessage(`Atlassian: ${v.detail}`); return put(st(id, { state: "error", detail: v.detail })); }
-    await ctx.secrets.store(K.jira, JSON.stringify(creds));
-    log(`connections: Atlassian credentials saved for ${new URL(creds.site).hostname}`);
-    await checkConfluence();
-    return checkJira();
-  }
-
-  async function connectFireflies(): Promise<ConnectionStatus> {
-    void vscode.env.openExternal(vscode.Uri.parse("https://app.fireflies.ai/integrations/custom/fireflies"));
-    const key = await vscode.window.showInputBox({ title: "Fireflies API key", prompt: "Copy it from Fireflies > Integrations > Fireflies API (opened in your browser). Stored in VS Code's secret storage.",
-      password: true, ignoreFocusOut: true, validateInput: (v) => (v.trim().length >= 10 ? undefined : "Paste the API key") });
-    if (!key) return statuses.get("fireflies") ?? st("fireflies", {});
-    const v = await verifyFireflies(key.trim());
-    if (!v.ok) { void vscode.window.showErrorMessage(v.detail); return put(st("fireflies", { state: "error", detail: v.detail })); }
-    await ctx.secrets.store(K.fireflies, key.trim());
-    return checkFireflies();
-  }
-
-  async function connectSf(id: "sf-dev" | "sf-qa"): Promise<ConnectionStatus> {
+  async function connectSf(id: "sf-dev" | "sf-qa"): Promise<RowStatus> {
     const role = id === "sf-dev" ? "dev" : "qa"; const c = config();
     const alias = sfAlias(role);
-    const decision = checkLoginUrl(role === "dev" ? c.sf.devUrl : c.sf.qaUrl, role === "dev" ? c.sf.devIsTrial : c.sf.qaIsTrial);
+    const decision = checkLoginUrl(role === "dev" ? c.sf.devUrl : c.sf.qaUrl);
     if (!decision.allowed) {
       void vscode.window.showWarningMessage(`Login refused: ${decision.warning}`, { modal: true });
       return put(st(id, { state: "error", detail: decision.warning }));
     }
-    if (decision.warning && !(await confirm(`Log in to ${decision.url} as "${alias}"?`, decision.warning, "Log in"))) return statuses.get(id) ?? st(id, {});
     terminal("Delivery Circuit: Salesforce").sendText(terminalCommand("sf", ["org", "login", "web", "--alias", alias, "--instance-url", decision.url]));
     void vscode.window.showInformationMessage(`Finish the Salesforce login in your browser. The "${alias}" row updates by itself.`);
     pollUntilConnected(id);
     return put(st(id, { state: "checking", detail: `Waiting for the browser login to ${new URL(decision.url).hostname}…` }));
   }
 
-  async function connectConfirmed(id: "slack" | "lucid"): Promise<ConnectionStatus> {
+  async function connectAcli(): Promise<RowStatus> {
+    const s = await checkAcli();
+    if (acliAuth?.state === "missing") {
+      const help = acliInstallHelp(process.platform, process.arch);
+      const choice = await vscode.window.showInformationMessage("Install the Atlassian CLI (acli)", { modal: true, detail: `${help.text}\nThen press Connect again to log in with your browser (no API token).` },
+        ...(help.commands.length ? ["Install in terminal"] : []), "Open install guide");
+      if (choice === "Install in terminal") {
+        const t = terminal("Delivery Circuit: Atlassian CLI");
+        for (const c of help.commands) t.sendText(terminalCommand(c[0], c.slice(1)));
+      } else if (choice === "Open install guide") await vscode.env.openExternal(vscode.Uri.parse(help.guide));
+      return s;
+    }
+    terminal("Delivery Circuit: Atlassian CLI").sendText(terminalCommand("acli", ["jira", "auth", "login", "--web"]));
+    void vscode.window.showInformationMessage("Accept the Atlassian login in your browser, then choose the same site in the terminal. The row updates by itself.");
+    pollUntilConnected("acli");
+    return put(st("acli", { state: "checking", detail: "Waiting for the Atlassian browser login…" }));
+  }
+
+  async function connectConfirmed(id: "slack" | "lucid" | "github-jira"): Promise<RowStatus> {
     const ws = slackWorkspaceUrl(config().slackWorkspace);
-    const url = id === "slack" ? ws : "https://lucid.app/documents";
-    if (!url) { void vscode.window.showWarningMessage("Set slack.workspace in build.config.yml first."); return checkConfirmed(id); }
+    const url = id === "slack" ? ws : id === "lucid" ? "https://lucid.app/documents" : def("github-jira").manageUrl!;
+    if (!url) { void vscode.window.showWarningMessage("Set slack.workspace in build.config.yml first."); return checkConfirmed("slack"); }
     await vscode.env.openExternal(vscode.Uri.parse(url));
     const ch = Object.values(config().slackChannels);
     const ask = id === "slack"
       ? `Opened ${new URL(url).hostname}. Confirm once you are signed in${ch.length ? ` and have joined #${ch.join(", #")}` : ""}.`
-      : "Opened Lucid. Confirm once you are signed in with your work account.";
+      : id === "lucid" ? "Opened Lucid. Confirm once you are signed in with your work account."
+        : "Opened the GitHub for Atlassian guide. Confirm once a Jira site admin has installed the app and connected this GitHub org.";
     if (await confirm(ask, undefined, "Done")) await ctx.globalState.update(K.confirmed(id), new Date().toISOString());
-    return checkConfirmed(id);
+    return id === "github-jira" ? checkGithubJira() : checkConfirmed(id);
   }
 
-  async function connectBrowsers(): Promise<ConnectionStatus> {
+  async function connectBrowsers(): Promise<RowStatus> {
     const p = playwrightPaths();
     if (!p.cli) { void vscode.window.showErrorMessage("Playwright is not bundled with this build of the extension."); return checkBrowsers(); }
     const t = vscode.window.createTerminal({ name: "Delivery Circuit: browsers", shellPath: process.execPath, shellArgs: [p.cli, "install", "chromium"],
@@ -511,25 +545,43 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
     return put(st("testing-browsers", { state: "checking", detail: "Installing Chrome for Testing…" }));
   }
 
-  async function connectMcp(id: McpRowId): Promise<ConnectionStatus> {
+  async function connectMcp(id: McpRowId): Promise<RowStatus> {
     const active = getIdentity()?.active ?? null;
     const holders = PERSONAS.filter((p) => findServerFor(id, personaServers(p)));
     const persona = active && holders.includes(active) ? active : holders[0];
-    if (!persona) {
-      void vscode.window.showWarningMessage(`No persona MCP config declares ${def(id).label}. The Circuit MCP module writes .claude/personas/<persona>.local.mcp.json; vendor servers are in <persona>.mcp.json.`);
+    if (persona) {
+      const entry = findServerFor(id, personaServers(persona))!;
+      if (entry.placeholder && MCP_KNOWN[id].url) {
+        const fixed = await fixPlaceholder(id, MCP_KNOWN[id].url!);
+        if (!fixed) return check(id);
+      }
+      const files = personaConfigFiles(persona).map(safeRelPath).filter((f): f is string => !!f);
+      if (!files.length) throw new Error("Persona MCP config path contains characters that are not safe for a terminal command.");
+      terminal(`Claude (${persona}) MCP`).sendText(terminalCommand("claude", ["--mcp-config", ...files]));
+      void vscode.window.showInformationMessage(`In Claude, type /mcp, pick "${entry.name}" and sign in. Press Check here when done.`);
+      mcpListCache = undefined;
+      return put(st(id, { state: "checking", detail: `Waiting for /mcp sign-in to "${entry.name}"…` }, holders));
+    }
+    let listed: McpListEntry | undefined;
+    try { listed = mcpListStateFor(id, undefined, await mcpList(true), true); } catch { listed = undefined; }
+    if (!listed && id === "mcp-slack") {
+      await vscode.env.openExternal(vscode.Uri.parse("https://claude.ai/customize/connectors"));
+      void vscode.window.showInformationMessage("Add the Slack connector in claude.ai and sign in. It shows up in Claude Code automatically; press Check here when done.");
       return check(id);
     }
-    const entry = findServerFor(id, personaServers(persona))!;
-    if (entry.placeholder && MCP_KNOWN[id].url) {
-      const fixed = await fixPlaceholder(id, MCP_KNOWN[id].url!);
-      if (!fixed) return check(id);
+    const url = MCP_KNOWN[id].url;
+    if (!listed) {
+      if (!url) { await vscode.env.openExternal(vscode.Uri.parse(def(id).manageUrl!)); return check(id); }
+      const name = MCP_KNOWN[id].names[0];
+      if (!(await confirm(`Add the ${def(id).label} to Claude Code?`, `Runs: claude mcp add --transport http --scope user ${name} ${url}\nSign-in is OAuth in Claude's /mcp; no token is stored by the circuit.`, "Add"))) return check(id);
+      const r = await run("claude", ["mcp", "add", "--transport", "http", "--scope", "user", name, url], { cwd: root, timeoutMs: 60_000 });
+      if (r.code !== 0) throw new Error(`claude mcp add failed: ${(r.stderr || r.stdout).trim().split(/\r?\n/)[0] ?? `exit ${r.code}`}`);
+      log(`connections: added MCP server ${name} (${url}) to Claude Code (user scope)`);
     }
-    const files = personaConfigFiles(persona).map(safeRelPath).filter((f): f is string => !!f);
-    if (!files.length) throw new Error("Persona MCP config path contains characters that are not safe for a terminal command.");
-    terminal(`Claude (${persona}) MCP`).sendText(terminalCommand("claude", ["--mcp-config", ...files]));
-    void vscode.window.showInformationMessage(`In Claude, type /mcp, pick "${entry.name}" and sign in. Press Check here when done.`);
+    terminal("Claude MCP sign-in").sendText(terminalCommand("claude", []));
+    void vscode.window.showInformationMessage(`In Claude, type /mcp, pick "${listed?.name ?? MCP_KNOWN[id].names[0]}" and sign in. Press Check here when done.`);
     mcpListCache = undefined;
-    return put(st(id, { state: "checking", detail: `Waiting for /mcp sign-in to "${entry.name}"…` }, holders));
+    return put(st(id, { state: "checking", detail: "Waiting for /mcp sign-in…" }, holders));
   }
 
   async function fixPlaceholder(id: McpRowId, url: string): Promise<boolean> {
@@ -549,29 +601,29 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
     return true;
   }
 
-  async function connectAiReviewer(): Promise<ConnectionStatus> {
-    const go = await confirm("Create the CI token for the AI Reviewer?",
-      "A terminal runs \"claude setup-token\" (your subscription; valid 1 year). Copy the token it prints, then paste it into the box that opens. It goes straight to the repo's Actions secret CLAUDE_CODE_OAUTH_TOKEN, encrypted.", "Start");
-    if (!go) return check("ai-reviewer");
-    terminal("Delivery Circuit: Claude token").sendText(terminalCommand("claude", ["setup-token"]));
-    const token = await vscode.window.showInputBox({ title: "CLAUDE_CODE_OAUTH_TOKEN", prompt: "Paste the token from \"claude setup-token\"", password: true, ignoreFocusOut: true,
-      validateInput: (v) => (v.trim().length >= 20 ? undefined : "Paste the whole token") });
-    if (!token) return check("ai-reviewer");
-    await setRepoSecretTracked("CLAUDE_CODE_OAUTH_TOKEN", token.trim());
-    return check("ai-reviewer");
-  }
-
-  async function connectCodeRabbit(): Promise<ConnectionStatus> {
+  async function connectCodeRabbit(): Promise<RowStatus> {
     const tpl = path.join(base.pluginRoot, "templates", "repo", ".coderabbit.yaml");
     if (!exists(".coderabbit.yaml") && fs.existsSync(tpl) && await confirm("Add the circuit's .coderabbit.yaml to this repo?", "Copied from the bundled circuit templates. Commit it with your next change.", "Add file")) {
       fs.copyFileSync(tpl, path.join(root, ".coderabbit.yaml"));
     }
-    await vscode.env.openExternal(vscode.Uri.parse("https://github.com/apps/coderabbitai/installations/new"));
-    void vscode.window.showInformationMessage("Install the CodeRabbit GitHub App on this repository. The row turns green after its first review on a PR.");
+    let inst: unknown;
+    try { inst = await orgInstallations(); } catch { inst = undefined; }
+    const app = inst !== undefined ? findInstallation(inst, APP_SLUGS.coderabbit) : undefined;
+    await vscode.env.openExternal(vscode.Uri.parse(app?.url ?? "https://github.com/apps/coderabbitai/installations/new"));
+    void vscode.window.showInformationMessage(app ? "Give CodeRabbit access to this repository under Repository access." : "Install the CodeRabbit GitHub App and give it access to this repository.");
     return check("coderabbit");
   }
 
-  async function connect(id: ConnectionId): Promise<ConnectionStatus> {
+  async function connectRunner(): Promise<RowStatus> {
+    const { owner, repo } = repoRef();
+    await vscode.env.openExternal(vscode.Uri.parse(`https://github.com/${owner}/${repo}/settings/actions/runners/new`));
+    void vscode.window.showInformationMessage("Follow GitHub's commands on the machine that has the sf, claude and acli logins. At ./config.sh add --labels circuit,circuit-release, and run it as a service. The row updates when it is online.",
+      { modal: true });
+    pollUntilConnected("runner", 900_000, 30_000);
+    return check("runner");
+  }
+
+  async function connect(id: RowId): Promise<RowStatus> {
     const d = def(id); const identity = getIdentity();
     if (d.scope === "project" && !identity?.isAdmin) {
       void vscode.window.showWarningMessage(`${d.label} is a project connection; a repo or org admin sets it up.`);
@@ -589,9 +641,8 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
         return put(st("claude", { state: "checking", detail: "Waiting for Claude sign-in…" }));
       }
       case "sf-dev": case "sf-qa": return connectSf(id);
-      case "jira": case "confluence": return connectAtlassian(id);
-      case "fireflies": return connectFireflies();
-      case "slack": case "lucid": return connectConfirmed(id);
+      case "acli": return connectAcli();
+      case "slack": case "lucid": case "github-jira": return connectConfirmed(id);
       case "testing-browsers": return connectBrowsers();
       case "code-analyzer": {
         terminal("Delivery Circuit: Code Analyzer").sendText(terminalCommand("sf", ["plugins", "install", "@salesforce/plugin-code-analyzer"]));
@@ -599,20 +650,21 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
         return put(st("code-analyzer", { state: "checking", detail: "Installing the sf plugin…" }));
       }
       case "coderabbit": return connectCodeRabbit();
-      case "ai-reviewer": return connectAiReviewer();
+      case "runner": return connectRunner();
+      case "ai-reviewer": return check("ai-reviewer");
       default: return connectMcp(id as McpRowId);
     }
   }
 
-  async function disconnect(id: ConnectionId): Promise<void> {
+  async function disconnect(id: RowId): Promise<void> {
     const label = def(id).label;
     switch (id) {
-      case "jira": case "confluence":
-        if (!(await confirm(`Remove your Atlassian credentials?`, "Jira and Confluence both use them.", "Remove"))) return;
-        await ctx.secrets.delete(K.jira); await checkJira(); await checkConfluence(); return;
-      case "fireflies":
-        if (!(await confirm("Remove your Fireflies API key?", undefined, "Remove"))) return;
-        await ctx.secrets.delete(K.fireflies); await checkFireflies(); return;
+      case "acli": {
+        if (!(await confirm("Log out of the Atlassian CLI?", "Runs acli jira auth logout. Jira rows in the extension stop updating until you log in again.", "Log out"))) return;
+        const r = await run("acli", ["jira", "auth", "logout"], { cwd: root, timeoutMs: 60_000 });
+        if (r.code !== 0) void vscode.window.showErrorMessage("acli jira auth logout failed.");
+        await check(id); return;
+      }
       case "slack": case "lucid":
         await ctx.globalState.update(K.confirmed(id), undefined); checkConfirmed(id); return;
       case "sf-dev": case "sf-qa": {
@@ -632,88 +684,48 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
     }
   }
 
-  // ---------- project secrets ----------
-  function workflowTexts(): string[] {
-    const dir = path.join(root, ".github", "workflows");
-    try { return fs.readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).map((f) => fs.readFileSync(path.join(dir, f), "utf8")); } catch { return []; }
-  }
-
+  // ---------- project settings ----------
   async function projectInfo(): Promise<ProjectInfo> {
-    const needs = scanWorkflows(workflowTexts());
-    const rems = reminders();
-    const setAt = ctx.globalState.get<string>(K.claudeTokenSetAt);
-    let repoSecrets: string[] = []; const envSecrets: Record<string, string[]> = {}; let error: string | undefined; let repoUrl: string | undefined;
+    const files = workflowFiles();
+    const bannedRefs = bannedSecretRefs(files);
+    let repoUrl: string | undefined; let defaultBranch: string | undefined; let error: string | undefined;
+    let rulesets: ReturnType<typeof parseRulesets> | undefined; let environments: ReturnType<typeof parseEnvironments> | undefined;
     try {
       const { owner, repo } = repoRef(); repoUrl = `https://github.com/${owner}/${repo}`;
-      repoSecrets = await gh.secretNames(owner, repo);
-      for (const env of needs.environments) {
-        try { envSecrets[env] = await gh.secretNames(owner, repo, env); } catch (e) { if ((e as any)?.status !== 404) throw e; envSecrets[env] = []; }
-      }
-    } catch (e) {
-      const s = (e as any)?.status;
-      error = s === 403 || s === 404 ? "Only repo admins can see which Actions secrets exist." : errMsg(e);
-    }
-    return buildProjectInfo({ needed: needs.secrets, envOf: needs.envOf, environments: needs.environments, repoSecrets, envSecrets,
-      reminders: rems, claudeTokenExpiresAt: setAt ? claudeTokenExpiry(setAt) : undefined, repoUrl, error });
+      defaultBranch = (await repoInfo().catch(() => undefined))?.default_branch;
+      try { rulesets = parseRulesets(await gh.request("GET", `/repos/${enc(owner)}/${enc(repo)}/rulesets?per_page=100`)); } catch { rulesets = undefined; }
+      try { environments = parseEnvironments(await gh.request("GET", `/repos/${enc(owner)}/${enc(repo)}/environments?per_page=100`)); } catch { environments = undefined; }
+    } catch (e) { error = errMsg(e); }
+    return buildProjectInfo({ repoUrl, defaultBranch, rulesets, environments, bannedRefs, workflowCount: files.length, reminders: reminders(), error });
   }
 
-  async function setRepoSecretTracked(name: string, value: string, env?: string): Promise<void> {
-    const { owner, repo } = repoRef();
-    await gh.setSecret(owner, repo, name, value, env);
-    if (name === "CLAUDE_CODE_OAUTH_TOKEN" && !env) await ctx.globalState.update(K.claudeTokenSetAt, new Date().toISOString());
-    log(`connections: set Actions secret ${name}${env ? ` (environment ${env})` : ""} on ${owner}/${repo}`);
-    ev.fire();
-  }
-
-  async function setProjectSecret(name: string, env?: string): Promise<void> {
-    if (!getIdentity()?.isAdmin) throw new Error("Only repo or org admins can set project secrets.");
-    const fileLike = isFileSecret(name);
-    let value: string | undefined;
-    if (fileLike) {
-      const pick = await vscode.window.showOpenDialog({ title: `Choose the file for ${name}`, canSelectMany: false, openLabel: "Use this file" });
-      if (!pick?.[0]) return;
-      value = fs.readFileSync(pick[0].fsPath, "utf8");
-    } else {
-      value = await vscode.window.showInputBox({ title: `${name}${env ? ` (environment ${env})` : ""}`, prompt: "Value goes straight to GitHub, encrypted. It is not stored locally.",
-        password: !/^(JIRA_BASE_URL|JIRA_EMAIL|APP_ID|SF_USERNAME_\w+|SF_CLIENT_ID_\w+)$/.test(name), ignoreFocusOut: true });
-    }
-    if (!value) return;
-    await setRepoSecretTracked(name, value.replace(/\r?\n$/, ""), env);
-    void vscode.window.showInformationMessage(`Saved ${name}${env ? ` in environment ${env}` : ""}.`);
-  }
-
+  const listNow = () => CONNECTIONS.map((c) => statuses.get(c.id) ?? st(c.id, {}));
   const service: ConnectionsInternals = {
     async list() {
       // While a full check runs, answer with what is known so far (rows show "Checking…") instead of waiting.
-      if (checkAllInflight) return CONNECTIONS.map((c) => statuses.get(c.id) ?? st(c.id, {}));
-      if (!lastFull || Date.now() - lastFull > 5 * 60_000) return checkAll();
-      return CONNECTIONS.map((c) => statuses.get(c.id) ?? st(c.id, {}));
+      if (checkAllInflight) return listNow().map(asContract);
+      if (!lastFull || Date.now() - lastFull > 5 * 60_000) return (await checkAll()).map(asContract);
+      return listNow().map(asContract);
     },
-    check,
-    connect: async (id) => { try { return await connect(id); } catch (e) { void vscode.window.showErrorMessage(`${def(id).label}: ${errMsg(e)}`); return check(id); } },
-    disconnect,
+    check: async (id) => asContract(await check(id)),
+    connect: async (id) => asContract(await service.connectRow(id)),
+    disconnect: (id) => disconnect(id),
+    checkRow: check,
+    async connectRow(id) { try { return await connect(id); } catch (e) { void vscode.window.showErrorMessage(`${def(id).label}: ${errMsg(e)}`); return check(id); } },
+    disconnectRow: disconnect,
     onDidChange: ev.event,
     githubToken,
-    jira,
-    firefliesKey,
     sfAlias,
     sfOrgGuard,
     githubRequest: (method, p, body) => gh.request(method, p, body),
     githubGraphql: (q, v) => gh.graphql(q, v),
-    repoSecretNames,
-    async setRepoSecret(name, value, env) { await setRepoSecretTracked(name, value, env); },
+    async repoSecretNames() { const { owner, repo } = repoRef(); return gh.secretNames(owner, repo); },
     links: () => links,
-    cached: () => CONNECTIONS.map((c) => statuses.get(c.id) ?? st(c.id, {})),
+    cached: listNow,
     config,
     projectInfo,
-    async projectSecrets() {
-      const info = await projectInfo();
-      return [...info.secrets, ...info.webhooks].map((r) => ({
-        name: r.name, kind: r.kind, env: r.env, expiring: r.expiring, present: r.unknown ? undefined : r.present,
-      }));
-    },
-    setProjectSecret,
     checkAll,
+    atlassianSite,
   };
   return { service, gh };
 }

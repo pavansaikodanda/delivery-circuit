@@ -150,12 +150,18 @@ export function reduce(s: ChatState, m: any): ChatState {
   }
 }
 
-/** Environment for Claude: the parent environment without API-key auth (subscription only), plus the persona. */
+/**
+ * Variables that would make Claude authenticate with a stored credential instead of the person's own login
+ * (`claude` /login on their Claude seat). v3 uses no stored tokens, so sessions never pass any of them on.
+ */
+export const CLAUDE_TOKEN_VARS = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"] as const;
+
+/** Environment for Claude: the parent environment without any token auth (the logged-in claude only), plus the persona. */
 export function claudeEnv(parent: NodeJS.ProcessEnv, persona: Persona): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(parent)) {
     if (v === undefined) continue;
-    if (k === "ANTHROPIC_API_KEY" || k === "ANTHROPIC_AUTH_TOKEN") continue;
+    if ((CLAUDE_TOKEN_VARS as readonly string[]).includes(k)) continue;
     out[k] = v;
   }
   out.CIRCUIT_PERSONA = persona;

@@ -1,0 +1,218 @@
+[
+  {
+    "key": "ABC-31",
+    "fields": {
+      "summary": "S00-TC-01 Foundation deploys",
+      "issuetype": {
+        "name": "Test"
+      },
+      "labels": [
+        "test-case",
+        "unit",
+        "ac-1"
+      ],
+      "status": {
+        "name": "To Do",
+        "statusCategory": {
+          "key": "new"
+        }
+      },
+      "issuelinks": [
+        {
+          "type": {
+            "name": "Tests",
+            "inward": "is tested by",
+            "outward": "tests"
+          },
+          "outwardIssue": {
+            "key": "ABC-11",
+            "fields": {
+              "summary": "Story 00: Foundation",
+              "status": {
+                "name": "In Progress",
+                "statusCategory": {
+                  "key": "indeterminate"
+                }
+              },
+              "issuetype": {
+                "name": "Story"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "key": "ABC-32",
+    "fields": {
+      "summary": "S01-TC-01 Agent escalates with a reason (AC1)",
+      "issuetype": {
+        "name": "Task"
+      },
+      "labels": [
+        "test-case",
+        "ui"
+      ],
+      "status": {
+        "name": "To Do",
+        "statusCategory": {
+          "key": "new"
+        }
+      },
+      "issuelinks": [
+        {
+          "type": {
+            "name": "Tests",
+            "inward": "is tested by",
+            "outward": "tests"
+          },
+          "outwardIssue": {
+            "key": "ABC-12",
+            "fields": {
+              "summary": "Story 01",
+              "status": {
+                "name": "In Progress",
+                "statusCategory": {
+                  "key": "indeterminate"
+                }
+              },
+              "issuetype": {
+                "name": "Story"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "key": "ABC-33",
+    "fields": {
+      "summary": "S01-TC-02 Closed Case cannot be escalated",
+      "issuetype": {
+        "name": "Task"
+      },
+      "labels": [
+        "test-case",
+        "level-ui",
+        "ac-2"
+      ],
+      "status": {
+        "name": "To Do",
+        "statusCategory": {
+          "key": "new"
+        }
+      },
+      "issuelinks": [
+        {
+          "type": {
+            "name": "Tests",
+            "inward": "is tested by",
+            "outward": "tests"
+          },
+          "outwardIssue": {
+            "key": "ABC-12",
+            "fields": {
+              "summary": "Story 01",
+              "status": {
+                "name": "In Progress",
+                "statusCategory": {
+                  "key": "indeterminate"
+                }
+              },
+              "issuetype": {
+                "name": "Story"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "key": "ABC-34",
+    "fields": {
+      "summary": "S02-TC-01 Queue shows escalations",
+      "issuetype": {
+        "name": "Task"
+      },
+      "labels": [
+        "test-case",
+        "manual"
+      ],
+      "status": {
+        "name": "To Do",
+        "statusCategory": {
+          "key": "new"
+        }
+      },
+      "issuelinks": [
+        {
+          "type": {
+            "name": "Tests",
+            "inward": "is tested by",
+            "outward": "tests"
+          },
+          "outwardIssue": {
+            "key": "ABC-13",
+            "fields": {
+              "summary": "Story 02",
+              "status": {
+                "name": "In Progress",
+                "statusCategory": {
+                  "key": "indeterminate"
+                }
+              },
+              "issuetype": {
+                "name": "Story"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "key": "ABC-35",
+    "fields": {
+      "summary": "S03-TC-01 Report totals",
+      "issuetype": {
+        "name": "Task"
+      },
+      "labels": [
+        "test-case"
+      ],
+      "status": {
+        "name": "To Do",
+        "statusCategory": {
+          "key": "new"
+        }
+      },
+      "issuelinks": [
+        {
+          "type": {
+            "name": "Tests",
+            "inward": "is tested by",
+            "outward": "tests"
+          },
+          "outwardIssue": {
+            "key": "ABC-14",
+            "fields": {
+              "summary": "Story 03",
+              "status": {
+                "name": "In Progress",
+                "statusCategory": {
+                  "key": "indeterminate"
+                }
+              },
+              "issuetype": {
+                "name": "Story"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+]

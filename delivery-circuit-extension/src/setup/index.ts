@@ -1,5 +1,6 @@
-// Project Setup wizard (admins only): phases B0-B12 of the bundled plugin's circuit-bootstrap skill, with state in
-// build-state.md in the repo (same table the skill writes). Command: deliveryCircuit.openSetup.
+// Project Setup wizard (admins only): phases B0-B13 of the bundled plugin's circuit-bootstrap skill (v3), with state
+// in build-state.md in the repo (same table the skill writes). Command: deliveryCircuit.openSetup.
+// v3 stores no credentials: there is no secret step; the wizard only reports (and offers to delete) leftover v2 secrets.
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
@@ -29,7 +30,6 @@ export function registerSetupUI(s: CircuitServices): void {
   const stored = (): Stored => ({ results: {}, ticks: {}, selected: "B0", ...(s.ctx.workspaceState.get<Stored>(STORE_KEY) ?? {}) });
   let mem: Stored = stored();
   let busy: string | null = null;
-  let secretNames: Record<string, string[]> | undefined;
   let formErrors: { key: string; message: string }[] = [];
   let panel: vscode.WebviewPanel | undefined;
 
@@ -64,26 +64,12 @@ export function registerSetupUI(s: CircuitServices): void {
     try { values = cfgExists ? readForm(fs.readFileSync(cfgPath(), "utf8")) : {}; } catch (e: any) { formErrors = [{ key: "", message: `build.config.yml: ${e?.message ?? e}` }]; }
     return buildView({
       login: id?.login ?? "", admin: !!id?.isAdmin, owner: id?.owner ?? "", repo: id?.repo ?? "",
-      defs: defs(), state, buildStateExists: exists, results: mem.results, ticks: mem.ticks, secretNames,
+      defs: defs(), state, buildStateExists: exists, results: mem.results, ticks: mem.ticks,
       selected: mem.selected, busy, config: { exists: cfgExists, values, errors: formErrors },
     });
   }
 
   function post() { panel?.webview.postMessage({ type: "state", data: view() }); }
-
-  async function refreshSecretNames(envs: string[]) {
-    const id = s.identity.get();
-    if (!id) return;
-    const next: Record<string, string[]> = { ...(secretNames ?? {}) };
-    for (const env of envs) {
-      try {
-        next[env] = env
-          ? ((await s.connections.githubRequest<any>("GET", `/repos/${encodeURIComponent(id.owner)}/${encodeURIComponent(id.repo)}/environments/${encodeURIComponent(env)}/secrets?per_page=100`))?.secrets ?? []).map((x: any) => String(x.name))
-          : await s.connections.repoSecretNames();
-      } catch { next[env] = []; }
-    }
-    secretNames = next;
-  }
 
   async function withBusy(key: string, fn: () => Promise<void>) {
     if (busy) { vscode.window.showInformationMessage("Another setup step is still running."); return; }
@@ -106,7 +92,6 @@ export function registerSetupUI(s: CircuitServices): void {
     const p = defs().find((d) => d.id === phaseId);
     if (!p) return;
     await withBusy(phaseId, async () => {
-      await refreshSecretNames([...new Set(p.steps.filter((x) => x.secrets).map((x) => x.env ?? ""))]);
       for (const st of p.steps.filter((x) => x.verify)) {
         busy = st.id; post();
         try { record(st.id, await steps.verify(st, mem.ticks[st.id] ?? [])); }
@@ -128,7 +113,6 @@ export function registerSetupUI(s: CircuitServices): void {
         const st = findStep(String(msg.step));
         if (!st) return;
         await withBusy(st.id, async () => {
-          if (st.secrets) await refreshSecretNames([st.env ?? ""]);
           record(st.id, await steps.verify(st, mem.ticks[st.id] ?? []));
         });
         break;
@@ -151,15 +135,6 @@ export function registerSetupUI(s: CircuitServices): void {
           if (!r) return;
           record(st.id, r);
           if (st.verify && r.state !== "err") record(st.id, mergeRun(mem.results[st.id], await steps.verify(st, mem.ticks[st.id] ?? []).catch(() => undefined)));
-        });
-        break;
-      }
-      case "secret": {
-        const st = findStep(String(msg.step));
-        if (!st) return;
-        await withBusy(st.id, async () => {
-          record(st.id, await steps.setSecret(st, String(msg.name)));
-          await refreshSecretNames([st.env ?? ""]);
         });
         break;
       }

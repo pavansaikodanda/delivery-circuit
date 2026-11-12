@@ -12,7 +12,7 @@ describe("terminal args", () => {
     expect(t.cwd).toBe("D:\\repo");
     expect(t.shellPath).toBe("C:\\bin\\claude.exe");
     expect(t.shellArgs).toEqual(["--agent", "developer", "--mcp-config", "D:\\repo\\.claude\\personas\\developer.local.mcp.json", "--strict-mcp-config", "/dev-review-plan 42"]);
-    expect(t.env).toEqual({ CIRCUIT_PERSONA: "developer", ANTHROPIC_API_KEY: null, ANTHROPIC_AUTH_TOKEN: null });
+    expect(t.env).toEqual({ CIRCUIT_PERSONA: "developer", ANTHROPIC_API_KEY: null, ANTHROPIC_AUTH_TOKEN: null, CLAUDE_CODE_OAUTH_TOKEN: null });
   });
   it("keeps a hostile prompt as exactly one argv element", () => {
     const evil = `review "this"; rm -rf / && echo $(whoami) | calc & 'x'`;
@@ -65,9 +65,9 @@ describe("resolving claude", () => {
 });
 
 describe("panel chat", () => {
-  it("removes API-key auth from Claude's environment and sets the persona", () => {
+  it("removes every token auth from Claude's environment (logged-in claude only) and sets the persona", () => {
     const env = claudeEnv({ PATH: "/bin", ANTHROPIC_API_KEY: "sk-ant-x", ANTHROPIC_AUTH_TOKEN: "t", CLAUDE_CODE_OAUTH_TOKEN: "o" }, "tester");
-    expect(env).toEqual({ PATH: "/bin", CLAUDE_CODE_OAUTH_TOKEN: "o", CIRCUIT_PERSONA: "tester" });
+    expect(env).toEqual({ PATH: "/bin", CIRCUIT_PERSONA: "tester" });
   });
   it("takes vendor servers from the persona config, skipping the Circuit server and VERIFY placeholders", () => {
     const r = vendorServers({ mcpServers: {

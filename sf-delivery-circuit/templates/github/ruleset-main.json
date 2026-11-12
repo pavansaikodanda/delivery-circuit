@@ -17,7 +17,8 @@
     { "type": "required_status_checks", "parameters": {
         "strict_required_status_checks_policy": true,
         "required_status_checks": [
-          { "context": "guard" }, { "context": "static" }, { "context": "qa" }, { "context": "spec-gate" },
+          { "context": "guard" }, { "context": "static" }, { "context": "code-analyzer" }, { "context": "qa" },
+          { "context": "design-gate" },
           { "context": "gate/developer" }, { "context": "gate/tester" }, { "context": "gate/architect" }
         ]
     } }

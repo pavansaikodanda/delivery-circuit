@@ -1,7 +1,7 @@
 {
   "name": "delivery-circuit",
   "displayName": "Delivery Circuit",
-  "description": "AI + Human Salesforce delivery: persona views for Architect, Developer and Tester, connections, Spec Kit status, AI testing and human gates in one place.",
+  "description": "AI + Human Salesforce delivery: persona views for Architect, Developer and Tester, sources, Jira and Confluence status, AI testing and human gates in one place. Every connection is a login; no stored tokens.",
   "version": "0.1.0",
   "publisher": "conscendo",
   "license": "UNLICENSED",
@@ -64,6 +64,11 @@
         "category": "Delivery Circuit"
       },
       {
+        "command": "deliveryCircuit.openSources",
+        "title": "Sources",
+        "category": "Delivery Circuit"
+      },
+      {
         "command": "deliveryCircuit.openTesting",
         "title": "Testing",
         "category": "Delivery Circuit"
@@ -105,6 +110,11 @@
           "command": "deliveryCircuit.openConnections",
           "when": "view == deliveryCircuit.home",
           "group": "2_circuit@2"
+        },
+        {
+          "command": "deliveryCircuit.openSources",
+          "when": "view == deliveryCircuit.home",
+          "group": "2_circuit@3"
         }
       ],
       "commandPalette": [
@@ -158,6 +168,30 @@
           "default": "",
           "description": "Only for repos owned by a personal account (no GitHub teams). Ignored when the repo belongs to an organisation."
         },
+        "deliveryCircuit.acliPath": {
+          "type": "string",
+          "default": "acli",
+          "scope": "machine",
+          "description": "Path of the Atlassian CLI (acli) the extension uses to read Jira with your own `acli jira auth login --web`. Read from your user settings only; a repository's workspace settings cannot change it."
+        },
+        "deliveryCircuit.designReader": {
+          "type": "string",
+          "enum": [
+            "claude",
+            "off"
+          ],
+          "default": "claude",
+          "enumDescriptions": [
+            "Read Confluence design pages and Fireflies meetings with a read-only `claude -p` call through your Atlassian and Fireflies MCP logins.",
+            "Do not read Confluence or Fireflies; G1 shows as unknown."
+          ],
+          "description": "How design pages (G1, decisions, org snapshot) and Fireflies meetings are read."
+        },
+        "deliveryCircuit.designReaderModel": {
+          "type": "string",
+          "default": "haiku",
+          "description": "Claude model for the read-only design-page and Fireflies reader."
+        },
         "deliveryCircuit.sessionMode": {
           "type": "string",
           "enum": [
@@ -203,13 +237,11 @@
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@playwright/mcp": "^0.0.82",
     "exceljs": "^4.4.0",
-    "libsodium-wrappers": "^0.8.4",
     "playwright": "^1.63.0",
     "yaml": "^2.9.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@types/libsodium-wrappers": "^0.7.14",
     "@types/node": "^22.10.0",
     "@types/vscode": "~1.90.0",
     "@vscode/codicons": "^0.0.46-24",

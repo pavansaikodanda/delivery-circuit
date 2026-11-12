@@ -8,7 +8,7 @@
 
   const go = (target) => post({ type: "nav", target });
   const refresh = () => post({ type: "refresh" });
-  const NAV_ICON = { testing: "beaker", connections: "plug", setup: "tools" };
+  const NAV_ICON = { sources: "notebook", testing: "beaker", connections: "plug", setup: "tools" };
 
   DC.mount(DC.skeleton({ n: 3, label: "Loading the circuit" }));
   DC.onState(render);

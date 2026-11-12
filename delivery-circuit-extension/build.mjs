@@ -7,7 +7,7 @@ const common = {
   target: "node20",
   sourcemap: true,
   // Loaded from node_modules at runtime: the SDK ships the Claude Code binary, Playwright ships browsers.
-  external: ["vscode", "@anthropic-ai/claude-agent-sdk", "playwright", "playwright-core", "@playwright/*", "exceljs", "libsodium-wrappers"],
+  external: ["vscode", "@anthropic-ai/claude-agent-sdk", "playwright", "playwright-core", "@playwright/*", "exceljs"],
 };
 import fs from "node:fs";
 import { writeBrands } from "./build-brands.mjs";

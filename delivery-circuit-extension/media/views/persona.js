@@ -1,6 +1,8 @@
 // Persona view (DESIGN.md §6.2): one tab per persona the identity can view (Architect: all three, acting only as
 // Architect; Developer and Tester: their own). Waiting on you, Features and Pull requests are keyed row lists;
-// AI sessions are the "Start AI session" menu on the Pull requests section. State from src/views/model.ts buildPersona().
+// AI sessions are the "Start AI session" menu on the Pull requests section. v3: features are Jira epics with a
+// Confluence design page; Start story, Add tests, Fix with AI and the review room arrive as queue and PR actions.
+// State from src/views/model.ts buildPersona().
 (function () {
   const { h, post } = DC;
   const me = document.currentScript && document.currentScript.src;
@@ -50,7 +52,7 @@
     const list = s.features || [];
     if (!list.length) {
       return DC.section("Features", { key: "sec:features" },
-        DC.empty({ icon: "map", title: "No features yet", text: "The Architect starts one with Intake." }));
+        DC.empty({ icon: "map", title: "No features yet", text: "A feature is a Jira epic with a design page. The Architect starts one with Intake." }));
     }
     // "G3 next, you" only when the viewer acts in this view; in a view-only tab no gate is "yours".
     const viewer = s.canAct ? s.selected : null;
@@ -62,7 +64,7 @@
   function aiMenu(s) {
     const acts = (s.aiActions || []).filter((a) => a && a.label);
     if (!acts.length) return null;
-    return DC.menu(["Runs as the " + s.selectedLabel + "; you pick the target next. AI never approves, merges or deploys.", ...acts.map((a) => ({
+    return DC.menu(["Runs your logged-in Claude as the " + s.selectedLabel + "; you pick the target next. AI never approves, merges or deploys.", ...acts.map((a) => ({
       label: a.label, icon: "sparkle", disabled: !a.allowed, reason: a.allowed ? null : a.reason, onClick: () => DC.action(a),
     }))], { text: "Start AI session", icon: "sparkle", label: "Start AI session" });
   }

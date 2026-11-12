@@ -1,5 +1,7 @@
 // Sessions: start Claude Code as a persona, either in an integrated terminal (`claude --agent <persona> ...`) or in a
-// chat panel driven by the Agent SDK. Subscription auth only: ANTHROPIC_API_KEY is removed from Claude's environment.
+// chat panel driven by the Agent SDK. Both run as the person's logged-in claude (their Claude seat): no tokens.
+// ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN and CLAUDE_CODE_OAUTH_TOKEN are removed from Claude's environment.
+// Vendor MCP servers (Atlassian, Slack, Fireflies, ...) sign in with OAuth inside Claude (/mcp), never with a key here.
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";

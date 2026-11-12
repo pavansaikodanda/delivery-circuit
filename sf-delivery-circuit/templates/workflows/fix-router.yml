@@ -1,0 +1,166 @@
+name: fix-router
+# NO AI. Routes a failed pr-checks run, or "changes requested" by a persona-team member or CodeRabbit, on a story PR
+# (feature/<KEY>-*) to the right person. It only labels, comments, and notifies. The Developer runs "Fix with AI"
+# from the Delivery Circuit extension on their own laptop, with the failure below prefilled.
+#   guard failed                          -> needs-human
+#   runner login or job setup failed      -> re-run the failed jobs once (no attempt used), then needs-human
+#   only SF AI Tester failed, route qa    -> needs-qa: the Tester fixes the suite or test data (no attempt used)
+#   anything else                         -> needs-fix + a PR comment with the failure (marker circuit-fix) for
+#                                            "Fix with AI" attempt N+1; at vars.MAX_AI_ATTEMPTS (default 3)
+#                                            attempts (labels ai-attempt-N, added by dev-fix) -> needs-human instead
+#   pr-checks green on the head commit    -> needs-fix removed
+# Team membership is read with the runner's own gh sign-in; PR writes use the job's GITHUB_TOKEN; Jira comments use
+# the runner's acli login; Slack notices use slack.sh (transport vars.CIRCUIT_SLACK_TRANSPORT). No stored secrets.
+on:
+  workflow_run:
+    workflows: [pr-checks]
+    types: [completed]
+  pull_request_review:
+    types: [submitted]
+
+concurrency:
+  group: fix-router-${{ github.event.workflow_run.pull_requests[0].number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  route:
+    if: >
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       (github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'success')) ||
+      (github.event_name == 'pull_request_review' && github.event.review.state == 'changes_requested' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, circuit]
+    permissions:
+      contents: read
+      actions: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v5
+        with: { persist-credentials: false, sparse-checkout: scripts/ci }
+      - name: Runner logins
+        run: bash scripts/ci/runner-check.sh --gh --tools jq
+      - name: Route, label and notify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAX: ${{ vars.MAX_AI_ATTEMPTS || '3' }}
+          DRY_RUN: ${{ vars.FIX_ROUTER_DRY_RUN }}
+          ORG: ${{ github.repository_owner }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion || 'review' }}
+          PR_FROM_RUN: ${{ github.event.workflow_run.pull_requests[0].number }}
+          PR_FROM_REVIEW: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          EVENT_SHA: ${{ github.event.workflow_run.head_sha || github.event.review.commit_id }}
+          REVIEW_ID: ${{ github.event.review.id }}
+          REVIEWER: ${{ github.event.review.user.login }}
+          REVIEW_BODY: ${{ github.event.review.body }}
+          CHANNEL_DEV: ${{ vars.SLACK_CHANNEL_DEV || 'dev-gate' }}
+          CHANNEL_QA: ${{ vars.SLACK_CHANNEL_QA || 'qa-gate' }}
+          CIRCUIT_SLACK_TRANSPORT: ${{ vars.CIRCUIT_SLACK_TRANSPORT || 'claude' }}
+          SLACK_MCP_SERVER: ${{ vars.SLACK_MCP_SERVER || 'claude_ai_Slack' }}
+        run: |
+          set -euo pipefail
+          R="$GITHUB_REPOSITORY"
+          [[ "$MAX" =~ ^[1-9]$ ]] || MAX=3
+          PR=${PR_FROM_RUN:-$PR_FROM_REVIEW}
+          [ -n "$PR" ] || { echo "No PR for this event"; exit 0; }
+          act() { if [ "$DRY_RUN" = true ]; then echo "DRY RUN: $*"; else "$@"; fi; }
+          notify() { if [ "$DRY_RUN" = true ]; then echo "DRY RUN: slack #$1: $2"; else bash scripts/ci/slack.sh "$1" "$2"; fi; }
+          jira_note() { if [ "$DRY_RUN" = true ]; then echo "DRY RUN: jira $KEY: $1"; else bash scripts/ci/jira.sh comment "$KEY" "$1" || echo "Jira comment skipped"; fi; }
+
+          INFO=$(gh pr view "$PR" --repo "$R" --json headRefName,headRefOid,labels,comments)
+          has_label() { jq -e --arg l "$1" 'any(.labels[]; .name == $l)' >/dev/null <<<"$INFO"; }
+          eval "$(bash scripts/ci/resolve-story.sh --branch "$(jq -r .headRefName <<<"$INFO")")"
+          [ -n "${KEY:-}" ] || { echo "Not a story branch"; exit 0; }
+          [ "$(jq -r .headRefOid <<<"$INFO")" = "$EVENT_SHA" ] || { echo "Stale event (the branch moved on)"; exit 0; }
+
+          if [ "$CONCLUSION" = success ]; then
+            if has_label needs-fix; then act gh pr edit "$PR" --repo "$R" --remove-label needs-fix; fi
+            echo "Checks green"; exit 0
+          fi
+          if has_label needs-human || has_label needs-qa; then echo "A person owns this PR"; exit 0; fi
+          SRC="checks"; [ -n "${RUN_ID:-}" ] || SRC="review-$REVIEW_ID"
+          MARK="<!-- circuit-fix:$EVENT_SHA:$SRC -->"
+          if jq -e --arg m "$MARK" 'any(.comments[]; .body | contains($m))' >/dev/null <<<"$INFO"; then echo "Already routed"; exit 0; fi
+
+          mkdir -p .ai
+          ROUTE=dev; : > .ai/detail.txt; FAILED_JOBS=""
+          if [ -n "${RUN_ID:-}" ]; then
+            JOBS=$(gh run view "$RUN_ID" --repo "$R" --json jobs)
+            FAILED_JOBS=$(jq -r '.jobs[] | select(.conclusion == "failure") | .name' <<<"$JOBS")
+            FAILED_STEPS=$(jq -r '.jobs[] | .steps[]? | select(.conclusion == "failure") | .name' <<<"$JOBS")
+            NSTEPS=$(grep -c . <<<"$FAILED_STEPS" || true)
+            if grep -qx guard <<<"$FAILED_JOBS"; then ROUTE=human
+            elif grep -qE '^(Runner logins|Set up job)$' <<<"$FAILED_STEPS"; then ROUTE=infra
+            elif [ "$NSTEPS" -eq 1 ] && grep -qx 'Acceptance tests (SF AI Tester)' <<<"$FAILED_STEPS"; then
+              gh run download "$RUN_ID" --repo "$R" -n test-evidence -D .ai/ev >/dev/null 2>&1 || true
+              ROUTE=$(jq -r '.route // "infra"' .ai/ev/verdict.json 2>/dev/null || echo infra)
+            fi
+            {
+              echo "Failed jobs: $(tr '\n' ' ' <<<"$FAILED_JOBS")"
+              echo "Failed steps: $(tr '\n' ' ' <<<"$FAILED_STEPS")"
+              if [ -f .ai/ev/verdict.json ]; then
+                echo; echo "SF AI Tester cases that did not pass:"
+                jq -r '(.failed // [])[] | "- \(.suite) \(.id) (\(.mode)): \(.summary)"' .ai/ev/verdict.json | tail -c 3000
+              fi
+              echo; echo "Log tail:"
+              gh run view "$RUN_ID" --repo "$R" --log-failed 2>/dev/null | tail -c 5000 || true
+            } >> .ai/detail.txt
+          else
+            if [ "$REVIEWER" != "coderabbitai[bot]" ]; then
+              ok=0
+              for t in developers testers architects; do bash scripts/ci/team-member.sh "$t" "$REVIEWER" && ok=1; done
+              [ "$ok" = 1 ] || { echo "Changes requested by a non-persona user; ignoring."; exit 0; }
+            fi
+            {
+              echo "Review by $REVIEWER:"; printf '%s\n' "$REVIEW_BODY"; echo
+              gh api "repos/$R/pulls/$PR/reviews/$REVIEW_ID/comments" --paginate --jq '.[] | "\(.path):\(.line // .original_line) \(.body)"' | tail -c 5000 || true
+            } >> .ai/detail.txt
+          fi
+
+          case "$ROUTE" in
+            infra)
+              if [ "${RUN_ATTEMPT:-1}" = "1" ] && [ -n "${RUN_ID:-}" ]; then
+                act gh run rerun "$RUN_ID" --repo "$R" --failed; echo "Re-ran a runner or setup failure"; exit 0
+              fi
+              ROUTE=human ;;
+            qa)
+              act gh pr edit "$PR" --repo "$R" --add-label needs-qa
+              act gh pr comment "$PR" --repo "$R" --body "$MARK SF AI Tester reported blocked cases on $KEY. Tester: explore on QA, fix the suite or test data on this PR, then remove \`needs-qa\` and re-run checks."
+              notify "$CHANNEL_QA" "Blocked acceptance tests on PR #$PR ($KEY). Tester action needed."
+              exit 0 ;;
+            pass) echo "Nothing to fix"; exit 0 ;;
+          esac
+
+          LAST=$(jq -r '[.labels[].name | select(test("^ai-attempt-[0-9]+$")) | ltrimstr("ai-attempt-") | tonumber] | max // 0' <<<"$INFO")
+          NEXT=$((LAST + 1))
+          tr '`' "'" < .ai/detail.txt | tail -c 9000 > .ai/detail.safe
+          if [ "$ROUTE" = human ] || [ "$NEXT" -gt "$MAX" ]; then
+            WHY=$([ "$ROUTE" = human ] && echo "this failure needs a person" || echo "$LAST of $MAX AI fix attempts used")
+            {
+              echo "$MARK"
+              echo "**needs-human** on \`${EVENT_SHA:0:8}\` ($SRC): $WHY. A developer takes over by hand."
+              echo; echo "<details><summary>Failure details</summary>"; echo; echo '```text'; cat .ai/detail.safe; echo '```'; echo "</details>"
+            } > .ai/comment.md
+            act gh pr edit "$PR" --repo "$R" --add-label needs-human
+            if has_label needs-fix; then act gh pr edit "$PR" --repo "$R" --remove-label needs-fix; fi
+            act gh pr comment "$PR" --repo "$R" --body-file .ai/comment.md
+            notify "$CHANNEL_DEV" "PR #$PR ($KEY) needs a developer: $WHY."
+            jira_note "AI stopped after $LAST attempt(s); needs a developer (PR #$PR)."
+            exit 0
+          fi
+
+          {
+            echo "$MARK"
+            echo "**Fix with AI: attempt $NEXT of $MAX** for $KEY on \`${EVENT_SHA:0:8}\` ($SRC)."
+            echo "Developer: open the Delivery Circuit extension and run *Fix with AI* (the failure below is prefilled), or fix it by hand."
+            echo; echo "<details><summary>Failure details</summary>"; echo; echo '```text'; cat .ai/detail.safe; echo '```'; echo "</details>"
+          } > .ai/comment.md
+          act gh pr edit "$PR" --repo "$R" --add-label needs-fix
+          act gh pr comment "$PR" --repo "$R" --body-file .ai/comment.md
+          notify "$CHANNEL_DEV" "PR #$PR ($KEY): checks or review need a fix. Fix with AI attempt $NEXT of $MAX is ready in the Delivery Circuit extension."

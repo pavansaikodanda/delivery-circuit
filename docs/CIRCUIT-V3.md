@@ -86,6 +86,12 @@ from Jira queries (epic link + labels), cached by the extension.
 with the page's current approved version; if the design changed after the story's version, the check fails with
 "Design changed since this story was planned: re-plan or re-approve".
 
+**G1 in CI (integration decision, 2026-11-12):** the official `acli` has no Confluence commands and a runner cannot
+complete an MCP OAuth login, so `design-gate` reads G1 from **Jira**: the epic's *Approved design version*, set by an
+"Approve design" transition that only `architects` may run, after the architect set the page to Approved. The
+extension and `arch-approve-design` read the Confluence page itself (status, version, approver from page history)
+through the person's Atlassian MCP login. The page status stays the human act; the Jira field is its record for CI.
+
 ## 5. Plugin changes (`sf-delivery-circuit/`)
 
 - Skills, new or rewritten:

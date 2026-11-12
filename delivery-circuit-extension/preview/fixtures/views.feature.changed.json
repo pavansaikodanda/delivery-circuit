@@ -1,0 +1,290 @@
+{
+  "found": true,
+  "featureId": "ACME-30",
+  "viewer": "developer",
+  "viewerLabel": "Developer",
+  "login": "ravi-dev",
+  "personas": [
+    "developer"
+  ],
+  "designActions": [
+    {
+      "id": "decision:record",
+      "label": "Record decision",
+      "persona": "developer",
+      "kind": "ai",
+      "args": {
+        "command": "/record-decision",
+        "argKind": "feature",
+        "arg": "ACME-30"
+      },
+      "allowed": true
+    }
+  ],
+  "stages": [
+    {
+      "id": "intake",
+      "label": "Intake",
+      "state": "done",
+      "title": "Intake: done"
+    },
+    {
+      "id": "clarify",
+      "label": "Clarify",
+      "state": "done",
+      "title": "Clarify: done"
+    },
+    {
+      "id": "plan",
+      "label": "Design",
+      "state": "done",
+      "title": "Design: done"
+    },
+    {
+      "id": "signoff",
+      "label": "Approved",
+      "state": "blocked",
+      "title": "Approved: blocked"
+    },
+    {
+      "id": "stories",
+      "label": "Stories",
+      "state": "done",
+      "title": "Stories: done"
+    },
+    {
+      "id": "tests",
+      "label": "Tests",
+      "state": "done",
+      "title": "Tests: done"
+    },
+    {
+      "id": "jira",
+      "label": "Ready",
+      "state": "done",
+      "title": "Ready: done"
+    },
+    {
+      "id": "build",
+      "label": "Build",
+      "state": "todo",
+      "title": "Build: todo"
+    },
+    {
+      "id": "qa",
+      "label": "Review",
+      "state": "todo",
+      "title": "Review: todo"
+    },
+    {
+      "id": "release",
+      "label": "Release",
+      "state": "todo",
+      "title": "Release: todo"
+    }
+  ],
+  "gates": [
+    {
+      "id": "G1",
+      "label": "Design approved",
+      "owner": "architect",
+      "ownerLabel": "Architect",
+      "state": "blocked",
+      "own": false,
+      "cls": "warn",
+      "waitsOnViewer": false,
+      "actions": []
+    },
+    {
+      "id": "G2",
+      "label": "Testability confirmed (ai-ready)",
+      "owner": "tester",
+      "ownerLabel": "Tester",
+      "state": "done",
+      "own": false,
+      "cls": "ok",
+      "waitsOnViewer": false,
+      "actions": []
+    },
+    {
+      "id": "G3",
+      "label": "AI plan approved",
+      "owner": "developer",
+      "ownerLabel": "Developer",
+      "state": "not-started",
+      "own": true,
+      "cls": "",
+      "waitsOnViewer": false,
+      "actions": []
+    },
+    {
+      "id": "G4",
+      "label": "AI test plan approved",
+      "owner": "tester",
+      "ownerLabel": "Tester",
+      "state": "not-started",
+      "own": false,
+      "cls": "",
+      "waitsOnViewer": false,
+      "actions": []
+    },
+    {
+      "id": "G5",
+      "label": "Code review",
+      "owner": "developer",
+      "ownerLabel": "Developer",
+      "state": "not-started",
+      "own": true,
+      "cls": "",
+      "waitsOnViewer": false,
+      "actions": []
+    },
+    {
+      "id": "G6",
+      "label": "QA on sandbox",
+      "owner": "tester",
+      "ownerLabel": "Tester",
+      "state": "not-started",
+      "own": false,
+      "cls": "",
+      "waitsOnViewer": false,
+      "actions": []
+    },
+    {
+      "id": "G7",
+      "label": "Schema and design review",
+      "owner": "architect",
+      "ownerLabel": "Architect",
+      "state": "not-started",
+      "own": false,
+      "cls": "",
+      "waitsOnViewer": false,
+      "actions": []
+    },
+    {
+      "id": "G8",
+      "label": "Merge",
+      "owner": "architect",
+      "ownerLabel": "Architect",
+      "state": "not-started",
+      "own": false,
+      "cls": "",
+      "waitsOnViewer": false,
+      "actions": []
+    },
+    {
+      "id": "G9",
+      "label": "Production approval",
+      "owner": "architect",
+      "ownerLabel": "Architect",
+      "state": "not-started",
+      "own": false,
+      "cls": "",
+      "waitsOnViewer": false,
+      "actions": []
+    }
+  ],
+  "stories": [
+    {
+      "num": "00",
+      "title": "Onboarding checklist object (Story 00)",
+      "jiraKey": "ACME-31",
+      "counts": {
+        "ui": 0,
+        "unit": 0,
+        "manual": 0
+      },
+      "total": 0,
+      "links": [
+        {
+          "kind": "jira",
+          "label": "ACME-31",
+          "target": "https://acme.atlassian.net/browse/ACME-31"
+        }
+      ],
+      "jiraStatus": "Ready for Dev",
+      "aiReady": true,
+      "designVersion": 4,
+      "designChanged": true,
+      "status": {
+        "tone": "warn",
+        "text": "design changed since v4"
+      },
+      "actions": [
+        {
+          "id": "dev:start-story",
+          "label": "Start story",
+          "persona": "developer",
+          "kind": "ai",
+          "args": {
+            "command": "/dev-start-story",
+            "argKind": "story",
+            "arg": "ACME-31"
+          },
+          "allowed": false,
+          "reason": "The design page changed after approval (now v6): an architect re-approves it first"
+        }
+      ]
+    }
+  ],
+  "sources": null,
+  "actions": [
+    {
+      "id": "ai:/dev-review-stories",
+      "label": "Review stories",
+      "persona": "developer",
+      "kind": "ai",
+      "args": {
+        "command": "/dev-review-stories",
+        "argKind": "feature",
+        "arg": "ACME-30"
+      },
+      "allowed": true
+    },
+    {
+      "id": "decision:record",
+      "label": "Record decision",
+      "persona": "developer",
+      "kind": "ai",
+      "args": {
+        "command": "/record-decision",
+        "argKind": "feature",
+        "arg": "ACME-30"
+      },
+      "allowed": true
+    }
+  ],
+  "updated": "2026-11-11T15:00:00.000Z",
+  "design": {
+    "url": "https://acme.atlassian.net/wiki/spaces/ACME/pages/2250777/Partner+onboarding",
+    "status": "Approved",
+    "version": 6,
+    "approvedVersion": 4,
+    "approvedBy": "maya.arch@example.com",
+    "state": "changed",
+    "text": "Changed since approved v4 (now v6)",
+    "tone": "warn"
+  },
+  "feature": {
+    "id": "ACME-30",
+    "slug": "ACME-30",
+    "epicKey": "ACME-30",
+    "title": "Partner onboarding checklist",
+    "openQuestions": 0,
+    "signedOff": false,
+    "links": [
+      {
+        "kind": "jira",
+        "label": "Epic ACME-30",
+        "target": "https://acme.atlassian.net/browse/ACME-30"
+      }
+    ]
+  },
+  "next": {
+    "id": "G1",
+    "label": "Design approved",
+    "owner": "architect",
+    "ownerLabel": "Architect",
+    "state": "blocked"
+  }
+}

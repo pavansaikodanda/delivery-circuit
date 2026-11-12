@@ -1,6 +1,8 @@
 
 # --- delivery circuit (appended by circuit-bootstrap) ---
 .ai/
+# Spec Kit drafts are the Architect's local scaffold; specs, design and decisions live in Confluence (v3)
+.specify/specs/
 # SF AI Tester working folder: session cookies (auth/), org metadata, generated evidence and runs never enter git
 .sf-ai-tester/
 coverage/
@@ -10,9 +12,13 @@ playwright-report/
 delta/
 build.config.local.yml
 .specify/extensions/sf/sf-config.local.yml
+# no stored credentials: keys and env files never enter git
 *.key
 *.pem
-# transcripts never enter git (the Delivery Circuit keeps them in Fireflies or encrypted on the Architect's machine)
+*.p12
+.env
+.env.*
+# transcripts never enter git: they stay in Fireflies or encrypted in the Delivery Circuit extension
 inputs/transcripts/*
 !inputs/transcripts/README.md
 # per-session Circuit MCP config with a local bearer token

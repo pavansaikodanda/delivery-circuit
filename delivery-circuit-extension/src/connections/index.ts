@@ -1,14 +1,15 @@
 // Connections + identity module: who the person is (GitHub teams -> personas) and every outside connection the circuit
-// needs (personal, Claude MCP, review tools, project secrets), with a Connections page.
+// needs (personal logins, Claude MCP servers, review tools, the project's runner and GitHub apps), with a Connections
+// page and the Architect's Sources page. v3: every connection is a login; nothing here asks for or stores a token.
 import * as vscode from "vscode";
-import { PERSONAS, type CircuitServices, type ConnectionId, type ConnectionsService, type IdentityService, type Persona } from "../core/contracts";
+import { PERSONAS, type CircuitServices, type ConnectionsService, type IdentityService, type Persona } from "../core/contracts";
 import { openLink, type ModuleBase } from "../core/util";
 import { openPanel } from "../core/webview";
-import { def, isConnectionId } from "./catalog";
+import { def, isConnectionId, type RowId } from "./catalog";
 import { createIdentity, type IdentityInternals } from "./identity";
 import { buildPanelState, type ProjectInfo } from "./panelState";
-import { validateEnvironmentName, validateSecretName } from "./secrets";
 import { createConnections, type ConnectionsInternals } from "./service";
+import { registerSourcesUI } from "./sources";
 
 let internals: { identity: IdentityInternals; connections: ConnectionsInternals } | undefined;
 
@@ -32,7 +33,7 @@ export function registerConnectionsUI(s: CircuitServices): void {
   let project: ProjectInfo | undefined;
   let pending: NodeJS.Timeout | undefined;
   // Checks the person started from the page: the row shows "Checking" until its own check returns.
-  const checking = new Set<ConnectionId>();
+  const checking = new Set<RowId>();
   let refreshing = false;
 
   const post = () => {
@@ -42,7 +43,7 @@ export function registerConnectionsUI(s: CircuitServices): void {
     void panel.webview.postMessage({ type: "state", data: state });
   };
   const schedulePost = () => { if (pending) clearTimeout(pending); pending = setTimeout(post, 80); };
-  const loadProject = async () => { project = await connections.projectInfo().catch((e) => ({ secrets: [], webhooks: [], environments: [], reminders: [], error: String(e?.message ?? e) })); schedulePost(); };
+  const loadProject = async () => { project = await connections.projectInfo().catch((e): ProjectInfo => ({ settings: [], reminders: [], error: String(e?.message ?? e) })); schedulePost(); };
 
   ctx.subscriptions.push(connections.onDidChange(schedulePost), identity.onDidChange(schedulePost));
 
@@ -63,34 +64,26 @@ export function registerConnectionsUI(s: CircuitServices): void {
           return;
         case "connect": case "check": case "disconnect": case "manage": {
           if (!isConnectionId(m.id)) return;
-          if (m.type === "connect") await connections.connect(m.id);
+          if (m.type === "connect") await connections.connectRow(m.id);
           else if (m.type === "check") {
             if (checking.has(m.id)) return;
             checking.add(m.id); post();
-            try { await connections.check(m.id); } finally { checking.delete(m.id); post(); }
+            try { await connections.checkRow(m.id); } finally { checking.delete(m.id); post(); }
           }
-          else if (m.type === "disconnect") await connections.disconnect(m.id);
+          else if (m.type === "disconnect") await connections.disconnectRow(m.id);
           else {
             const url = connections.cached().find((c) => c.id === m.id)?.manageUrl ?? def(m.id).manageUrl;
             if (url) await openLink(root, { kind: "url", label: "Manage", target: url });
           }
-          if (m.id === "ai-reviewer" || m.id === "github") await loadProject();
+          if (m.id === "ai-reviewer" || m.id === "github" || m.id === "runner") await loadProject();
           return;
         }
         case "switchPersona":
           if (PERSONAS.includes(m.persona as Persona)) await identity.setActive(m.persona);
           return;
-        case "setSecret": {
-          const name = String(m.name ?? "");
-          const env = m.env ? String(m.env) : undefined;
-          const bad = validateSecretName(name) ?? (env ? validateEnvironmentName(env) : undefined);
-          if (bad) throw new Error(bad);
-          const known = [...(project?.secrets ?? []), ...(project?.webhooks ?? [])].some((r) => r.name === name);
-          if (!known) throw new Error(`${name} is not a secret the circuit's workflows use.`);
-          await connections.setProjectSecret(name, env);
-          await loadProject();
+        case "openSources":
+          await vscode.commands.executeCommand("deliveryCircuit.openSources");
           return;
-        }
       }
     } catch (e: any) {
       void vscode.window.showErrorMessage(`Connections: ${e?.message ?? e}`);
@@ -102,5 +95,7 @@ export function registerConnectionsUI(s: CircuitServices): void {
     panel.onDidDispose(() => { panel = undefined; });
     post();
   }));
+
+  registerSourcesUI(s, connections);
 }
 

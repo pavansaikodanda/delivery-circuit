@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { describe, expect, it } from "vitest";
 import {
-  aiAttemptFromLabels, checkRunState, featureIdFromBranch, mapDeployRuns, mapPr, mapPrsResponse, mapStoryPrsResponse, missingStoryKeys, PRS_QUERY, STORY_SEARCH_BATCH, storyPrsQuery, reviewerVerdict,
+  aiAttemptFromLabels, checkRunState, storyKeyFromTitle, mapDeployRuns, mapPr, mapPrsResponse, mapStoryPrsResponse, missingStoryKeys, PRS_QUERY, STORY_SEARCH_BATCH, storyPrsQuery, reviewerVerdict,
   statusContextState, storyKeyFromBranch,
 } from "../../src/project/github";
 
@@ -16,10 +16,17 @@ describe("branch, label and check helpers", () => {
     expect(storyKeyFromBranch("spec/001-x")).toBeUndefined();
     expect(storyKeyFromBranch("feature/ABC-123x")).toBeUndefined();
   });
-  it("reads the feature id of spec PRs", () => {
-    expect(featureIdFromBranch("spec/001-case-escalation")).toBe("001");
-    expect(featureIdFromBranch("intake/foo", "Spec 002-partner")).toBe("002");
-    expect(featureIdFromBranch("main")).toBeUndefined();
+  it("reads the story key from a v3 PR title", () => {
+    expect(storyKeyFromTitle("ABC-12 Agent escalates")).toBe("ABC-12");
+    expect(storyKeyFromTitle("[ACME_X-7] Fix")).toBe("ACME_X-7");
+    expect(storyKeyFromTitle("ABC-12: Agent")).toBe("ABC-12");
+    expect(storyKeyFromTitle("Fix ABC-12")).toBeUndefined();
+    expect(storyKeyFromTitle("ABC-12x")).toBeUndefined();
+  });
+  it("uses the title key on a feature branch that has none", () => {
+    const pr = mapPr({ number: 7, url: "u", title: "ABC-77 Something", headRefName: "feature/something", state: "OPEN", labels: { nodes: [] } });
+    expect(pr.storyKey).toBe("ABC-77");
+    expect(mapPr({ number: 8, url: "u", title: "ABC-77 x", headRefName: "chore/x", state: "OPEN" }).storyKey).toBeUndefined();
   });
   it("takes the highest ai-attempt label", () => {
     expect(aiAttemptFromLabels(["ai-attempt-1", "ai-attempt-3", "x"])).toBe(3);
@@ -41,7 +48,7 @@ describe("branch, label and check helpers", () => {
     expect(reviewerVerdict("no verdict")).toBeUndefined();
   });
   it("is a single query that asks for labels, rollup contexts, reviews, comments and the prod tag", () => {
-    for (const s of ["statusCheckRollup", "StatusContext", "CheckRun", "reviews(", "comments(", "prod-deployed", "states: MERGED"]) expect(PRS_QUERY).toContain(s);
+    for (const s of ["statusCheckRollup", "StatusContext", "CheckRun", "reviews(", "comments(", "files(", "prod-deployed", "states: MERGED"]) expect(PRS_QUERY).toContain(s);
   });
 });
 
@@ -57,9 +64,10 @@ describe("mapPrsResponse on the fixture", () => {
     expect(prodDeployedSha).toBe("aaa111");
   });
 
-  it("maps a spec PR", () => {
-    expect(pr(40)).toMatchObject({ featureId: "001", draft: false, labels: ["sdd", "plan-review"], state: "open", headSha: "s40" });
+  it("maps a non-story PR without a story or feature (no spec PRs in v3)", () => {
+    expect(pr(40)).toMatchObject({ draft: false, labels: ["sdd", "plan-review"], state: "open", headSha: "s40" });
     expect(pr(40).storyKey).toBeUndefined();
+    expect(pr(40).featureId).toBeUndefined();
     expect(pr(40).checks).toEqual({ "spec-gate": "success", guard: "success", reviewer: "success" });
   });
 
@@ -67,6 +75,8 @@ describe("mapPrsResponse on the fixture", () => {
     expect(pr(42)).toMatchObject({ storyKey: "ABC-12", draft: true, author: "circuit-app[bot]" });
     expect(pr(42).checks).toEqual({ "gate/developer": "missing", "gate/tester": "missing", "gate/architect": "missing" });
     expect(pr(42).reviews).toEqual([]);
+    expect(pr(42).files).toEqual(["docs/plans/ABC-12/PLAN.md", "docs/plans/ABC-12/TESTPLAN.md"]);
+    expect(pr(44).files).toBeUndefined();
   });
 
   it("builds review signals from people, CodeRabbit, the AI Reviewer, Code Analyzer and SF AI Tester", () => {

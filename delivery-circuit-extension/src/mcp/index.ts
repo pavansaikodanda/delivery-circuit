@@ -59,13 +59,17 @@ export function createMcp(base: ModuleBase, deps: { identity: IdentityService; c
     features: () => project.features(),
     feature: (id) => project.feature(id),
     queue: (p) => project.queue(who(p), p),
-    jiraMap: (id) => project.jiraMap(id),
     testResults: (suite) => readTestResults(root, suite),
     prs: () => project.prs(),
     sources: () => project.sources(),
     transcript: (id) => project.transcript(id),
     connections: () => connections.list(),
   };
+  // v3 detail reads (design_get, decisions_get, org_snapshot_get, story_get), served by the project service.
+  data.story = (key: string) => project.story(key);
+  data.design = (id: string) => project.design(id);
+  data.decisions = (id: string) => project.decisions(id);
+  data.orgSnapshot = (id: string) => project.orgSnapshot(id);
 
   async function ensureHost(): Promise<CircuitHttp> {
     if (host) return host;

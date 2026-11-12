@@ -1,0 +1,6 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "result": "```json\n{\"meetings\":[{\"id\":\"01JD7K2M9Q\",\"title\":\"Support escalations call\",\"date\":\"2026-11-01T15:00:00Z\"},{\"id\":\"x\",\"title\":\"bad\"}]}\n```"
+}

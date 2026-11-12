@@ -10,17 +10,17 @@ reviews:
       instructions: >
         Salesforce Apex. Flag SOQL/DML in loops, missing sharing keywords, missing CRUD/FLS, hard-coded IDs,
         duplicated logic that exists elsewhere in force-app, tests without assertions, and unit test cases
-        from tests/story_NN.tc.json that no test references ("// TC: Sxx-TC-yy").
+        from tests/<KEY>.tc.json that no test references ("// TC: <KEY>-TC-nn").
     - path: "force-app/**/lwc/**"
       instructions: "Error handling, loading states, LDS/UI API before Apex, Jest coverage."
     - path: "force-app/**/flows/**"
       instructions: "Recursion, missing fault paths, hard-coded values, entry criteria."
     - path: "force-app/**/objects/**"
-      instructions: "Every new object or field must appear in the feature's data-model.md; flag anything else."
+      instructions: "Every new object or field must appear in the data model of the approved Confluence design page (docs/plans/<KEY>/PLAN.md cites it); flag anything else."
     - path: "test-cases/**"
-      instructions: "Expected results must be observable on screen and specific; steps use exact UI labels; ids match tests/story_NN.tc.json."
-    - path: ".specify/specs/**"
-      instructions: "Acceptance criteria are Given/When/Then and testable; plan lists reuse and blast radius."
+      instructions: "Expected results must be observable on screen and specific; steps use exact UI labels; ids match tests/<KEY>.tc.json."
+    - path: "docs/plans/**"
+      instructions: "PLAN.md maps every acceptance criterion of the Jira story to work and names the approved design version; TESTPLAN.md lists every TC id from tests/<KEY>.tc.json; both list reuse and blast radius."
 knowledge_base:
   code_guidelines:
     enabled: true

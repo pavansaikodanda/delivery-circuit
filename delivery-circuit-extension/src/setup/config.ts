@@ -1,4 +1,5 @@
-// build.config.yml as a form: read fields, write them back keeping comments and layout. Never holds secrets.
+// build.config.yml (v3) as a form: read fields, write them back keeping comments and layout. Never holds secrets:
+// every connection is a login.
 // No vscode import.
 import * as YAML from "yaml";
 
@@ -15,23 +16,31 @@ export const CONFIG_FIELDS: ConfigField[] = [
   { key: "github.org", label: "GitHub organisation", type: "text" },
   { key: "github.repo", label: "Repository", type: "text" },
   { key: "github.default_branch", label: "Default branch", type: "text" },
+  { key: "github.visibility", label: "Visibility", type: "select", options: ["private", "public"], hint: "private: the circuit uses self-hosted runners" },
   { key: "people.architects", label: "Architects", type: "people", hint: "One per line: GitHub login, Atlassian email, Slack handle" },
   { key: "people.developers", label: "Developers", type: "people", hint: "One per line: GitHub login, Atlassian email, Slack handle" },
   { key: "people.testers", label: "Testers", type: "people", hint: "One per line: GitHub login, Atlassian email, Slack handle" },
+  { key: "runners.circuit.name", label: "Circuit runner name", type: "text", hint: "PR checks with logins (labels self-hosted, circuit)" },
+  { key: "runners.circuit.os", label: "Circuit runner OS", type: "select", options: ["linux", "macos", "windows"] },
+  { key: "runners.release.name", label: "Release runner name", type: "text", hint: "deploy-prod only (labels self-hosted, circuit-release)" },
+  { key: "runners.release.os", label: "Release runner OS", type: "select", options: ["linux", "macos", "windows"] },
   { key: "jira.site", label: "Jira site", type: "url", hint: "https://<site>.atlassian.net" },
   { key: "jira.project_key", label: "Jira project key", type: "text" },
   { key: "jira.test_tool", label: "Jira test tool", type: "select", options: ["none", "xray", "zephyr"] },
+  { key: "jira.design_pending_statuses", label: "Design pending statuses", type: "text", hint: "Epic statuses that mean the design is not approved" },
   { key: "confluence.space_key", label: "Confluence space key", type: "text" },
-  { key: "salesforce.dev_sandbox_url", label: "DEV sandbox URL", type: "url" },
-  { key: "salesforce.qa_sandbox_url", label: "QA sandbox URL", type: "url" },
-  { key: "salesforce.prod_url", label: "Production URL", type: "text", hint: "URL, or none" },
+  { key: "confluence.architects_group", label: "Architects group", type: "text", hint: "Only this group edits design pages / sets them to Approved" },
+  { key: "salesforce.dev_alias", label: "DEV org alias", type: "text", hint: "sf CLI alias; any connected org" },
+  { key: "salesforce.qa_alias", label: "QA org alias", type: "text" },
+  { key: "salesforce.prod_alias", label: "Production alias", type: "text", hint: "The org the project names as production: AI never touches it" },
   { key: "salesforce.api_version", label: "API version", type: "text" },
   { key: "slack.workspace", label: "Slack workspace", type: "text" },
   { key: "slack.channels.arch", label: "Architect channel", type: "text" },
   { key: "slack.channels.dev", label: "Developer channel", type: "text" },
   { key: "slack.channels.qa", label: "Tester channel", type: "text" },
-  { key: "transcripts.source", label: "Transcript source", type: "select", options: ["file", "fireflies", "both"] },
-  { key: "ai.max_attempts", label: "Max AI attempts", type: "number" },
+  { key: "slack.channels.review", label: "Review room channel", type: "text" },
+  { key: "slack.transport", label: "Slack notices", type: "select", options: ["claude", "github-app", "off"] },
+  { key: "ai.max_attempts", label: "Max AI fix attempts", type: "number" },
   { key: "ai.sf_ai_tester_in_ci", label: "SF AI Tester in CI", type: "bool" },
   { key: "ai.sf_ai_tester_ref", label: "SF AI Tester commit", type: "text" },
   { key: "ai.sf_ai_tester_mode", label: "SF AI Tester mode", type: "select", options: ["manual", "automation", "both"] },
@@ -39,17 +48,25 @@ export const CONFIG_FIELDS: ConfigField[] = [
 
 export interface Person { gh: string; atlassian: string; slack: string }
 
+export interface RunnerConfig { name: string; os: string; labels: string[] }
+
 export interface BuildConfig {
   org: string;
   repo: string;
   defaultBranch: string;
+  visibility: string;
   people: Record<"architects" | "developers" | "testers", Person[]>;
+  runners: { circuit: RunnerConfig; release: RunnerConfig };
   jiraSite: string;
   jiraKey: string;
+  designPendingStatuses: string;
   spaceKey: string;
-  devUrl: string;
-  qaUrl: string;
-  prodUrl: string;
+  architectsGroup: string;
+  devAlias: string;
+  qaAlias: string;
+  prodAlias: string;
+  channels: { arch: string; dev: string; qa: string; review: string };
+  slackTransport: string;
   maxAttempts: number;
   testerInCi: boolean;
   testerRef: string;
@@ -89,18 +106,26 @@ export function readForm(text: string): Record<string, string> {
 
 export function readConfig(text: string): BuildConfig {
   const d = YAML.parse(text) ?? {};
+  const str = (k: string, def = "") => { const v = get(d, k); return v == null || String(v).trim() === "" ? def : String(v).trim(); };
   const people = (k: string) => (Array.isArray(get(d, `people.${k}`)) ? get(d, `people.${k}`) : [])
     .filter((p: any) => p && String(p.gh ?? "").trim())
     .map((p: any) => ({ gh: String(p.gh).trim(), atlassian: String(p.atlassian ?? ""), slack: String(p.slack ?? "") }));
+  const runner = (k: "circuit" | "release", label: string): RunnerConfig => {
+    const labels = get(d, `runners.${k}.labels`);
+    return { name: str(`runners.${k}.name`), os: str(`runners.${k}.os`, "linux"), labels: Array.isArray(labels) && labels.length ? labels.map(String) : [label] };
+  };
   return {
-    org: String(get(d, "github.org") ?? ""), repo: String(get(d, "github.repo") ?? ""), defaultBranch: String(get(d, "github.default_branch") ?? "main"),
+    org: str("github.org"), repo: str("github.repo"), defaultBranch: str("github.default_branch", "main"), visibility: str("github.visibility", "private"),
     people: { architects: people("architects"), developers: people("developers"), testers: people("testers") },
-    jiraSite: String(get(d, "jira.site") ?? ""), jiraKey: String(get(d, "jira.project_key") ?? ""), spaceKey: String(get(d, "confluence.space_key") ?? ""),
-    devUrl: String(get(d, "salesforce.dev_sandbox_url") ?? ""), qaUrl: String(get(d, "salesforce.qa_sandbox_url") ?? ""),
-    prodUrl: String(get(d, "salesforce.prod_url") ?? ""),
+    runners: { circuit: runner("circuit", "circuit"), release: runner("release", "circuit-release") },
+    jiraSite: str("jira.site"), jiraKey: str("jira.project_key"), designPendingStatuses: str("jira.design_pending_statuses", "Backlog,Design Review"),
+    spaceKey: str("confluence.space_key"), architectsGroup: str("confluence.architects_group", "architects"),
+    devAlias: str("salesforce.dev_alias", "dev"), qaAlias: str("salesforce.qa_alias", "qa"), prodAlias: str("salesforce.prod_alias", "prod"),
+    channels: { arch: str("slack.channels.arch", "arch-gate"), dev: str("slack.channels.dev", "dev-gate"), qa: str("slack.channels.qa", "qa-gate"), review: str("slack.channels.review", "review-room") },
+    slackTransport: str("slack.transport", "claude"),
     maxAttempts: Number(get(d, "ai.max_attempts") ?? 3) || 3,
     testerInCi: get(d, "ai.sf_ai_tester_in_ci") === true || String(get(d, "ai.sf_ai_tester_in_ci")) === "true",
-    testerRef: String(get(d, "ai.sf_ai_tester_ref") ?? ""), testerMode: String(get(d, "ai.sf_ai_tester_mode") ?? "manual"),
+    testerRef: str("ai.sf_ai_tester_ref"), testerMode: str("ai.sf_ai_tester_mode", "manual"),
   };
 }
 
@@ -121,7 +146,7 @@ export function validateForm(values: Record<string, string>): FormError[] {
     const v = String(values[f.key] ?? "");
     if (!v.trim()) continue;
     for (const part of f.type === "people" ? v.split(/[\n,]/) : [v]) {
-      if (looksLikeSecret(part)) { errs.push({ key: f.key, message: "Looks like a secret. Secrets go to GitHub Actions secrets, never into build.config.yml." }); break; }
+      if (looksLikeSecret(part)) { errs.push({ key: f.key, message: "Looks like a secret. The circuit stores no credentials: every connection is a login (gh, sf, acli, claude, MCP OAuth)." }); break; }
     }
     if (f.type === "url" && !isPlaceholder(v) && !/^https:\/\/[\w.-]+(\/.*)?$/.test(v.trim())) errs.push({ key: f.key, message: "Use an https:// URL" });
     if (f.type === "number" && !/^\d+$/.test(v.trim())) errs.push({ key: f.key, message: "Use a whole number" });
@@ -130,6 +155,7 @@ export function validateForm(values: Record<string, string>): FormError[] {
       for (const p of textToPeople(v)) if (p.gh && !/^[A-Za-z0-9-]+$/.test(p.gh)) errs.push({ key: f.key, message: `${p.gh} is not a GitHub login` });
     }
     if (f.key === "github.org" || f.key === "github.repo") if (!/^[\w.-]+$/.test(v.trim())) errs.push({ key: f.key, message: "Letters, digits, '.', '-' and '_' only" });
+    if (/(_alias|\.name)$/.test(f.key) && !isPlaceholder(v) && !/^[\w.-]{1,60}$/.test(v.trim())) errs.push({ key: f.key, message: "Letters, digits, '.', '-' and '_' only" });
   }
   const seen = new Map<string, string>();
   for (const k of ["architects", "developers", "testers"]) {

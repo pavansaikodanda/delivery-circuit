@@ -3,15 +3,15 @@
   "admin": false,
   "repo": {
     "owner": "acme-org",
-    "repo": "salesDemoOrg",
-    "url": "https://github.com/acme-org/salesDemoOrg"
+    "repo": "acme-salesforce",
+    "url": "https://github.com/acme-org/acme-salesforce"
   },
   "buildState": {
     "exists": true,
-    "repaired": true,
+    "repaired": false,
     "path": "build-state.md"
   },
-  "selected": "B0",
+  "selected": "B2",
   "busy": null,
   "phases": [],
   "config": {

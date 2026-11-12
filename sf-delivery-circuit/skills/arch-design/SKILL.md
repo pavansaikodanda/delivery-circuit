@@ -1,32 +1,34 @@
 ---
 name: arch-design
-description: Architect continues a draft Salesforce spec - records answers to open clarification questions, re-runs clarify and plan, draws the architecture in Lucid, mirrors the design to Confluence, and prepares G1 (plan sign-off), then stories and story review. Use with a spec folder name like 001-case-escalation.
+description: Architect finishes a feature design on its Confluence design page - records answers to open questions as decisions, drafts the technical plan and data model, builds the org snapshot child page from the DEV org, draws the architecture in Lucid, and prepares the human design approval (G1). Use with a feature id like 001-shipping-rates or the design page link.
 ---
 
 # Architect: finish the design and prepare G1
 
-Persona: **Architect** (`cc-arch`). Input: `$ARGUMENTS` = spec folder `NNN-slug`. Conventions: `circuit` skill.
+Persona: **Architect** (`cc-arch`). Input: `$ARGUMENTS` = `NNN-slug` or the design page URL/id.
+Conventions: `circuit` skill. Writes: Confluence (design page + "Org snapshot" child), Lucid, local `.specify/` only.
 
-1. **Branch:** check out `spec/NNN-slug` (fetch it if needed). Read `spec.md`, the clarification report, the
-   constitution and, if present, `plan.md`.
-2. **Open questions:** list every `OPEN` item, numbered. Ask the user for the answers (they are the human
-   Architect or have the client's answers). Record each answer in `spec.md` → "Clarification Status" with who
-   answered and the date. Never invent an answer.
-3. **Re-clarify:** run `/speckit-sf-clarify`. Repeat step 2 until nothing is `OPEN`.
-4. **Plan:** run `/speckit-sf-plan` if `plan.md` is missing or older than the latest `spec.md` change.
-   Check that it lists reuse decisions (existing objects/flows/classes found in `dev`), the blast radius, and
-   the security model. Leave Architect Sign-Off **unticked**: the guard blocks you from ticking it anyway.
-5. **Diagram:** with the Lucid MCP, create or update "NNN-slug architecture": objects and relationships,
-   automation (flows, triggers, handlers), LWCs, integrations, personas and their access. Put the Lucid link in
-   `plan.md` → "Diagrams".
-6. **Confluence mirror:** with the Atlassian MCP, create or update page "Design: <feature>" in the space from
-   `build.config.yml` (`confluence.space_key`): spec summary, object map, security model, diagram embed, open
-   risks, links to the files on the `spec/` branch. Status "Awaiting architect approval".
-7. **Commit** and print the push command.
-8. **Hand over to the human Architect (G1):**
-   > Review `plan.md` and the Confluence page. If you approve, tick `Overall Sign-Off: [x] APPROVED` in `plan.md`
-   > yourself, commit and push. Then run `/speckit-sf-stories` and `/speckit-sf-review` (or ask me to), and ask
-   > the Developer for `dev-review-stories` and the Tester for `qa-design-tests`.
-
-After G1, when asked to generate stories: run `/speckit-sf-stories` (it must create `task_story_00.md` first),
-then `/speckit-sf-review`, fix BLOCKER findings in the stories, commit, and name the next owners.
+1. **Read** the design page (`getConfluenceContent`; find it with `searchConfluence` `label = "feature-NNN"`), its
+   Decisions table, the constitution and `CLAUDE.md`. If the page status is Approved, stop: changes after approval
+   need a new approval (tell the Architect; see `arch-approve-design`).
+2. **Open questions:** list each, numbered. Ask the user for the answers (they are the human Architect or have the
+   client's). Record each answer with `record-decision` (date, decision, who answered, why, source). Never invent an
+   answer. Remove answered items from Open questions.
+3. **Plan locally:** refresh the local draft (`/speckit-sf-clarify`, then `/speckit-sf-plan`) under
+   `.specify/specs/NNN-slug/`. Check it lists reuse decisions (existing objects/flows/classes found in `dev`), the
+   blast radius and the security model.
+4. **Org snapshot (C4):** for every object the feature touches, read `dev`: `sf sobject describe --sobject <X>
+   --target-org dev` (fields, types, required, picklists), flows and triggers on it
+   (`sf data query -q "SELECT ApiName, ProcessType, TriggerObjectOrEventLabel FROM FlowDefinitionView WHERE ..."
+   --target-org dev`), permission sets granting it. Create or update the child page "Org snapshot: NNN slug" with
+   a table per object (marking what the feature adds or changes) and the date and org alias of the snapshot.
+5. **Diagram:** with the Lucid MCP, create or update "NNN-slug architecture": objects and relationships, automation
+   (flows, triggers, handlers), LWCs, integrations, personas and their access. Put the link in the Diagram section.
+6. **Update the design page** (`updateConfluenceContent`, from the version you just read): Technical plan, Data model
+   (new/changed objects and fields with types, FLS, record types), Security model, Diagram, Risks, and the story
+   outline (Story 00 foundation first, then feature stories with acceptance criteria). Keep Decisions as written by
+   `record-decision`.
+7. **Status:** set the page status to "Ready for review" (`setConfluenceContentStatus`). Never "Approved".
+8. **Hand over (G1):** "Review the design page and the org snapshot. If you approve, follow `arch-approve-design`:
+   only an `architects` member sets the status to Approved and records the version on the epic." Then: after G1,
+   run `arch-jira-push NNN-slug`.

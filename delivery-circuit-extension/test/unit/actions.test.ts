@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { GATES, PERSONAS, type ActionRef, type Identity, type Persona } from "../../src/core/contracts";
 import {
-  approvableEnvironments, confirmText, denyReason, isAllowed, isProtectedBranch, mergeMethods, parseAction, pinnedHead, signoffMessage,
+  approvableEnvironments, confirmText, denyReason, failureContext, fixPrompt, isAllowed, mergeMethods, parseAction, pinnedHead,
 } from "../../src/actions/grammar";
-import { applySignOff, isSignedOff, signOffItems } from "../../src/actions/signoff";
 
 const ident = (personas: Persona[], active: Persona | null, login = "pat"): Identity =>
   ({ login, personas, active, isAdmin: false, owner: "acme", repo: "crm", orgOwned: true });
@@ -24,7 +23,6 @@ describe("action grammar", () => {
     expect(parseAction(A("gate:review", "tester", { pr: 5, event: "request_changes" }))).toMatchObject({ event: "REQUEST_CHANGES", gate: "G6" });
     expect(parseAction(A("gate:review", "architect", { pr: 5, event: "APPROVE" }))).toMatchObject({ gate: "G7" });
     expect(parseAction(A("gate:merge", "architect", { pr: 9 }))).toMatchObject({ type: "merge", gate: "G8" });
-    expect(parseAction(A("gate:signoff", "architect", { featureId: "001" }))).toMatchObject({ type: "signoff", gate: "G1" });
     expect(parseAction(A("gate:deploy", "architect", { runId: 123 }))).toMatchObject({ type: "deploy", gate: "G9", runId: 123 });
     expect(parseAction(A("nav:feature", "developer", { featureId: "002" }))).toEqual({ type: "nav-feature", featureId: "002" });
     expect(parseAction(A("nav:testing", "tester"))).toEqual({ type: "nav-testing", suite: undefined });
@@ -36,7 +34,8 @@ describe("action grammar", () => {
     expect(() => parseAction(A("gate:nuke", "architect"))).toThrow(/Unknown gate/);
     expect(() => parseAction(A("ai:", "developer"))).toThrow();
     expect(() => parseAction({ id: "gate:merge", label: "x", persona: "architect", kind: "ai", args: { pr: 1 } })).toThrow(/does not match/);
-    expect(() => parseAction(A("gate:signoff", "architect", { featureId: "../etc" }))).toThrow();
+    // v2 plan.md sign-off is gone: G1 is the Confluence page status (arch:approve-design opens the page)
+    expect(() => parseAction(A("gate:signoff", "architect", { featureId: "001" }))).toThrow(/Unknown gate/);
   });
 });
 
@@ -50,7 +49,6 @@ describe("allowed() matrix", () => {
     { a: A("gate:label", "tester", { pr: 1, label: "testplan-approved" }), owner: "tester" },
     { a: A("gate:label", "tester", { pr: 1, label: "ai-ready" }), owner: "tester" },
     { a: A("gate:merge", "architect", { pr: 1 }), owner: "architect" },
-    { a: A("gate:signoff", "architect", { featureId: "001" }), owner: "architect" },
     { a: A("gate:deploy", "architect", { runId: 1 }), owner: "architect" },
   ];
 
@@ -72,7 +70,7 @@ describe("allowed() matrix", () => {
     const dev = ident(["developer"], "developer");
     expect(denyReason(dev, A("gate:merge", "developer", { pr: 1 }))).toMatch(/G8.*architect/);
     expect(denyReason(dev, A("gate:label", "developer", { pr: 1, label: "testplan-approved" }))).toMatch(/G4.*tester/);
-    expect(denyReason(ident(["tester"], "tester"), A("gate:signoff", "tester", { featureId: "001" }))).toMatch(/G1/);
+    expect(denyReason(ident(["tester"], "tester"), { id: "arch:approve-design", label: "Approve design", persona: "tester", kind: "nav", args: { featureId: "ACME-10" } })).toMatch(/architect/);
   });
   it("needs an identity and the active persona", () => {
     expect(denyReason(null, A("ai:/x", "developer"))).toMatch(/Sign in/);
@@ -95,9 +93,6 @@ describe("confirmation text", () => {
     expect(confirmText(parseAction(A("gate:merge", "architect", { pr: 9 })), { ...c, mergeMethod: "squash" })).toBe("Merge PR #9 in acme/crm with the squash method as pat (G8).");
     expect(confirmText(parseAction(A("gate:deploy", "architect", { runId: 77 })), { ...c, environments: ["production"] }))
       .toBe("Approve the deployment of workflow run #77 in acme/crm to production as pat (G9).");
-    expect(confirmText(parseAction(A("gate:signoff", "architect", { featureId: "001" })), { ...c, planPath: ".specify/specs/001-x/plan.md", branch: "spec/001-x", gitName: "Pat Lee", gitEmail: "pat@acme.io" }))
-      .toBe(`Tick the Architect Sign-Off in .specify/specs/001-x/plan.md, commit "Architect sign-off for 001" as Pat Lee <pat@acme.io> on branch spec/001-x and push it (G1).`);
-    expect(signoffMessage("001-x")).toBe("Architect sign-off for 001-x");
   });
 });
 
@@ -116,45 +111,6 @@ describe("gate helpers", () => {
     ]);
     expect(r.approvable).toEqual([{ id: 1, name: "production" }]);
     expect(r.blocked).toEqual(["production-dryrun"]);
-  });
-  it("never signs off on main", () => {
-    for (const b of ["main", "master", "HEAD", "", "trunk"]) expect(isProtectedBranch(b, "trunk")).toBe(true);
-    expect(isProtectedBranch("spec/001-x")).toBe(false);
-  });
-});
-
-const PLAN = [
-  "# Plan", "", "## Architect Sign-Off", "", "<!-- gate -->", "", "### Data Model Review",
-  "- [ ] Object relationships are correct", "- [ ] Field types are appropriate", "- **Reviewed by**: [Architect Name]", "",
-  "### Security Review", "- [ ] OWD settings are correct", "- **Reviewed by**: [Architect Name]", "",
-  "**Overall Sign-Off**: [ ] APPROVED / [ ] CHANGES REQUIRED", "**Date**: [Date]", "", "---", "", "## Estimation Summary", "- [ ] not part of sign-off",
-].join("\n");
-
-describe("plan.md sign-off", () => {
-  it("lists only the items of the sign-off section", () => {
-    const items = signOffItems(PLAN);
-    expect(items.map((i) => i.text)).toEqual(["Object relationships are correct", "Field types are appropriate", "OWD settings are correct", "Overall Sign-Off: APPROVED"]);
-    expect(items[0].section).toBe("Data Model Review");
-    expect(items.at(-1)!.overall).toBe(true);
-  });
-  it("ticks the chosen lines, fills name and date, never ticks CHANGES REQUIRED", () => {
-    const items = signOffItems(PLAN);
-    const out = applySignOff(PLAN, [items[0].line, items[2].line, items[3].line], "Pat Lee", "2026-11-11T10:00:00Z");
-    expect(out).toContain("- [x] Object relationships are correct");
-    expect(out).toContain("- [ ] Field types are appropriate");
-    expect(out).toContain("**Overall Sign-Off**: [x] APPROVED / [ ] CHANGES REQUIRED");
-    expect(out).toContain("**Date**: 2026-11-11");
-    expect(out.match(/Reviewed by\*\*: Pat Lee/g)).toHaveLength(2);
-    expect(out).toContain("- [ ] not part of sign-off");
-    expect(isSignedOff(out)).toBe(true);
-    expect(isSignedOff(PLAN)).toBe(false);
-  });
-  it("requires the Overall APPROVED box and keeps CRLF", () => {
-    expect(() => applySignOff(PLAN, [signOffItems(PLAN)[0].line], "x", "2026-01-01")).toThrow(/Overall/);
-    const crlf = PLAN.replace(/\n/g, "\r\n");
-    const lines = signOffItems(crlf).map((i) => i.line);
-    expect(applySignOff(crlf, lines, "x", "2026-01-01")).toContain("\r\n");
-    expect(() => applySignOff("# no section", [], "x", "2026-01-01")).toThrow(/no Architect Sign-Off/);
   });
 });
 
@@ -176,5 +132,67 @@ describe("review and merge are pinned to the reviewed head commit", () => {
     const c = { login: "pat", owner: "acme", repo: "crm", headSha: A1 };
     expect(confirmText(parseAction(A("gate:merge", "architect", { pr: 9 })), { ...c, mergeMethod: "squash" })).toBe("Merge PR #9 at commit aaaaaaa in acme/crm with the squash method as pat (G8).");
     expect(confirmText(parseAction(A("gate:review", "tester", { pr: 8, event: "APPROVE" })), c)).toBe("Approve PR #8 at commit aaaaaaa in acme/crm as pat (G6: QA on sandbox).");
+  });
+});
+
+describe("v3 named actions", () => {
+  const V = (id: string, persona: Persona, kind: ActionRef["kind"], args?: Record<string, string | number>): ActionRef => ({ id, label: id, persona, kind, args });
+
+  it("start story, add tests, review room and verdict run their skills", () => {
+    expect(parseAction(V("dev:start-story", "developer", "ai", { command: "/dev-start-story", arg: "acme-12", storyKey: "ACME-12" })))
+      .toEqual({ type: "ai", skill: "/dev-start-story", prompt: "/dev-start-story ACME-12", named: "dev:start-story" });
+    expect(parseAction(V("dev:start-story", "developer", "ai", { key: "ACME-12", phase: "build" }))).toMatchObject({ prompt: "/dev-start-story ACME-12 build" });
+    expect(parseAction(V("qa:add-tests", "tester", "ai", { arg: "ACME-12", pr: 42 }))).toMatchObject({ prompt: "/qa-add-tests ACME-12" });
+    expect(parseAction(V("review:open-room", "developer", "ai", { arg: "open 42", pr: 42 }))).toMatchObject({ prompt: "/review-room open 42" });
+    expect(parseAction(V("review:record-verdict", "developer", "ai", { pr: "42" }))).toMatchObject({ prompt: "/review-room verdict 42" });
+  });
+
+  it("dev:fix carries the failing checks and failure context, and stops at the attempt cap", () => {
+    expect(parseAction(V("dev:fix", "developer", "ai", { pr: 42, checks: "qa,apex", attempt: 1 }))).toMatchObject({ prompt: "/dev-fix 42 qa,apex" });
+    expect(parseAction(V("dev:fix", "developer", "ai", { pr: 42, attempt: 3, failure: "apex: 2 tests failed & \"x\"" })))
+      .toMatchObject({ prompt: "/dev-fix 42 failure: apex: 2 tests failed x" });
+    expect(() => parseAction(V("dev:fix", "developer", "ai", { pr: 42, attempt: 4 }))).toThrow(/needs-human/);
+    expect(() => parseAction(V("dev:fix", "developer", "ai", { pr: "42; rm" }))).toThrow(/PR number/);
+  });
+
+  it("decision:record targets the feature and keeps the text on one safe line", () => {
+    expect(parseAction(V("decision:record", "tester", "ai", { featureId: "acme-12", text: "Use Tier 2 queue\nfor escalations | now" })))
+      .toMatchObject({ prompt: "/record-decision ACME-12 Use Tier 2 queue for escalations now" });
+    expect(parseAction(V("decision:record", "architect", "ai", { arg: "001-case-escalation" }))).toMatchObject({ prompt: "/record-decision 001-case-escalation" });
+    expect(() => parseAction(V("decision:record", "architect", "ai", { arg: "../x y" }))).toThrow(/epic key/);
+  });
+
+  it("arch:approve-design opens the page; it is the Architect's G1 and never an AI session", () => {
+    expect(parseAction(V("arch:approve-design", "architect", "nav", { featureId: "ACME-10", pageId: "12345", url: "https://acme-demo.atlassian.net/wiki/x" })))
+      .toEqual({ type: "approve-design", gate: "G1", key: "ACME-10", url: "https://acme-demo.atlassian.net/wiki/x" });
+    expect(() => parseAction(V("arch:approve-design", "architect", "nav", { url: "http://insecure" }))).toThrow(/https/);
+    expect(() => parseAction(V("arch:approve-design", "architect", "ai", { featureId: "ACME-10" }))).toThrow(/kind/);
+    expect(() => parseAction(V("arch:approve-design", "architect", "nav", {}))).toThrow(/needs the feature/);
+    expect(confirmText(parseAction(V("arch:approve-design", "architect", "nav", { featureId: "ACME-10" })), { login: "pat", owner: "acme", repo: "crm" })).toMatch(/AI never approves/);
+  });
+
+  it("each named action belongs to its persona; decision:record to whoever acts", () => {
+    const dev = ident(["developer"], "developer");
+    const arch = ident(["architect"], "architect");
+    const qa = ident(["tester"], "tester");
+    expect(isAllowed(dev, V("dev:start-story", "developer", "ai", { arg: "ACME-12" }))).toBe(true);
+    expect(denyReason(arch, V("dev:start-story", "architect", "ai", { arg: "ACME-12" }))).toMatch(/developer action/);
+    expect(isAllowed(arch, V("dev:start-story", "developer", "ai", { arg: "ACME-12" }))).toBe(false);
+    expect(isAllowed(qa, V("qa:add-tests", "tester", "ai", { arg: "ACME-12" }))).toBe(true);
+    expect(isAllowed(dev, V("qa:add-tests", "tester", "ai", { arg: "ACME-12" }))).toBe(false);
+    expect(isAllowed(arch, V("arch:approve-design", "architect", "nav", { featureId: "ACME-10" }))).toBe(true);
+    expect(isAllowed(dev, V("arch:approve-design", "developer", "nav", { featureId: "ACME-10" }))).toBe(false);
+    for (const [who, id] of [["architect", arch], ["developer", dev], ["tester", qa]] as const) {
+      expect(isAllowed(id, V("decision:record", who, "ai", { featureId: "ACME-10" }))).toBe(true);
+    }
+  });
+
+  it("builds failure context and fix prompts from failed check runs", () => {
+    expect(failureContext([
+      { name: "guard", conclusion: "success" },
+      { name: "apex", conclusion: "failure", output: { title: "2 of 40 tests failed" } },
+      { name: "qa-deploy", conclusion: "timed_out", output: { summary: "\nDeploy timed out after 30m\nmore" } },
+    ])).toBe("apex: 2 of 40 tests failed; qa-deploy: Deploy timed out after 30m");
+    expect(fixPrompt(7, "apex, bad;name", "")).toBe("/dev-fix 7 apex");
   });
 });

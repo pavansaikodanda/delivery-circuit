@@ -26,17 +26,50 @@
   "canAct": false,
   "queue": [
     {
+      "id": "d-start-ACME-15",
+      "kind": "start-story",
+      "title": "Start story: ACME-15 Escalation history on the Case page",
+      "detail": "ai-ready · design v8",
+      "age": "1 d",
+      "since": "2026-11-10T09:00:00.000Z",
+      "featureId": "ACME-10",
+      "storyKey": "ACME-15",
+      "links": [
+        {
+          "kind": "jira",
+          "label": "ACME-15",
+          "target": "https://acme.atlassian.net/browse/ACME-15"
+        }
+      ],
+      "actions": [
+        {
+          "id": "dev:start-story",
+          "label": "Start story",
+          "persona": "developer",
+          "kind": "ai",
+          "args": {
+            "command": "/dev-start-story",
+            "arg": "ACME-15",
+            "storyKey": "ACME-15",
+            "featureId": "ACME-10"
+          },
+          "allowed": false,
+          "reason": "Only a Developer can run this"
+        }
+      ]
+    },
+    {
       "id": "d-g3-43",
       "kind": "approve-plan",
-      "title": "Approve AI plan: CE-13 Tier 2 routing",
-      "detail": "docs/plans/CE-13/PLAN.md on draft PR",
+      "title": "Approve plan: ACME-13 Tier 2 routing",
+      "detail": "docs/plans/ACME-13/PLAN.md on the draft PR",
       "gate": "G3",
       "gateLabel": "G3 AI plan approved",
       "age": "1 d",
       "since": "2026-11-10T13:00:00.000Z",
-      "featureId": "001",
+      "featureId": "ACME-10",
       "prNumber": 43,
-      "storyKey": "CE-13",
+      "storyKey": "ACME-13",
       "links": [
         {
           "kind": "github",
@@ -45,13 +78,8 @@
         },
         {
           "kind": "jira",
-          "label": "CE-13",
-          "target": "https://acme.atlassian.net/browse/CE-13"
-        },
-        {
-          "kind": "file",
-          "label": "PLAN.md",
-          "target": "docs/plans/CE-13/PLAN.md"
+          "label": "ACME-13",
+          "target": "https://acme.atlassian.net/browse/ACME-13"
         }
       ],
       "actions": [
@@ -84,15 +112,15 @@
     {
       "id": "d-g5-42",
       "kind": "review-pr",
-      "title": "Code review: CE-12 Agent escalates a Case",
+      "title": "Code review: ACME-12 Agent escalates a Case",
       "detail": "All checks green; CodeRabbit 1 nitpick",
       "gate": "G5",
       "gateLabel": "G5 Code review",
       "age": "5 h",
       "since": "2026-11-11T10:00:00.000Z",
-      "featureId": "001",
+      "featureId": "ACME-10",
       "prNumber": 42,
-      "storyKey": "CE-12",
+      "storyKey": "ACME-12",
       "links": [
         {
           "kind": "github",
@@ -101,8 +129,8 @@
         },
         {
           "kind": "jira",
-          "label": "CE-12",
-          "target": "https://acme.atlassian.net/browse/CE-12"
+          "label": "ACME-12",
+          "target": "https://acme.atlassian.net/browse/ACME-12"
         },
         {
           "kind": "coderabbit",
@@ -125,7 +153,7 @@
           "reason": "Only a Developer can run this"
         },
         {
-          "id": "gate:approve",
+          "id": "gate:review",
           "label": "Approve (G5)",
           "persona": "developer",
           "kind": "gate",
@@ -140,13 +168,13 @@
     {
       "id": "d-human-44",
       "kind": "needs-human",
-      "title": "Take over CE-14: AI stopped after 3 attempts",
-      "detail": "static and qa failing; route dev",
+      "title": "Take over ACME-14: AI stopped after 3 attempts",
+      "detail": "static and qa failing",
       "age": "3 h",
       "since": "2026-11-11T12:00:00.000Z",
-      "featureId": "001",
+      "featureId": "ACME-10",
       "prNumber": 44,
-      "storyKey": "CE-14",
+      "storyKey": "ACME-14",
       "links": [
         {
           "kind": "github",
@@ -155,8 +183,8 @@
         },
         {
           "kind": "jira",
-          "label": "CE-14",
-          "target": "https://acme.atlassian.net/browse/CE-14"
+          "label": "ACME-14",
+          "target": "https://acme.atlassian.net/browse/ACME-14"
         }
       ],
       "actions": [
@@ -175,17 +203,67 @@
           "reason": "Only a Developer can run this"
         }
       ]
+    },
+    {
+      "id": "d-fix-45",
+      "kind": "fix",
+      "title": "Fix with AI: ACME-17 static failed",
+      "detail": "Attempt 2 of 3 · Code Analyzer: ApexUnitTestClassShouldHaveAsserts",
+      "age": "2 h",
+      "since": "2026-11-11T13:00:00.000Z",
+      "featureId": "ACME-10",
+      "prNumber": 45,
+      "storyKey": "ACME-17",
+      "links": [
+        {
+          "kind": "github",
+          "label": "PR #45",
+          "target": "https://github.com/acme-org/salesDemoOrg/pull/45"
+        },
+        {
+          "kind": "jira",
+          "label": "ACME-17",
+          "target": "https://acme.atlassian.net/browse/ACME-17"
+        }
+      ],
+      "actions": [
+        {
+          "id": "dev:fix",
+          "label": "Fix with AI",
+          "persona": "developer",
+          "kind": "ai",
+          "args": {
+            "command": "/dev-fix",
+            "arg": "45",
+            "pr": 45,
+            "checks": "static",
+            "attempt": 2
+          },
+          "allowed": false,
+          "reason": "Only a Developer can run this"
+        }
+      ]
     }
   ],
   "features": [
     {
-      "id": "001",
-      "slug": "001-case-escalation",
+      "id": "ACME-10",
+      "slug": "ACME-10",
       "title": "Case escalation with reason and queue routing",
-      "score": 92,
       "openQuestions": 0,
-      "stories": 4,
+      "stories": 7,
       "signedOff": true,
+      "epicKey": "ACME-10",
+      "design": {
+        "url": "https://acme.atlassian.net/wiki/spaces/ACME/pages/2211843/Case+escalation",
+        "status": "Approved",
+        "version": 8,
+        "approvedVersion": 8,
+        "approvedBy": "maya.arch@example.com",
+        "state": "approved",
+        "text": "Approved v8 by maya.arch@example.com",
+        "tone": "ok"
+      },
       "stages": [
         {
           "id": "intake",
@@ -201,15 +279,15 @@
         },
         {
           "id": "plan",
-          "label": "Plan",
+          "label": "Design",
           "state": "done",
-          "title": "Plan: done"
+          "title": "Design: done"
         },
         {
           "id": "signoff",
-          "label": "Sign-off",
+          "label": "Approved",
           "state": "done",
-          "title": "Sign-off: done"
+          "title": "Approved: done"
         },
         {
           "id": "stories",
@@ -225,9 +303,9 @@
         },
         {
           "id": "jira",
-          "label": "Jira",
+          "label": "Ready",
           "state": "done",
-          "title": "Jira: done"
+          "title": "Ready: done"
         },
         {
           "id": "build",
@@ -237,9 +315,9 @@
         },
         {
           "id": "qa",
-          "label": "QA",
+          "label": "Review",
           "state": "todo",
-          "title": "QA: todo"
+          "title": "Review: todo"
         },
         {
           "id": "release",
@@ -254,7 +332,7 @@
           "label": "G1",
           "state": "done",
           "own": false,
-          "title": "G1 Plan signed off · Architect · done"
+          "title": "G1 Design approved · Architect · done"
         },
         {
           "id": "G2",
@@ -322,19 +400,19 @@
       },
       "links": [
         {
-          "kind": "file",
-          "label": "spec.md",
-          "target": ".specify/specs/001-case-escalation/spec.md"
-        },
-        {
           "kind": "jira",
-          "label": "Epic CE-10",
-          "target": "https://acme.atlassian.net/browse/CE-10"
+          "label": "Epic ACME-10",
+          "target": "https://acme.atlassian.net/browse/ACME-10"
         },
         {
           "kind": "confluence",
-          "label": "Design",
-          "target": "https://acme.atlassian.net/wiki/spaces/CE/pages/2211843/Case+escalation"
+          "label": "Design: Case escalation",
+          "target": "https://acme.atlassian.net/wiki/spaces/ACME/pages/2211843/Case+escalation"
+        },
+        {
+          "kind": "confluence",
+          "label": "Org snapshot",
+          "target": "https://acme.atlassian.net/wiki/spaces/ACME/pages/2211901/Org+snapshot"
         },
         {
           "kind": "lucid",
@@ -344,12 +422,21 @@
       ]
     },
     {
-      "id": "002",
-      "slug": "002-entitlement-sla",
+      "id": "ACME-20",
+      "slug": "ACME-20",
       "title": "Entitlement SLA timers on premium support Cases",
       "openQuestions": 3,
       "stories": 0,
       "signedOff": false,
+      "epicKey": "ACME-20",
+      "design": {
+        "url": "https://acme.atlassian.net/wiki/spaces/ACME/pages/2240011/Entitlement+SLA",
+        "status": "In progress",
+        "version": 3,
+        "state": "draft",
+        "text": "In progress · v3",
+        "tone": "info"
+      },
       "stages": [
         {
           "id": "intake",
@@ -365,15 +452,15 @@
         },
         {
           "id": "plan",
-          "label": "Plan",
-          "state": "todo",
-          "title": "Plan: todo"
+          "label": "Design",
+          "state": "active",
+          "title": "Design: active"
         },
         {
           "id": "signoff",
-          "label": "Sign-off",
+          "label": "Approved",
           "state": "todo",
-          "title": "Sign-off: todo"
+          "title": "Approved: todo"
         },
         {
           "id": "stories",
@@ -389,9 +476,9 @@
         },
         {
           "id": "jira",
-          "label": "Jira",
+          "label": "Ready",
           "state": "todo",
-          "title": "Jira: todo"
+          "title": "Ready: todo"
         },
         {
           "id": "build",
@@ -401,9 +488,9 @@
         },
         {
           "id": "qa",
-          "label": "QA",
+          "label": "Review",
           "state": "todo",
-          "title": "QA: todo"
+          "title": "Review: todo"
         },
         {
           "id": "release",
@@ -418,7 +505,7 @@
           "label": "G1",
           "state": "waiting",
           "own": false,
-          "title": "G1 Plan signed off · Architect · waiting"
+          "title": "G1 Design approved · Architect · waiting"
         },
         {
           "id": "G2",
@@ -479,37 +566,341 @@
       ],
       "next": {
         "id": "G1",
-        "label": "Plan signed off",
+        "label": "Design approved",
         "owner": "architect",
         "ownerLabel": "Architect",
         "state": "waiting"
       },
       "links": [
         {
-          "kind": "file",
-          "label": "spec.md",
-          "target": ".specify/specs/002-entitlement-sla/spec.md"
+          "kind": "jira",
+          "label": "Epic ACME-20",
+          "target": "https://acme.atlassian.net/browse/ACME-20"
+        },
+        {
+          "kind": "confluence",
+          "label": "Design",
+          "target": "https://acme.atlassian.net/wiki/spaces/ACME/pages/2240011/Entitlement+SLA"
+        }
+      ]
+    },
+    {
+      "id": "ACME-30",
+      "slug": "ACME-30",
+      "title": "Partner onboarding checklist",
+      "openQuestions": 0,
+      "stories": 1,
+      "signedOff": false,
+      "epicKey": "ACME-30",
+      "design": {
+        "url": "https://acme.atlassian.net/wiki/spaces/ACME/pages/2250777/Partner+onboarding",
+        "status": "Approved",
+        "version": 6,
+        "approvedVersion": 4,
+        "approvedBy": "maya.arch@example.com",
+        "state": "changed",
+        "text": "Changed since approved v4 (now v6)",
+        "tone": "warn"
+      },
+      "stages": [
+        {
+          "id": "intake",
+          "label": "Intake",
+          "state": "done",
+          "title": "Intake: done"
+        },
+        {
+          "id": "clarify",
+          "label": "Clarify",
+          "state": "done",
+          "title": "Clarify: done"
+        },
+        {
+          "id": "plan",
+          "label": "Design",
+          "state": "done",
+          "title": "Design: done"
+        },
+        {
+          "id": "signoff",
+          "label": "Approved",
+          "state": "blocked",
+          "title": "Approved: blocked"
+        },
+        {
+          "id": "stories",
+          "label": "Stories",
+          "state": "done",
+          "title": "Stories: done"
+        },
+        {
+          "id": "tests",
+          "label": "Tests",
+          "state": "done",
+          "title": "Tests: done"
+        },
+        {
+          "id": "jira",
+          "label": "Ready",
+          "state": "done",
+          "title": "Ready: done"
+        },
+        {
+          "id": "build",
+          "label": "Build",
+          "state": "todo",
+          "title": "Build: todo"
+        },
+        {
+          "id": "qa",
+          "label": "Review",
+          "state": "todo",
+          "title": "Review: todo"
+        },
+        {
+          "id": "release",
+          "label": "Release",
+          "state": "todo",
+          "title": "Release: todo"
+        }
+      ],
+      "gates": [
+        {
+          "id": "G1",
+          "label": "G1",
+          "state": "blocked",
+          "own": false,
+          "title": "G1 Design approved · Architect · blocked"
+        },
+        {
+          "id": "G2",
+          "label": "G2",
+          "state": "done",
+          "own": false,
+          "title": "G2 Testability confirmed (ai-ready) · Tester · done"
+        },
+        {
+          "id": "G3",
+          "label": "G3",
+          "state": "not-started",
+          "own": true,
+          "title": "G3 AI plan approved · Developer · not-started"
+        },
+        {
+          "id": "G4",
+          "label": "G4",
+          "state": "not-started",
+          "own": false,
+          "title": "G4 AI test plan approved · Tester · not-started"
+        },
+        {
+          "id": "G5",
+          "label": "G5",
+          "state": "not-started",
+          "own": true,
+          "title": "G5 Code review · Developer · not-started"
+        },
+        {
+          "id": "G6",
+          "label": "G6",
+          "state": "not-started",
+          "own": false,
+          "title": "G6 QA on sandbox · Tester · not-started"
+        },
+        {
+          "id": "G7",
+          "label": "G7",
+          "state": "not-started",
+          "own": false,
+          "title": "G7 Schema and design review · Architect · not-started"
+        },
+        {
+          "id": "G8",
+          "label": "G8",
+          "state": "not-started",
+          "own": false,
+          "title": "G8 Merge · Architect · not-started"
+        },
+        {
+          "id": "G9",
+          "label": "G9",
+          "state": "not-started",
+          "own": false,
+          "title": "G9 Production approval · Architect · not-started"
+        }
+      ],
+      "next": {
+        "id": "G1",
+        "label": "Design approved",
+        "owner": "architect",
+        "ownerLabel": "Architect",
+        "state": "blocked"
+      },
+      "links": [
+        {
+          "kind": "jira",
+          "label": "Epic ACME-30",
+          "target": "https://acme.atlassian.net/browse/ACME-30"
         }
       ]
     }
   ],
   "prs": [
     {
-      "number": 44,
-      "title": "CE-14 Notify the account owner on escalation",
-      "url": "https://github.com/acme-org/salesDemoOrg/pull/44",
-      "branch": "feature/CE-14-escalation-notify",
+      "number": 45,
+      "title": "ACME-17 Auto-close stale escalations",
+      "url": "https://github.com/acme-org/salesDemoOrg/pull/45",
+      "branch": "feature/ACME-17-auto-close",
       "draft": false,
-      "author": "claude[bot]",
+      "author": "ravi-dev",
       "labels": [
-        "ai-generated",
+        "plan-approved",
+        "testplan-approved",
+        "ai-attempt-1"
+      ],
+      "storyKey": "ACME-17",
+      "featureId": "ACME-10",
+      "aiAttempt": 1,
+      "age": "2 h",
+      "needsYou": true,
+      "checks": [
+        {
+          "name": "guard",
+          "state": "success",
+          "cls": "ok"
+        },
+        {
+          "name": "static",
+          "state": "failure",
+          "cls": "err"
+        },
+        {
+          "name": "design-gate",
+          "state": "success",
+          "cls": "ok"
+        },
+        {
+          "name": "qa",
+          "state": "pending",
+          "cls": "info"
+        },
+        {
+          "name": "gate/developer",
+          "state": "missing",
+          "cls": ""
+        },
+        {
+          "name": "gate/tester",
+          "state": "missing",
+          "cls": ""
+        }
+      ],
+      "gates": [
+        {
+          "id": "G3",
+          "label": "G3",
+          "state": "done",
+          "own": true,
+          "title": "G3 AI plan approved · done"
+        },
+        {
+          "id": "G5",
+          "label": "G5",
+          "state": "waiting",
+          "own": true,
+          "title": "G5 Code review · waiting"
+        }
+      ],
+      "groups": [
+        {
+          "source": "code-analyzer",
+          "label": "Code Analyzer",
+          "signals": [
+            {
+              "author": "github-actions[bot]",
+              "state": "block",
+              "cls": "err",
+              "summary": "1 violation: ApexUnitTestClassShouldHaveAsserts",
+              "at": "2026-11-11T13:00:00.000Z",
+              "links": [
+                {
+                  "kind": "github",
+                  "label": "Results",
+                  "target": "https://github.com/acme-org/salesDemoOrg/actions/runs/11874020"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "missing": [
+        "CodeRabbit",
+        "AI Reviewer",
+        "SF AI Tester"
+      ],
+      "links": [
+        {
+          "kind": "github",
+          "label": "PR #45",
+          "target": "https://github.com/acme-org/salesDemoOrg/pull/45"
+        },
+        {
+          "kind": "jira",
+          "label": "ACME-17",
+          "target": "https://acme.atlassian.net/browse/ACME-17"
+        },
+        {
+          "kind": "github",
+          "label": "Checks",
+          "target": "https://github.com/acme-org/salesDemoOrg/pull/45/checks"
+        }
+      ],
+      "actions": [
+        {
+          "id": "dev:fix",
+          "label": "Fix with AI",
+          "persona": "developer",
+          "kind": "ai",
+          "args": {
+            "command": "/dev-fix",
+            "argKind": "pr",
+            "arg": 45,
+            "attempt": 2,
+            "checks": "static"
+          },
+          "allowed": false,
+          "reason": "Only a Developer can run this"
+        },
+        {
+          "id": "ai:/dev-review-pr",
+          "label": "Review PR",
+          "persona": "developer",
+          "kind": "ai",
+          "args": {
+            "command": "/dev-review-pr",
+            "argKind": "pr",
+            "arg": 45
+          },
+          "allowed": false,
+          "reason": "Only a Developer can run this"
+        }
+      ]
+    },
+    {
+      "number": 44,
+      "title": "ACME-14 Notify the account owner on escalation",
+      "url": "https://github.com/acme-org/salesDemoOrg/pull/44",
+      "branch": "feature/ACME-14-escalation-notify",
+      "draft": false,
+      "author": "ravi-dev",
+      "labels": [
         "plan-approved",
         "testplan-approved",
         "ai-attempt-3",
         "needs-human"
       ],
-      "storyKey": "CE-14",
-      "featureId": "001",
+      "storyKey": "ACME-14",
+      "featureId": "ACME-10",
       "aiAttempt": 3,
       "age": "3 h",
       "needsYou": true,
@@ -525,14 +916,14 @@
           "cls": "err"
         },
         {
+          "name": "design-gate",
+          "state": "success",
+          "cls": "ok"
+        },
+        {
           "name": "qa",
           "state": "failure",
           "cls": "err"
-        },
-        {
-          "name": "spec-gate",
-          "state": "success",
-          "cls": "ok"
         },
         {
           "name": "gate/developer",
@@ -630,7 +1021,7 @@
               "author": "github-actions[bot]",
               "state": "block",
               "cls": "err",
-              "summary": "S03-TC-01 failed: no email sent",
+              "summary": "ACME-14-TC-01 failed: no email sent",
               "at": "2026-11-11T12:00:00.000Z",
               "links": [
                 {
@@ -652,8 +1043,8 @@
         },
         {
           "kind": "jira",
-          "label": "CE-14",
-          "target": "https://acme.atlassian.net/browse/CE-14"
+          "label": "ACME-14",
+          "target": "https://acme.atlassian.net/browse/ACME-14"
         },
         {
           "kind": "coderabbit",
@@ -698,20 +1089,17 @@
     },
     {
       "number": 42,
-      "title": "CE-12 Agent escalates a Case with a reason",
+      "title": "ACME-12 Agent escalates a Case with a reason",
       "url": "https://github.com/acme-org/salesDemoOrg/pull/42",
-      "branch": "feature/CE-12-escalate-case",
+      "branch": "feature/ACME-12-escalate-case",
       "draft": false,
-      "author": "claude[bot]",
+      "author": "sam-dev",
       "labels": [
-        "ai-generated",
         "plan-approved",
-        "testplan-approved",
-        "ai-attempt-1"
+        "testplan-approved"
       ],
-      "storyKey": "CE-12",
-      "featureId": "001",
-      "aiAttempt": 1,
+      "storyKey": "ACME-12",
+      "featureId": "ACME-10",
       "age": "5 h",
       "needsYou": true,
       "checks": [
@@ -726,12 +1114,12 @@
           "cls": "ok"
         },
         {
-          "name": "qa",
+          "name": "design-gate",
           "state": "success",
           "cls": "ok"
         },
         {
-          "name": "spec-gate",
+          "name": "qa",
           "state": "success",
           "cls": "ok"
         },
@@ -858,8 +1246,8 @@
         },
         {
           "kind": "jira",
-          "label": "CE-12",
-          "target": "https://acme.atlassian.net/browse/CE-12"
+          "label": "ACME-12",
+          "target": "https://acme.atlassian.net/browse/ACME-12"
         },
         {
           "kind": "coderabbit",
@@ -885,27 +1273,44 @@
           },
           "allowed": false,
           "reason": "Only a Developer can run this"
+        },
+        {
+          "id": "review:open-room",
+          "label": "Open review room",
+          "persona": "developer",
+          "kind": "ai",
+          "args": {
+            "command": "/review-room",
+            "argKind": "pr",
+            "arg": 42
+          },
+          "allowed": false,
+          "reason": "Only a Developer can run this"
         }
       ]
     },
     {
       "number": 43,
-      "title": "CE-13 Escalated Cases route to the Tier 2 queue",
+      "title": "ACME-13 Escalated Cases route to the Tier 2 queue",
       "url": "https://github.com/acme-org/salesDemoOrg/pull/43",
-      "branch": "feature/CE-13-escalation-routing",
+      "branch": "feature/ACME-13-escalation-routing",
       "draft": true,
-      "author": "claude[bot]",
+      "author": "ravi-dev",
       "labels": [
-        "ai-generated",
         "plan-review"
       ],
-      "storyKey": "CE-13",
-      "featureId": "001",
+      "storyKey": "ACME-13",
+      "featureId": "ACME-10",
       "age": "1 d",
       "needsYou": true,
       "checks": [
         {
           "name": "guard",
+          "state": "success",
+          "cls": "ok"
+        },
+        {
+          "name": "design-gate",
           "state": "success",
           "cls": "ok"
         }
@@ -941,8 +1346,8 @@
         },
         {
           "kind": "jira",
-          "label": "CE-13",
-          "target": "https://acme.atlassian.net/browse/CE-13"
+          "label": "ACME-13",
+          "target": "https://acme.atlassian.net/browse/ACME-13"
         },
         {
           "kind": "github",
@@ -968,15 +1373,17 @@
     },
     {
       "number": 41,
-      "title": "Spec: case escalation stories and test cases",
+      "title": "ACME-11 Escalation data model and permissions",
       "url": "https://github.com/acme-org/salesDemoOrg/pull/41",
-      "branch": "spec/001-case-escalation",
+      "branch": "feature/ACME-11-escalation-model",
       "draft": false,
-      "author": "maya-arch",
+      "author": "ravi-dev",
       "labels": [
-        "sdd"
+        "plan-approved",
+        "testplan-approved"
       ],
-      "featureId": "001",
+      "storyKey": "ACME-11",
+      "featureId": "ACME-10",
       "age": "1 d",
       "needsYou": false,
       "checks": [
@@ -986,36 +1393,62 @@
           "cls": "ok"
         },
         {
-          "name": "spec-gate",
+          "name": "static",
+          "state": "success",
+          "cls": "ok"
+        },
+        {
+          "name": "design-gate",
+          "state": "success",
+          "cls": "ok"
+        },
+        {
+          "name": "qa",
+          "state": "success",
+          "cls": "ok"
+        },
+        {
+          "name": "gate/architect",
+          "state": "success",
+          "cls": "ok"
+        },
+        {
+          "name": "gate/developer",
+          "state": "success",
+          "cls": "ok"
+        },
+        {
+          "name": "gate/tester",
           "state": "success",
           "cls": "ok"
         }
       ],
-      "gates": [],
+      "gates": [
+        {
+          "id": "G3",
+          "label": "G3",
+          "state": "done",
+          "own": true,
+          "title": "G3 AI plan approved · done"
+        },
+        {
+          "id": "G5",
+          "label": "G5",
+          "state": "done",
+          "own": true,
+          "title": "G5 Code review · done"
+        }
+      ],
       "groups": [
         {
           "source": "human",
           "label": "Human",
           "signals": [
             {
-              "author": "tess-qa",
+              "author": "sam-dev",
               "state": "approved",
               "cls": "ok",
-              "summary": "Test cases cover every AC",
-              "at": "2026-11-10T07:00:00.000Z",
-              "links": [
-                {
-                  "kind": "github",
-                  "label": "Review",
-                  "target": "https://github.com/acme-org/salesDemoOrg/pull/41#pullrequestreview-2402"
-                }
-              ]
-            },
-            {
-              "author": "ravi-dev",
-              "state": "approved",
-              "cls": "ok",
-              "summary": "Stories are buildable; Story 00 contract complete",
+              "summary": "Data model matches the approved design v8",
               "at": "2026-11-10T05:00:00.000Z",
               "links": [
                 {
@@ -1035,7 +1468,7 @@
               "author": "coderabbitai[bot]",
               "state": "commented",
               "cls": "",
-              "summary": "2 nitpicks in task_story_03.md",
+              "summary": "2 nitpicks",
               "at": "2026-11-09T23:00:00.000Z",
               "links": [
                 {
@@ -1060,6 +1493,11 @@
           "target": "https://github.com/acme-org/salesDemoOrg/pull/41"
         },
         {
+          "kind": "jira",
+          "label": "ACME-11",
+          "target": "https://acme.atlassian.net/browse/ACME-11"
+        },
+        {
           "kind": "coderabbit",
           "label": "CodeRabbit",
           "target": "https://github.com/acme-org/salesDemoOrg/pull/41#pullrequestreview"
@@ -1070,21 +1508,7 @@
           "target": "https://github.com/acme-org/salesDemoOrg/pull/41/checks"
         }
       ],
-      "actions": [
-        {
-          "id": "ai:/dev-review-pr",
-          "label": "Review PR",
-          "persona": "developer",
-          "kind": "ai",
-          "args": {
-            "command": "/dev-review-pr",
-            "argKind": "pr",
-            "arg": 41
-          },
-          "allowed": false,
-          "reason": "Only a Developer can run this"
-        }
-      ]
+      "actions": []
     }
   ],
   "aiActions": [
@@ -1096,6 +1520,18 @@
       "args": {
         "command": "/dev-review-stories",
         "argKind": "feature"
+      },
+      "allowed": false,
+      "reason": "Only a Developer can run this"
+    },
+    {
+      "id": "dev:start-story",
+      "label": "Start story",
+      "persona": "developer",
+      "kind": "ai",
+      "args": {
+        "command": "/dev-start-story",
+        "argKind": "story"
       },
       "allowed": false,
       "reason": "Only a Developer can run this"
@@ -1125,6 +1561,42 @@
       "reason": "Only a Developer can run this"
     },
     {
+      "id": "dev:fix",
+      "label": "Fix with AI",
+      "persona": "developer",
+      "kind": "ai",
+      "args": {
+        "command": "/dev-fix",
+        "argKind": "pr"
+      },
+      "allowed": false,
+      "reason": "Only a Developer can run this"
+    },
+    {
+      "id": "review:open-room",
+      "label": "Open review room",
+      "persona": "developer",
+      "kind": "ai",
+      "args": {
+        "command": "/review-room",
+        "argKind": "pr"
+      },
+      "allowed": false,
+      "reason": "Only a Developer can run this"
+    },
+    {
+      "id": "review:record-verdict",
+      "label": "Record verdict",
+      "persona": "developer",
+      "kind": "ai",
+      "args": {
+        "command": "/review-room",
+        "argKind": "pr"
+      },
+      "allowed": false,
+      "reason": "Only a Developer can run this"
+    },
+    {
       "id": "ai:/dev-review-pr",
       "label": "Take over",
       "persona": "developer",
@@ -1133,6 +1605,18 @@
         "command": "/dev-review-pr",
         "argKind": "pr",
         "intent": "takeover"
+      },
+      "allowed": false,
+      "reason": "Only a Developer can run this"
+    },
+    {
+      "id": "decision:record",
+      "label": "Record decision",
+      "persona": "developer",
+      "kind": "ai",
+      "args": {
+        "command": "/record-decision",
+        "argKind": "feature"
       },
       "allowed": false,
       "reason": "Only a Developer can run this"

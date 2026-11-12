@@ -1,57 +1,52 @@
 {
-  "login": "pavansaikodanda",
+  "login": "maya-arch",
   "admin": true,
   "repo": {
     "owner": "acme-org",
-    "repo": "salesDemoOrg",
-    "url": "https://github.com/acme-org/salesDemoOrg"
+    "repo": "acme-salesforce",
+    "url": "https://github.com/acme-org/acme-salesforce"
   },
   "buildState": {
     "exists": true,
-    "repaired": true,
+    "repaired": false,
     "path": "build-state.md"
   },
-  "selected": "B1",
+  "selected": "B2",
   "busy": null,
   "phases": [
     {
       "id": "B0",
       "name": "Preflight",
-      "summary": "Tools, GitHub CLI scopes, installer dry run, build.config.yml.",
-      "status": "PARTIAL",
-      "kind": "partial",
-      "verified": "tools: yes; gh admin: no",
-      "evidence": "versions below",
-      "notes": "gh token has repo,workflow but not admin:org; user is a plain member of acme-org",
+      "summary": "Tools, GitHub CLI scopes, installer dry run, build.config.yml, browser sign-ins.",
+      "status": "DONE",
+      "kind": "done",
+      "verified": "2026-11-10",
+      "evidence": "tools ok; gh scopes ok",
+      "notes": "",
       "steps": [
         {
           "id": "b0.tools",
           "kind": "check",
           "title": "Tool versions",
-          "detail": "git, gh, node, npm, python, uv, sf (+ code-analyzer), claude, openssl, jq, actionlint, specify. Recorded in build-state.md.",
+          "detail": "git, gh, node, npm, sf (+ code-analyzer), claude, acli, jq, actionlint, shellcheck, specify. Recorded in build-state.md.",
           "action": "Record in build-state.md",
           "verify": true,
           "links": [],
-          "result": {
-            "state": "ok",
-            "text": "git 2.53.0, gh 2.73.0, node 22.23.3, npm 10.9.9, python 3.13.1, uv 0.13.0, sf 2.157.8 (code-analyzer 5.1.0), claude 2.1.318, openssl 3.5.5, jq 1.7.1, actionlint 1.7.7, specify 1.3.4",
-            "at": "2026-11-11T09:30:00Z"
-          },
           "status": {
-            "tone": "ok",
-            "text": "passed"
+            "tone": "muted",
+            "text": "not checked"
           },
           "actions": [
             {
-              "do": "run",
-              "label": "Record in build-state.md"
-            },
-            {
               "do": "verify",
               "label": "Check"
+            },
+            {
+              "do": "run",
+              "label": "Record in build-state.md"
             }
           ],
-          "done": true
+          "done": false
         },
         {
           "id": "b0.gh",
@@ -60,18 +55,9 @@
           "detail": "gh auth status needs scopes repo, admin:org, workflow; you need to be an org owner or repo admin.",
           "verify": true,
           "links": [],
-          "result": {
-            "state": "warn",
-            "text": "gh token lacks admin:org: run gh auth refresh -s admin:org,workflow",
-            "at": "2026-11-11T09:30:00Z",
-            "lines": [
-              "gh: signed in; scopes repo, workflow",
-              "You: pavansaikodanda, admin of acme-org/salesDemoOrg"
-            ]
-          },
           "status": {
-            "tone": "warn",
-            "text": "needs attention"
+            "tone": "muted",
+            "text": "not checked"
           },
           "actions": [
             {
@@ -85,18 +71,13 @@
           "id": "b0.dryrun",
           "kind": "run",
           "title": "Installer dry run",
-          "detail": "Shows what install.mjs would add, update or skip. Changes nothing.",
+          "detail": "Shows what install.mjs would add, update or skip, and lists v2 files still in the repo as STALE. Changes nothing.",
           "action": "Run dry run",
           "verify": false,
           "links": [],
-          "result": {
-            "state": "ok",
-            "text": "Dry run: add 0, update 2, skip 41",
-            "at": "2026-11-11T09:30:00Z"
-          },
           "status": {
-            "tone": "ok",
-            "text": "done"
+            "tone": "muted",
+            "text": "not run"
           },
           "actions": [
             {
@@ -104,23 +85,18 @@
               "label": "Run dry run"
             }
           ],
-          "done": true
+          "done": false
         },
         {
           "id": "b0.config",
           "kind": "form",
           "title": "Fill build.config.yml",
-          "detail": "Org, repo, people per team, Jira, Confluence, Salesforce URLs, Slack. No secrets.",
+          "detail": "Org, repo, people per team, runners, Jira, Confluence, sf aliases, Slack. No secrets: the circuit stores none.",
           "verify": true,
           "links": [],
-          "result": {
-            "state": "warn",
-            "text": "Still empty: people.architects, people.developers, people.testers, jira.site",
-            "at": "2026-11-11T09:30:00Z"
-          },
           "status": {
-            "tone": "warn",
-            "text": "needs attention"
+            "tone": "muted",
+            "text": "not checked"
           },
           "actions": [
             {
@@ -155,7 +131,7 @@
               "done": false
             },
             {
-              "text": "Signed in to Slack",
+              "text": "Signed in to Slack and claude.ai",
               "done": false
             }
           ],
@@ -168,22 +144,17 @@
             {
               "kind": "jira",
               "label": "Atlassian",
-              "target": "https://id.atlassian.com/login"
-            },
-            {
-              "kind": "salesforce",
-              "label": "DEV sandbox",
-              "target": "https://acme-demo.my.salesforce.com"
-            },
-            {
-              "kind": "salesforce",
-              "label": "QA sandbox",
-              "target": "https://acme-demo.my.salesforce.com"
+              "target": "https://acme.atlassian.net"
             },
             {
               "kind": "slack",
               "label": "Slack",
               "target": "https://slack.com/signin"
+            },
+            {
+              "kind": "url",
+              "label": "Claude",
+              "target": "https://claude.ai/login"
             }
           ],
           "status": {
@@ -201,18 +172,18 @@
       ],
       "ready": false,
       "progress": {
-        "done": 2,
+        "done": 0,
         "total": 5
       }
     },
     {
       "id": "B1",
-      "name": "GitHub org and bot",
-      "summary": "Teams, labels, GitHub App, secrets, variables, production environment.",
-      "status": "TODO",
-      "kind": "todo",
-      "verified": "",
-      "evidence": "",
+      "name": "GitHub repo, teams, labels",
+      "summary": "Teams, labels, Actions settings for self-hosted runners, variables; no secrets.",
+      "status": "DONE",
+      "kind": "done",
+      "verified": "2026-11-10",
+      "evidence": "teams disjoint; 13 labels; no secrets",
       "notes": "",
       "steps": [
         {
@@ -223,19 +194,9 @@
           "action": "Create teams and members",
           "verify": true,
           "links": [],
-          "result": {
-            "state": "warn",
-            "text": "Teams incomplete",
-            "at": "2026-11-11T09:30:00Z",
-            "lines": [
-              "architects: missing",
-              "developers: missing",
-              "testers: missing"
-            ]
-          },
           "status": {
-            "tone": "warn",
-            "text": "needs attention"
+            "tone": "muted",
+            "text": "not run"
           },
           "actions": [
             {
@@ -253,18 +214,13 @@
           "id": "b1.labels",
           "kind": "run",
           "title": "Labels",
-          "detail": "sdd, needs-clarification, plan-review, plan-approved, testplan-approved, ai-ready, ai-generated, ai-attempt-1..3, needs-human, needs-qa.",
+          "detail": "plan-review, plan-approved, testplan-approved, ai-ready, ai-generated, ai-attempt-1..3, needs-fix, needs-human, needs-qa, review-room, review-verdict.",
           "action": "Create missing labels",
           "verify": true,
           "links": [],
-          "result": {
-            "state": "warn",
-            "text": "Missing labels: plan-approved, testplan-approved, ai-ready, needs-human, needs-qa",
-            "at": "2026-11-11T09:30:00Z"
-          },
           "status": {
-            "tone": "warn",
-            "text": "needs attention"
+            "tone": "muted",
+            "text": "not run"
           },
           "actions": [
             {
@@ -279,53 +235,40 @@
           "done": false
         },
         {
-          "id": "b1.hc2",
+          "id": "b1.actions",
           "kind": "human",
-          "title": "GitHub App for CI",
-          "detail": "Create the App in the browser, install it on this repo only, then store its id and private key below.",
-          "hc": "HC-2",
+          "title": "Actions settings for self-hosted runners",
+          "detail": "GitHub: self-hosted runners should almost never be used for public repositories. Keep the repo private, never run fork PR workflows, and give workflows read-only tokens by default.",
           "verify": true,
           "checklist": [
             {
-              "text": "No webhook",
-              "done": true
-            },
-            {
-              "text": "Repository permissions: Contents RW, Pull requests RW, Issues RW, Actions Read, Commit statuses RW, Metadata Read",
-              "done": true
-            },
-            {
-              "text": "Organization permissions: Members Read",
+              "text": "Repository is private (or: public with \"Require approval for all external contributors\")",
               "done": false
             },
             {
-              "text": "Workflows: no access",
+              "text": "Fork pull request workflows: \"Run workflows from fork pull requests\" is off",
               "done": false
             },
             {
-              "text": "Private key generated",
-              "done": false
-            },
-            {
-              "text": "Installed on this repository only",
+              "text": "Workflow permissions: \"Read repository contents and packages permissions\"",
               "done": false
             }
           ],
           "links": [
             {
               "kind": "github",
-              "label": "New GitHub App",
-              "target": "https://github.com/organizations/acme-org/settings/apps/new"
+              "label": "Repository settings",
+              "target": "https://github.com/acme-org/acme-salesforce/settings"
             },
             {
               "kind": "github",
-              "label": "Org installed apps",
-              "target": "https://github.com/organizations/acme-org/settings/installations"
+              "label": "Actions settings",
+              "target": "https://github.com/acme-org/acme-salesforce/settings/actions"
             }
           ],
           "status": {
             "tone": "info",
-            "text": "2 of 6 ticked"
+            "text": "waiting for you"
           },
           "actions": [
             {
@@ -334,113 +277,12 @@
             }
           ],
           "done": false
-        },
-        {
-          "id": "b1.app",
-          "kind": "secret",
-          "title": "App secrets",
-          "detail": "APP_ID from the App page; APP_PRIVATE_KEY from the downloaded .pem (deleted afterwards if you agree).",
-          "verify": true,
-          "secrets": [
-            {
-              "name": "APP_ID",
-              "set": false
-            },
-            {
-              "name": "APP_PRIVATE_KEY",
-              "set": false
-            }
-          ],
-          "links": [],
-          "result": {
-            "state": "warn",
-            "text": "Missing repository secrets: APP_ID, APP_PRIVATE_KEY",
-            "at": "2026-11-11T09:30:00Z"
-          },
-          "status": {
-            "tone": "warn",
-            "text": "needs attention"
-          },
-          "actions": [
-            {
-              "do": "secret",
-              "label": "Set APP_ID",
-              "name": "APP_ID"
-            },
-            {
-              "do": "secret",
-              "label": "Set APP_PRIVATE_KEY",
-              "name": "APP_PRIVATE_KEY"
-            },
-            {
-              "do": "verify",
-              "label": "Check"
-            }
-          ],
-          "done": false
-        },
-        {
-          "id": "b1.hc3",
-          "kind": "human",
-          "title": "Claude token for CI (subscription seat)",
-          "detail": "On the dedicated CI seat run claude setup-token (1-year token), then store it as CLAUDE_CODE_OAUTH_TOKEN. Never ANTHROPIC_API_KEY.",
-          "hc": "HC-3",
-          "action": "Open terminal: claude setup-token",
-          "verify": true,
-          "checklist": [
-            {
-              "text": "Signed in as the dedicated CI seat",
-              "done": false
-            },
-            {
-              "text": "Token copied from the terminal, not pasted anywhere else",
-              "done": false
-            }
-          ],
-          "secrets": [
-            {
-              "name": "CLAUDE_CODE_OAUTH_TOKEN",
-              "set": true
-            }
-          ],
-          "links": [
-            {
-              "kind": "url",
-              "label": "Claude Code authentication docs",
-              "target": "https://code.claude.com/docs/en/authentication"
-            }
-          ],
-          "result": {
-            "state": "ok",
-            "text": "CLAUDE_CODE_OAUTH_TOKEN set; no ANTHROPIC_API_KEY",
-            "at": "2026-11-11T09:30:00Z"
-          },
-          "status": {
-            "tone": "ok",
-            "text": "done"
-          },
-          "actions": [
-            {
-              "do": "run",
-              "label": "Open terminal: claude setup-token"
-            },
-            {
-              "do": "verify",
-              "label": "Verify"
-            },
-            {
-              "do": "secret",
-              "label": "Replace CLAUDE_CODE_OAUTH_TOKEN",
-              "name": "CLAUDE_CODE_OAUTH_TOKEN"
-            }
-          ],
-          "done": true
         },
         {
           "id": "b1.vars",
           "kind": "run",
           "title": "Repository variables",
-          "detail": "MAX_AI_ATTEMPTS, SF_INSTANCE_URL_SANDBOX, SF_INSTANCE_URL_PROD, SF_AI_TESTER_IN_CI, SF_AI_TESTER_REF, SF_AI_TESTER_MODE from build.config.yml.",
+          "detail": "MAX_AI_ATTEMPTS, CIRCUIT_QA_ALIAS, CIRCUIT_PROD_ALIAS, CIRCUIT_RELEASE_ALIAS, DESIGN_PENDING_STATUSES, SLACK_CHANNEL_DEV/QA, CIRCUIT_SLACK_TRANSPORT, SF_AI_TESTER_* from build.config.yml. Names and flags only.",
           "action": "Set variables",
           "verify": true,
           "links": [],
@@ -461,17 +303,98 @@
           "done": false
         },
         {
-          "id": "b1.env",
-          "kind": "run",
-          "title": "Environment production",
-          "detail": "Creates the production environment (reviewers are added in B9).",
-          "action": "Create environment",
+          "id": "b1.nosecrets",
+          "kind": "check",
+          "title": "No stored credentials",
+          "detail": "The repository and its environments hold no secrets: no CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY, Salesforce JWT keys, Jira tokens or Slack webhooks. Leftovers from v2 can be deleted here.",
+          "action": "Delete leftover secrets",
           "verify": true,
           "links": [],
+          "status": {
+            "tone": "muted",
+            "text": "not checked"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Check"
+            },
+            {
+              "do": "run",
+              "label": "Delete leftover secrets"
+            }
+          ],
+          "done": false
+        }
+      ],
+      "ready": false,
+      "progress": {
+        "done": 0,
+        "total": 5
+      }
+    },
+    {
+      "id": "B2",
+      "name": "Self-hosted runners",
+      "summary": "Two runners with their own logins: circuit (PR checks) and circuit-release (deploy-prod).",
+      "status": "PARTIAL",
+      "kind": "partial",
+      "verified": "",
+      "evidence": "",
+      "notes": "circuit runner online; release runner not registered yet",
+      "steps": [
+        {
+          "id": "b2.circuit",
+          "kind": "human",
+          "title": "Register the circuit runner",
+          "detail": "On the circuit machine, as its service user: download the runner, register it with the labels below and install it as a service.",
+          "hc": "HC-2",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "Runner downloaded from the repository's New self-hosted runner page",
+              "done": false
+            },
+            {
+              "text": "Registered with labels self-hosted, circuit",
+              "done": false
+            },
+            {
+              "text": "Installed and started as a service",
+              "done": false
+            }
+          ],
+          "commands": [
+            "# in the runner folder (downloaded from Settings > Actions > Runners > New self-hosted runner)",
+            "./config.sh --url https://github.com/acme-org/acme-salesforce --token \"$(gh api -X POST repos/acme-org/acme-salesforce/actions/runners/registration-token --jq .token)\" --name circuit-1 --labels circuit",
+            "sudo ./svc.sh install <service-user> && sudo ./svc.sh start",
+            "sudo ./svc.sh status"
+          ],
+          "notes": [
+            "The registration token expires after 1 hour; it is read on the runner machine and never stored.",
+            "config cannot add labels to a registered runner: change them in Settings > Actions > Runners > the runner > Labels.",
+            "This runner holds DEV/QA logins only, never production."
+          ],
+          "links": [
+            {
+              "kind": "github",
+              "label": "New self-hosted runner",
+              "target": "https://github.com/acme-org/acme-salesforce/settings/actions/runners/new"
+            },
+            {
+              "kind": "github",
+              "label": "Runners",
+              "target": "https://github.com/acme-org/acme-salesforce/settings/actions/runners"
+            }
+          ],
           "result": {
             "state": "ok",
-            "text": "Environment production exists",
-            "at": "2026-11-11T09:30:00Z"
+            "text": "[self-hosted, circuit]: circuit-1 online",
+            "at": "2026-11-11T15:00:00Z",
+            "lines": [
+              "[self-hosted, circuit]: circuit-1 online",
+              "circuit-1: online; labels self-hosted, Linux, circuit"
+            ]
           },
           "status": {
             "tone": "ok",
@@ -479,38 +402,175 @@
           },
           "actions": [
             {
-              "do": "run",
-              "label": "Create environment"
-            },
-            {
               "do": "verify",
-              "label": "Check"
+              "label": "Verify"
             }
           ],
           "done": true
+        },
+        {
+          "id": "b2.logins",
+          "kind": "human",
+          "title": "Circuit runner logins",
+          "detail": "As the runner's service user, in a terminal on that machine, sign in once to each tool. Logins stay on the runner; nothing goes into GitHub secrets.",
+          "hc": "HC-3",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "gh signed in (repo, read:org)",
+              "done": true
+            },
+            {
+              "text": "claude signed in with a Claude Team seat (and Slack via /mcp if transport is claude)",
+              "done": true
+            },
+            {
+              "text": "acli jira auth login --web done",
+              "done": true
+            },
+            {
+              "text": "sf logins for the DEV and QA aliases",
+              "done": false
+            },
+            {
+              "text": "runner-check.sh prints ok",
+              "done": false
+            }
+          ],
+          "commands": [
+            "gh auth login    # scopes repo, read:org",
+            "claude           # sign in with the Claude Team seat; then /mcp > Slack if notices use transport claude",
+            "acli jira auth login --web",
+            "sf org login web --alias dev    # or: sf org login device --alias dev on a headless machine",
+            "sf org login web --alias qa",
+            "bash scripts/ci/runner-check.sh --gh --acli --claude --sf dev --sf qa --not-sf prod"
+          ],
+          "notes": [
+            "Also install there: sf plugins install @salesforce/plugin-code-analyzer, Node 22, jq, and the SF AI Tester (scripts/ci/install-sf-ai-tester.sh).",
+            "Re-run a login when it expires (org refresh, password change)."
+          ],
+          "links": [],
+          "result": {
+            "state": "warn",
+            "text": "[self-hosted, circuit]: circuit-1 online. Checklist 3/5 ticked.",
+            "at": "2026-11-11T15:00:00Z"
+          },
+          "status": {
+            "tone": "warn",
+            "text": "needs attention"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
+        },
+        {
+          "id": "b2.release",
+          "kind": "human",
+          "title": "Release runner and the production login",
+          "detail": "A second machine or service user for deploy-prod only. The person with production rights signs in to the production alias there. Claude and this extension never do.",
+          "hc": "HC-5",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "Registered with labels self-hosted, circuit-release",
+              "done": false
+            },
+            {
+              "text": "Installed as a service",
+              "done": false
+            },
+            {
+              "text": "Production alias signed in by a person, on this runner only",
+              "done": false
+            },
+            {
+              "text": "runner-check.sh prints ok",
+              "done": false
+            }
+          ],
+          "commands": [
+            "# in the runner folder (downloaded from Settings > Actions > Runners > New self-hosted runner)",
+            "./config.sh --url https://github.com/acme-org/acme-salesforce --token \"$(gh api -X POST repos/acme-org/acme-salesforce/actions/runners/registration-token --jq .token)\" --name circuit-release-1 --labels circuit-release",
+            "sudo ./svc.sh install <service-user> && sudo ./svc.sh start",
+            "sudo ./svc.sh status",
+            "sf org login web --alias prod    # HC-5: a person, on the release runner only",
+            "bash scripts/ci/runner-check.sh --tools sf,jq,git --sf-plugin sfdx-git-delta --sf prod"
+          ],
+          "notes": [
+            "The registration token expires after 1 hour; it is read on the runner machine and never stored.",
+            "config cannot add labels to a registered runner: change them in Settings > Actions > Runners > the runner > Labels.",
+            "This runner holds the one login to the production alias and runs deploy-prod only."
+          ],
+          "links": [
+            {
+              "kind": "github",
+              "label": "New self-hosted runner",
+              "target": "https://github.com/acme-org/acme-salesforce/settings/actions/runners/new"
+            }
+          ],
+          "result": {
+            "state": "warn",
+            "text": "[self-hosted, circuit-release]: no runner registered with these labels",
+            "at": "2026-11-11T15:00:00Z"
+          },
+          "status": {
+            "tone": "warn",
+            "text": "needs attention"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
         }
       ],
       "ready": false,
       "progress": {
-        "done": 2,
-        "total": 7
+        "done": 1,
+        "total": 3
       }
     },
     {
-      "id": "B2",
-      "name": "Salesforce access",
-      "summary": "DEV and QA integration users with JWT; production by a person (HC-5).",
-      "status": "PARTIAL",
-      "kind": "partial",
-      "verified": "aliases only",
-      "evidence": "`sf alias list`",
-      "notes": "DEV and QA = SDO trial org salesOrgSDO (demo.user@example.com); CI JWT users not yet created",
+      "id": "B3",
+      "name": "Salesforce logins",
+      "summary": "Each person logs in to DEV and QA with their own user; no integration users, no JWT keys.",
+      "status": "TODO",
+      "kind": "todo",
+      "verified": "",
+      "evidence": "",
+      "notes": "",
       "steps": [
         {
-          "id": "b2.orgs",
+          "id": "b3.login",
+          "kind": "terminal",
+          "title": "Log in to DEV and QA",
+          "detail": "sf org login web --alias dev and --alias qa. Any connected org may be DEV or QA (sandbox, scratch, Developer Edition, demo org).",
+          "action": "Open terminal: sf org login web",
+          "verify": false,
+          "links": [],
+          "status": {
+            "tone": "muted",
+            "text": "not run"
+          },
+          "actions": [
+            {
+              "do": "run",
+              "label": "Open terminal: sf org login web"
+            }
+          ],
+          "done": false
+        },
+        {
+          "id": "b3.orgs",
           "kind": "check",
-          "title": "Org aliases dev and qa",
-          "detail": "sf org display for both aliases (read-only).",
+          "title": "Org aliases",
+          "detail": "sf org display for dev and qa, and no production alias (prod, production, live) on this machine. Architects may hold it for manual work; AI is still blocked by the guard.",
           "verify": true,
           "links": [],
           "status": {
@@ -524,250 +584,26 @@
             }
           ],
           "done": false
-        },
-        {
-          "id": "b2.keys",
-          "kind": "run",
-          "title": "Key pairs",
-          "detail": "Creates dev.key/dev.crt and qa.key/qa.crt in ~/.sfkeys with openssl (730 days). Existing keys are kept.",
-          "action": "Create keys",
-          "verify": false,
-          "links": [],
-          "status": {
-            "tone": "muted",
-            "text": "not run"
-          },
-          "actions": [
-            {
-              "do": "run",
-              "label": "Create keys"
-            }
-          ],
-          "done": false
-        },
-        {
-          "id": "b2.hc4",
-          "kind": "human",
-          "title": "Integration users and External Client Apps (DEV and QA)",
-          "detail": "Per sandbox: user ai-dev / ai-qa, permission set, External Client App with JWT and the .crt. You handle licence and MFA prompts.",
-          "hc": "HC-4",
-          "verify": true,
-          "checklist": [
-            {
-              "text": "ai-dev: API, read, run tests, check-only deploys; nothing else",
-              "done": false
-            },
-            {
-              "text": "ai-qa: deploy, run tests, test-data DML",
-              "done": false
-            },
-            {
-              "text": "External Client App: OAuth, JWT bearer, .crt uploaded, admin-approved users pre-authorised",
-              "done": false
-            },
-            {
-              "text": "Consumer keys copied",
-              "done": false
-            }
-          ],
-          "links": [
-            {
-              "kind": "salesforce",
-              "label": "DEV users",
-              "target": "https://acme-demo.my.salesforce.com/lightning/setup/ManageUsers/home"
-            },
-            {
-              "kind": "salesforce",
-              "label": "DEV External Client Apps",
-              "target": "https://acme-demo.my.salesforce.com/lightning/setup/ManageExternalClientApplication/home"
-            },
-            {
-              "kind": "salesforce",
-              "label": "QA users",
-              "target": "https://acme-demo.my.salesforce.com/lightning/setup/ManageUsers/home"
-            },
-            {
-              "kind": "salesforce",
-              "label": "QA External Client Apps",
-              "target": "https://acme-demo.my.salesforce.com/lightning/setup/ManageExternalClientApplication/home"
-            }
-          ],
-          "status": {
-            "tone": "info",
-            "text": "waiting for you"
-          },
-          "actions": [
-            {
-              "do": "verify",
-              "label": "Verify"
-            }
-          ],
-          "done": false
-        },
-        {
-          "id": "b2.secrets",
-          "kind": "secret",
-          "title": "DEV and QA secrets",
-          "detail": "Client ids and usernames typed; JWT keys picked from ~/.sfkeys (deleted afterwards if you agree; keep the .crt).",
-          "verify": true,
-          "secrets": [
-            {
-              "name": "SF_CLIENT_ID_DEV",
-              "set": false
-            },
-            {
-              "name": "SF_USERNAME_DEV",
-              "set": false
-            },
-            {
-              "name": "SF_JWT_KEY_DEV",
-              "set": false
-            },
-            {
-              "name": "SF_CLIENT_ID_QA",
-              "set": false
-            },
-            {
-              "name": "SF_USERNAME_QA",
-              "set": false
-            },
-            {
-              "name": "SF_JWT_KEY_QA",
-              "set": false
-            }
-          ],
-          "links": [],
-          "status": {
-            "tone": "warn",
-            "text": "0 of 6 set"
-          },
-          "actions": [
-            {
-              "do": "secret",
-              "label": "Set SF_CLIENT_ID_DEV",
-              "name": "SF_CLIENT_ID_DEV"
-            },
-            {
-              "do": "secret",
-              "label": "Set SF_USERNAME_DEV",
-              "name": "SF_USERNAME_DEV"
-            },
-            {
-              "do": "secret",
-              "label": "Set SF_JWT_KEY_DEV",
-              "name": "SF_JWT_KEY_DEV"
-            },
-            {
-              "do": "secret",
-              "label": "Set SF_CLIENT_ID_QA",
-              "name": "SF_CLIENT_ID_QA"
-            },
-            {
-              "do": "secret",
-              "label": "Set SF_USERNAME_QA",
-              "name": "SF_USERNAME_QA"
-            },
-            {
-              "do": "secret",
-              "label": "Set SF_JWT_KEY_QA",
-              "name": "SF_JWT_KEY_QA"
-            },
-            {
-              "do": "verify",
-              "label": "Check"
-            }
-          ],
-          "done": false
-        },
-        {
-          "id": "b2.hc5",
-          "kind": "human",
-          "title": "Production access (a person only)",
-          "detail": "The person with production rights follows docs/prod-access-steps.md and stores the three PROD secrets on the production environment. This extension never logs in to production.",
-          "hc": "HC-5",
-          "env": "production",
-          "verify": true,
-          "checklist": [
-            {
-              "text": "Release user with deploy rights only",
-              "done": false
-            },
-            {
-              "text": "External Client App with its own certificate",
-              "done": false
-            },
-            {
-              "text": "Secrets stored on the production environment, not the repo",
-              "done": false
-            }
-          ],
-          "secrets": [
-            {
-              "name": "SF_CLIENT_ID_PROD",
-              "set": null
-            },
-            {
-              "name": "SF_USERNAME_PROD",
-              "set": null
-            },
-            {
-              "name": "SF_JWT_KEY_PROD",
-              "set": null
-            }
-          ],
-          "links": [
-            {
-              "kind": "github",
-              "label": "Environment secrets",
-              "target": "https://github.com/acme-org/salesDemoOrg/settings/environments"
-            }
-          ],
-          "status": {
-            "tone": "info",
-            "text": "waiting for you"
-          },
-          "actions": [
-            {
-              "do": "verify",
-              "label": "Verify"
-            },
-            {
-              "do": "secret",
-              "label": "Set SF_CLIENT_ID_PROD",
-              "name": "SF_CLIENT_ID_PROD"
-            },
-            {
-              "do": "secret",
-              "label": "Set SF_USERNAME_PROD",
-              "name": "SF_USERNAME_PROD"
-            },
-            {
-              "do": "secret",
-              "label": "Set SF_JWT_KEY_PROD",
-              "name": "SF_JWT_KEY_PROD"
-            }
-          ],
-          "done": false
         }
       ],
       "ready": false,
       "progress": {
         "done": 0,
-        "total": 5
+        "total": 2
       }
     },
     {
-      "id": "B3",
+      "id": "B4",
       "name": "Repo foundation",
       "summary": "Installer on pipeline/foundation; persona MCP URLs; PR merged by a person.",
-      "status": "DONE (local)",
-      "kind": "done",
-      "verified": "guard checks run in repo",
-      "evidence": "commit 55be182 on pipeline/foundation",
-      "notes": "not pushed: no GitHub repo yet; workflows held for B8; MCP URLs still VERIFY",
+      "status": "TODO",
+      "kind": "todo",
+      "verified": "",
+      "evidence": "",
+      "notes": "",
       "steps": [
         {
-          "id": "b3.branch",
+          "id": "b4.branch",
           "kind": "run",
           "title": "Branch pipeline/foundation",
           "detail": "git switch -c pipeline/foundation (or switch to it).",
@@ -791,10 +627,10 @@
           "done": false
         },
         {
-          "id": "b3.install",
+          "id": "b4.install",
           "kind": "run",
           "title": "Run the installer",
-          "detail": "install.mjs for real: CLAUDE.md, .claude/, CODEOWNERS, PR template, scripts/ci, .coderabbit.yaml, sf-config, workflows. Existing files are skipped.",
+          "detail": "install.mjs for real: CLAUDE.md, .claude/, CODEOWNERS, PR template, scripts/ci, .coderabbit.yaml, sf-config, build.config.yml, build-state.md. Existing files are skipped; workflows wait for B9.",
           "action": "Install",
           "verify": true,
           "links": [],
@@ -815,10 +651,10 @@
           "done": false
         },
         {
-          "id": "b3.mcp",
+          "id": "b4.mcp",
           "kind": "run",
           "title": "Persona MCP URLs",
-          "detail": "Replaces VERIFY placeholders in .claude/personas/*.mcp.json with the verified vendor URLs (Atlassian v2, Lucid, Fireflies, GitHub, Slack).",
+          "detail": "Replaces VERIFY placeholders in .claude/personas/*.mcp.json with the vendor URLs (Atlassian v2, Lucid, Fireflies, GitHub, Slack). Sign-in is OAuth in Claude (/mcp), never a key.",
           "action": "Fill URLs",
           "verify": true,
           "links": [],
@@ -839,7 +675,7 @@
           "done": false
         },
         {
-          "id": "b3.pr",
+          "id": "b4.pr",
           "kind": "human",
           "title": "Commit, push and merge the foundation PR",
           "detail": "Commit everything except .github/workflows/, push pipeline/foundation, open the PR. A person merges it.",
@@ -862,7 +698,7 @@
             {
               "kind": "github",
               "label": "Pull requests",
-              "target": "https://github.com/acme-org/salesDemoOrg/pulls"
+              "target": "https://github.com/acme-org/acme-salesforce/pulls"
             }
           ],
           "status": {
@@ -885,17 +721,17 @@
       }
     },
     {
-      "id": "B4",
+      "id": "B5",
       "name": "Spec Kit",
-      "summary": "specify init + spec-kit-sf v2.0.1; deploy skills removed; constitution.",
-      "status": "PARTIAL",
-      "kind": "partial",
-      "verified": "`specify extension list` shows sf 2.0.1",
-      "evidence": "commit 876212c on pipeline/speckit",
-      "notes": "deploy/hotfix/pr skills removed; constitution not yet generated",
+      "summary": "The Architect's local drafting scaffold: specify init + spec-kit-sf; .specify/specs stays out of git.",
+      "status": "TODO",
+      "kind": "todo",
+      "verified": "",
+      "evidence": "",
+      "notes": "",
       "steps": [
         {
-          "id": "b4.init",
+          "id": "b5.init",
           "kind": "terminal",
           "title": "specify init",
           "detail": "specify init --here --integration claude --integration-options=--no-model-invocation",
@@ -915,7 +751,7 @@
           "done": false
         },
         {
-          "id": "b4.ext",
+          "id": "b5.ext",
           "kind": "terminal",
           "title": "spec-kit-sf extension",
           "detail": "specify extension add sf --from the v2.0.1 release archive (confirm the URL in the terminal).",
@@ -935,7 +771,7 @@
           "done": false
         },
         {
-          "id": "b4.skills",
+          "id": "b5.skills",
           "kind": "run",
           "title": "Remove deploy skills",
           "detail": "Deletes .claude/skills/speckit-sf-deploy, -hotfix and -pr (the guard blocks them anyway).",
@@ -959,10 +795,10 @@
           "done": false
         },
         {
-          "id": "b4.check",
+          "id": "b5.check",
           "kind": "check",
           "title": "Spec Kit state",
-          "detail": ".specify/, extension sf, sf-config prod: \"none\", constitution present.",
+          "detail": ".specify/, extension sf, .specify/specs/ gitignored (specs are published to Confluence and Jira), production alias named in sf-config.",
           "verify": true,
           "links": [],
           "status": {
@@ -978,7 +814,7 @@
           "done": false
         },
         {
-          "id": "b4.constitution",
+          "id": "b5.constitution",
           "kind": "human",
           "title": "Constitution",
           "detail": "An Architect runs /speckit-sf-constitution against dev and appends the house rules as Article X; the Architect reviews and merges the PR.",
@@ -1023,9 +859,9 @@
       }
     },
     {
-      "id": "B5",
-      "name": "Jira",
-      "summary": "Service account, groups, fields, workflow, automation rules, GitHub for Jira.",
+      "id": "B6",
+      "name": "Jira and acli",
+      "summary": "Atlassian CLI web login, Jira groups/fields/workflows, GitHub for Atlassian.",
       "status": "TODO",
       "kind": "todo",
       "verified": "",
@@ -1033,91 +869,68 @@
       "notes": "",
       "steps": [
         {
-          "id": "b5.hc6",
-          "kind": "human",
-          "title": "Jira service account token",
-          "detail": "Create the API token for delivery-bot and store it with the site URL and the bot email.",
-          "hc": "HC-6",
+          "id": "b6.acli",
+          "kind": "terminal",
+          "title": "Atlassian CLI login",
+          "detail": "acli covers Jira (the official reference has no Confluence commands). Sign in with the browser: acli jira auth login --web, then pick the site. Never the --token form. Each acli version is supported for 6 months: keep it updated.",
+          "action": "Open terminal: acli jira auth login --web",
           "verify": true,
-          "checklist": [
-            {
-              "text": "Token created while signed in as the service account",
-              "done": false
-            },
-            {
-              "text": "Service account has project access",
-              "done": false
-            }
-          ],
-          "secrets": [
-            {
-              "name": "JIRA_API_TOKEN",
-              "set": false
-            },
-            {
-              "name": "JIRA_BASE_URL",
-              "set": false
-            },
-            {
-              "name": "JIRA_EMAIL",
-              "set": false
-            }
+          "commands": [
+            "curl -LO https://acli.atlassian.com/linux/latest/acli_linux_amd64/acli && chmod +x acli && sudo mv acli /usr/local/bin/",
+            "# or the apt repo https://acli.atlassian.com/linux/deb (key https://acli.atlassian.com/gpg/public-key.asc)",
+            "acli --help",
+            "acli jira auth login --web",
+            "acli jira auth status"
           ],
           "links": [
             {
               "kind": "jira",
-              "label": "Atlassian API tokens",
-              "target": "https://id.atlassian.com/manage-profile/security/api-tokens"
+              "label": "Install acli",
+              "target": "https://developer.atlassian.com/cloud/acli/guides/install-acli/"
             }
           ],
           "status": {
-            "tone": "info",
-            "text": "waiting for you"
+            "tone": "muted",
+            "text": "not run"
           },
           "actions": [
             {
-              "do": "secret",
-              "label": "Set JIRA_API_TOKEN",
-              "name": "JIRA_API_TOKEN"
-            },
-            {
-              "do": "secret",
-              "label": "Set JIRA_BASE_URL",
-              "name": "JIRA_BASE_URL"
-            },
-            {
-              "do": "secret",
-              "label": "Set JIRA_EMAIL",
-              "name": "JIRA_EMAIL"
+              "do": "run",
+              "label": "Open terminal: acli jira auth login --web"
             },
             {
               "do": "verify",
-              "label": "Verify"
+              "label": "Check"
             }
           ],
           "done": false
         },
         {
-          "id": "b5.setup",
+          "id": "b6.hc6",
           "kind": "human",
-          "title": "Groups, project, fields, workflow",
-          "detail": "Groups architects/developers/testers; company-managed project; custom fields; workflow with restricted transitions (Design Approved: architects; Ready for Dev: testers + Testability confirmed).",
+          "title": "Groups, fields and workflows",
+          "detail": "Jira admin, in the browser: groups architects/developers/testers; company-managed project; fields; epic workflow with Approve design restricted to architects; story workflow with Ready for Dev restricted to testers (G2).",
+          "hc": "HC-6",
           "verify": true,
           "checklist": [
             {
-              "text": "Fields: Spec file, Feature, Story type, Schema change, Persona, Test level, AC id, Testability confirmed, Acceptance criteria",
+              "text": "Groups match the GitHub teams",
               "done": false
             },
             {
-              "text": "Statuses Backlog to Done in order",
+              "text": "Fields: Design page, Approved design version, Acceptance criteria, Story type, Schema change, Persona, Test level, AC id, Testability confirmed",
               "done": false
             },
             {
-              "text": "Design Review to Design Approved: architects only",
+              "text": "Epic: Backlog > Design Review > Approve design (architects only, sets Approved design version) > Design Approved",
               "done": false
             },
             {
-              "text": "Design Approved to Ready for Dev: testers only",
+              "text": "Story: Backlog > Ready for Dev (testers only, Testability confirmed, label ai-ready) > In Build > Code Review > QA > Done",
+              "done": false
+            },
+            {
+              "text": "No Jira automation calls GitHub and no PAT in any rule",
               "done": false
             }
           ],
@@ -1126,6 +939,16 @@
               "kind": "jira",
               "label": "Groups",
               "target": "https://admin.atlassian.com/"
+            },
+            {
+              "kind": "jira",
+              "label": "Custom fields",
+              "target": "https://acme.atlassian.net/secure/admin/ViewCustomFields.jspa"
+            },
+            {
+              "kind": "jira",
+              "label": "Project settings",
+              "target": "https://acme.atlassian.net/plugins/servlet/project-config/ACME/summary"
             }
           ],
           "status": {
@@ -1141,70 +964,35 @@
           "done": false
         },
         {
-          "id": "b5.hc7",
+          "id": "b6.app",
           "kind": "human",
-          "title": "Automation rules A and B",
-          "detail": "Rule A posts repository_dispatch with the key only; the fine-grained PAT goes into its header, typed by you. Rule B syncs statuses from the bot's comments.",
-          "hc": "HC-7",
+          "title": "GitHub for Atlassian",
+          "detail": "Jira > Apps > Explore more apps > GitHub for Atlassian > Get app; a Jira site admin and a GitHub org owner connect the org. Branches feature/<KEY>-<slug> and PR titles \"<KEY> ...\" then link to the work item.",
           "verify": true,
           "checklist": [
             {
-              "text": "Rule A: trigger Ready for Dev, conditions ai-ready + Testability + blockers Done",
+              "text": "App installed in Jira",
               "done": false
             },
             {
-              "text": "Rule A: POST /repos/<org>/<repo>/dispatches with {event_type: jira-ready, client_payload: {key}}",
+              "text": "GitHub org connected",
               "done": false
             },
             {
-              "text": "Rule A: then transition to Plan Review",
-              "done": false
-            },
-            {
-              "text": "Rule B rows for every bot comment",
+              "text": "A test branch with an uppercase key shows in the work item's Development panel",
               "done": false
             }
           ],
           "links": [
             {
-              "kind": "github",
-              "label": "New fine-grained PAT",
-              "target": "https://github.com/settings/personal-access-tokens/new"
-            }
-          ],
-          "status": {
-            "tone": "info",
-            "text": "waiting for you"
-          },
-          "actions": [
-            {
-              "do": "verify",
-              "label": "Verify"
-            }
-          ],
-          "done": false
-        },
-        {
-          "id": "b5.app",
-          "kind": "human",
-          "title": "GitHub for Jira",
-          "detail": "Install the GitHub for Jira app and connect the organisation.",
-          "verify": true,
-          "checklist": [
-            {
-              "text": "App installed on the org",
-              "done": false
+              "kind": "jira",
+              "label": "Jira apps",
+              "target": "https://acme.atlassian.net/jira/marketplace"
             },
             {
-              "text": "Org connected in Jira",
-              "done": false
-            }
-          ],
-          "links": [
-            {
               "kind": "github",
-              "label": "GitHub for Jira",
-              "target": "https://github.com/apps/jira"
+              "label": "Org installed apps",
+              "target": "https://github.com/organizations/acme-org/settings/installations"
             }
           ],
           "status": {
@@ -1220,47 +1008,10 @@
           "done": false
         },
         {
-          "id": "b5.discover",
-          "kind": "terminal",
-          "title": "Discover Jira ids",
-          "detail": "jira-sync.mjs discover writes .specify/extensions/jira/jira-config.json (your Jira credentials are passed through the environment).",
-          "action": "Open terminal: discover",
-          "verify": false,
-          "links": [],
-          "status": {
-            "tone": "muted",
-            "text": "not run"
-          },
-          "actions": [
-            {
-              "do": "run",
-              "label": "Open terminal: discover"
-            }
-          ],
-          "done": false
-        }
-      ],
-      "ready": false,
-      "progress": {
-        "done": 0,
-        "total": 5
-      }
-    },
-    {
-      "id": "B6",
-      "name": "Confluence, Lucid, Fireflies",
-      "summary": "Design space, Lucid for Confluence, Architect MCP sign-ins.",
-      "status": "TODO",
-      "kind": "todo",
-      "verified": "",
-      "evidence": "",
-      "notes": "",
-      "steps": [
-        {
-          "id": "b6.space",
+          "id": "b6.config",
           "kind": "check",
-          "title": "Confluence space",
-          "detail": "The space from build.config.yml exists (REST with your Atlassian token).",
+          "title": "Jira field ids",
+          "detail": ".specify/extensions/jira/jira-config.json (field ids for Design page and Approved design version), built once by arch-jira-push and committed; design-gate reads it on the runner.",
           "verify": true,
           "links": [],
           "status": {
@@ -1274,37 +1025,99 @@
             }
           ],
           "done": false
-        },
+        }
+      ],
+      "ready": false,
+      "progress": {
+        "done": 0,
+        "total": 4
+      }
+    },
+    {
+      "id": "B7",
+      "name": "Confluence and MCP sign-ins",
+      "summary": "Approved page status, edit restriction for architects, Lucid; Atlassian, Lucid and Fireflies MCP via /mcp.",
+      "status": "TODO",
+      "kind": "todo",
+      "verified": "",
+      "evidence": "",
+      "notes": "",
+      "steps": [
         {
-          "id": "b6.hc",
+          "id": "b7.space",
           "kind": "human",
-          "title": "Lucid and Fireflies for the Architect",
-          "detail": "Install Lucid for Confluence; the Architect signs in to the Lucid and Fireflies MCP servers once with /mcp.",
+          "title": "Design space and Approved status",
+          "detail": "A space admin adds Approved as a suggested content status. Confluence cannot limit status changes to a group, so restrict edit of approved design pages to the architects group; the circuit checks who set Approved from the page history.",
+          "hc": "HC-7",
           "verify": true,
           "checklist": [
             {
-              "text": "Only architects can set pages to Approved",
+              "text": "Space exists (confluence.space_key)",
+              "done": false
+            },
+            {
+              "text": "Approved is a suggested content status",
+              "done": false
+            },
+            {
+              "text": "Approved design pages: edit restricted to architects",
               "done": false
             },
             {
               "text": "Lucid for Confluence installed",
               "done": false
+            }
+          ],
+          "links": [
+            {
+              "kind": "confluence",
+              "label": "Space settings",
+              "target": "https://acme.atlassian.net/wiki/spaces/SD/settings"
             },
             {
-              "text": "Architect signed in to Lucid and Fireflies MCP",
+              "kind": "jira",
+              "label": "Lucid for Confluence",
+              "target": "https://marketplace.atlassian.com/search?query=lucid"
+            }
+          ],
+          "status": {
+            "tone": "info",
+            "text": "waiting for you"
+          },
+          "actions": [
+            {
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
+        },
+        {
+          "id": "b7.mcp",
+          "kind": "human",
+          "title": "MCP sign-ins (Atlassian, Lucid, Fireflies)",
+          "detail": "Each person, in an interactive Claude session: /mcp and sign in to atlassian (Rovo MCP, OAuth). Architects also sign in to lucid and fireflies. claude -p cannot run the OAuth flow, so this happens interactively first. No API-token auth.",
+          "action": "Open Claude: /mcp",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "atlassian signed in",
+              "done": false
+            },
+            {
+              "text": "lucid signed in (Architects)",
+              "done": false
+            },
+            {
+              "text": "fireflies signed in (Architects)",
               "done": false
             }
           ],
           "links": [
             {
               "kind": "jira",
-              "label": "Lucid for Confluence",
-              "target": "https://marketplace.atlassian.com/search?query=lucid"
-            },
-            {
-              "kind": "lucid",
-              "label": "Lucid MCP",
-              "target": "https://help.lucid.co/hc/en-us/articles/42578801807508"
+              "label": "Atlassian Rovo MCP",
+              "target": "https://support.atlassian.com/atlassian-rovo-mcp-server/docs/getting-started-with-the-atlassian-remote-mcp-server/"
             },
             {
               "kind": "fireflies",
@@ -1317,6 +1130,10 @@
             "text": "waiting for you"
           },
           "actions": [
+            {
+              "do": "run",
+              "label": "Open Claude: /mcp"
+            },
             {
               "do": "verify",
               "label": "Verify"
@@ -1332,9 +1149,9 @@
       }
     },
     {
-      "id": "B7",
-      "name": "Slack",
-      "summary": "Gate channels and one incoming webhook per channel.",
+      "id": "B8",
+      "name": "Slack and the review room",
+      "summary": "Gate channels, #review-room, Claude Slack connector, GitHub app for Slack; no webhooks.",
       "status": "TODO",
       "kind": "todo",
       "verified": "",
@@ -1342,44 +1159,44 @@
       "notes": "",
       "steps": [
         {
-          "id": "b7.hc",
+          "id": "b8.hc8",
           "kind": "human",
-          "title": "Slack app Delivery Gates",
-          "detail": "Channels #arch-gate, #dev-gate, #qa-gate; one Slack app with an incoming webhook per channel. Paste each URL into the password box; it goes straight to GitHub.",
+          "title": "Slack workspace",
+          "detail": "A Slack admin approves the Claude Slack connector (claude.ai > Connectors > Slack), installs the GitHub app for Slack, and invites CodeRabbit and Claude to the review room. No incoming webhook, no bot token.",
+          "hc": "HC-8",
           "verify": true,
           "checklist": [
             {
-              "text": "Three channels created",
+              "text": "Channels #arch-gate, #dev-gate, #qa-gate, #review-room exist",
               "done": false
             },
             {
-              "text": "App Delivery Gates created",
+              "text": "Claude Slack connector approved for the workspace",
               "done": false
             },
             {
-              "text": "Incoming webhooks on, one per channel",
+              "text": "GitHub app for Slack subscribed",
+              "done": false
+            },
+            {
+              "text": "CodeRabbit and Claude invited to #review-room",
               "done": false
             }
           ],
-          "secrets": [
-            {
-              "name": "SLACK_WEBHOOK_ARCH",
-              "set": false
-            },
-            {
-              "name": "SLACK_WEBHOOK_DEV",
-              "set": false
-            },
-            {
-              "name": "SLACK_WEBHOOK_QA",
-              "set": false
-            }
+          "commands": [
+            "/github subscribe acme-org/acme-salesforce deployments    # in #arch-gate",
+            "/github subscribe acme-org/acme-salesforce pulls    # in #dev-gate"
           ],
           "links": [
             {
               "kind": "slack",
-              "label": "Slack apps",
-              "target": "https://api.slack.com/apps"
+              "label": "Slack MCP server",
+              "target": "https://docs.slack.dev/ai/slack-mcp-server"
+            },
+            {
+              "kind": "url",
+              "label": "Claude connectors",
+              "target": "https://claude.ai/settings/connectors"
             }
           ],
           "status": {
@@ -1388,19 +1205,38 @@
           },
           "actions": [
             {
-              "do": "secret",
-              "label": "Set SLACK_WEBHOOK_ARCH",
-              "name": "SLACK_WEBHOOK_ARCH"
+              "do": "verify",
+              "label": "Verify"
+            }
+          ],
+          "done": false
+        },
+        {
+          "id": "b8.signin",
+          "kind": "human",
+          "title": "Slack MCP sign-in",
+          "detail": "Each person (and the circuit runner's service user when transport is claude) signs in to Slack once in an interactive Claude session (/mcp).",
+          "action": "Open Claude: /mcp",
+          "verify": true,
+          "checklist": [
+            {
+              "text": "Signed in to Slack in Claude",
+              "done": false
             },
             {
-              "do": "secret",
-              "label": "Set SLACK_WEBHOOK_DEV",
-              "name": "SLACK_WEBHOOK_DEV"
-            },
+              "text": "A test message posted and read in #review-room",
+              "done": false
+            }
+          ],
+          "links": [],
+          "status": {
+            "tone": "info",
+            "text": "waiting for you"
+          },
+          "actions": [
             {
-              "do": "secret",
-              "label": "Set SLACK_WEBHOOK_QA",
-              "name": "SLACK_WEBHOOK_QA"
+              "do": "run",
+              "label": "Open Claude: /mcp"
             },
             {
               "do": "verify",
@@ -1413,13 +1249,13 @@
       "ready": false,
       "progress": {
         "done": 0,
-        "total": 1
+        "total": 2
       }
     },
     {
-      "id": "B8",
+      "id": "B9",
       "name": "Workflows and CodeRabbit",
-      "summary": "Workflows on pipeline/workflows, actionlint clean, CodeRabbit on this repo.",
+      "summary": "The five v3 workflows on pipeline/workflows, actionlint and shellcheck clean, CodeRabbit on this repo.",
       "status": "TODO",
       "kind": "todo",
       "verified": "",
@@ -1427,7 +1263,7 @@
       "notes": "",
       "steps": [
         {
-          "id": "b8.branch",
+          "id": "b9.branch",
           "kind": "run",
           "title": "Branch pipeline/workflows",
           "detail": "git switch -c pipeline/workflows (or switch to it).",
@@ -1451,10 +1287,10 @@
           "done": false
         },
         {
-          "id": "b8.lint",
+          "id": "b9.lint",
           "kind": "check",
-          "title": "actionlint",
-          "detail": "actionlint on .github/workflows/*.yml must be clean.",
+          "title": "actionlint and shellcheck",
+          "detail": "actionlint on .github/workflows/*.yml (custom runner labels in .github/actionlint.yaml) and shellcheck on scripts/ci/*.sh must be clean. No workflow reads a stored credential.",
           "verify": true,
           "links": [],
           "status": {
@@ -1470,14 +1306,14 @@
           "done": false
         },
         {
-          "id": "b8.coderabbit",
+          "id": "b9.coderabbit",
           "kind": "human",
-          "title": "Install CodeRabbit",
-          "detail": "Install the CodeRabbit GitHub App on this repository only. Its reviews appear as review signals on every PR.",
+          "title": "CodeRabbit repository access",
+          "detail": "Install the CodeRabbit GitHub App with access to this repository. Its reviews appear as review signals on every PR, and it joins the review room in Slack.",
           "verify": true,
           "checklist": [
             {
-              "text": "Installed on this repository only",
+              "text": "CodeRabbit installed with access to this repository",
               "done": false
             }
           ],
@@ -1486,6 +1322,11 @@
               "kind": "github",
               "label": "Install CodeRabbit",
               "target": "https://github.com/apps/coderabbitai/installations/new"
+            },
+            {
+              "kind": "github",
+              "label": "Org installed apps",
+              "target": "https://github.com/organizations/acme-org/settings/installations"
             }
           ],
           "status": {
@@ -1501,14 +1342,18 @@
           "done": false
         },
         {
-          "id": "b8.pr",
+          "id": "b9.pr",
           "kind": "human",
           "title": "Workflows PR",
           "detail": "Push pipeline/workflows and open the PR; the Architect merges it (CODEOWNERS covers .github/).",
           "verify": true,
           "checklist": [
             {
-              "text": "All workflows visible in Actions",
+              "text": "pr-checks, design-gate, persona-gates, fix-router, deploy-prod visible in Actions",
+              "done": false
+            },
+            {
+              "text": "Self-hosted jobs ran on circuit for a same-repo test PR",
               "done": false
             },
             {
@@ -1524,12 +1369,12 @@
             {
               "kind": "github",
               "label": "Actions",
-              "target": "https://github.com/acme-org/salesDemoOrg/actions"
+              "target": "https://github.com/acme-org/acme-salesforce/actions"
             },
             {
               "kind": "github",
               "label": "Pull requests",
-              "target": "https://github.com/acme-org/salesDemoOrg/pulls"
+              "target": "https://github.com/acme-org/acme-salesforce/pulls"
             }
           ],
           "status": {
@@ -1552,9 +1397,9 @@
       }
     },
     {
-      "id": "B9",
+      "id": "B10",
       "name": "Protect main and production",
-      "summary": "Rulesets (HC-8), production reviewers, tag ruleset.",
+      "summary": "Rulesets (HC-9) and production reviewers.",
       "status": "TODO",
       "kind": "todo",
       "verified": "",
@@ -1562,11 +1407,11 @@
       "notes": "",
       "steps": [
         {
-          "id": "b9.rulesets",
+          "id": "b10.rulesets",
           "kind": "run",
           "title": "Rulesets for main",
-          "detail": "circuit-main-gates (PRs, code owners, required checks guard static qa spec-gate gate/*) and circuit-merge-architects-only. You review both payloads before they are created.",
-          "hc": "HC-8",
+          "detail": "circuit-main-gates (PRs, code owners, required checks guard static code-analyzer qa design-gate gate/*) and circuit-merge-architects-only. You review both payloads before they are created.",
+          "hc": "HC-9",
           "action": "Review and create",
           "verify": true,
           "links": [],
@@ -1587,10 +1432,10 @@
           "done": false
         },
         {
-          "id": "b9.env",
+          "id": "b10.env",
           "kind": "run",
           "title": "Production reviewers",
-          "detail": "Environment production: required reviewers = team architects, prevent self-review, deployments from main only.",
+          "detail": "Environment production: required reviewers = team architects, prevent self-review, deployments from main only. deploy-prod runs on circuit-release.",
           "action": "Protect environment",
           "verify": true,
           "links": [],
@@ -1609,53 +1454,18 @@
             }
           ],
           "done": false
-        },
-        {
-          "id": "b9.tag",
-          "kind": "human",
-          "title": "Tag ruleset prod-deployed",
-          "detail": "A tag ruleset for prod-deployed with the GitHub App as the only bypass actor.",
-          "verify": true,
-          "checklist": [
-            {
-              "text": "Target: tags matching prod-deployed",
-              "done": false
-            },
-            {
-              "text": "Bypass: the circuit GitHub App only",
-              "done": false
-            }
-          ],
-          "links": [
-            {
-              "kind": "github",
-              "label": "New tag ruleset",
-              "target": "https://github.com/acme-org/salesDemoOrg/settings/rules/new?target=tag"
-            }
-          ],
-          "status": {
-            "tone": "info",
-            "text": "waiting for you"
-          },
-          "actions": [
-            {
-              "do": "verify",
-              "label": "Verify"
-            }
-          ],
-          "done": false
         }
       ],
       "ready": false,
       "progress": {
         "done": 0,
-        "total": 3
+        "total": 2
       }
     },
     {
-      "id": "B10",
+      "id": "B11",
       "name": "Persona workstations",
-      "summary": "Every person: this extension, their connections, MCP sign-ins.",
+      "summary": "Every person: this extension, the plugin, their logins and MCP sign-ins.",
       "status": "TODO",
       "kind": "todo",
       "verified": "",
@@ -1663,10 +1473,10 @@
       "notes": "",
       "steps": [
         {
-          "id": "b10.people",
+          "id": "b11.people",
           "kind": "human",
           "title": "Each person connects",
-          "detail": "Each person opens Delivery Circuit, connects GitHub, Claude and their tools on the Connections page, and signs in to the MCP servers once with /mcp in a persona terminal.",
+          "detail": "Each person installs this extension and the plugin, runs scripts/setup-persona.sh, and checks Connections: GitHub, Claude, sf, acli, Atlassian MCP, Fireflies MCP (Architects), Slack MCP, runner online.",
           "verify": true,
           "checklist": [
             {
@@ -1685,6 +1495,9 @@
               "text": "Each ran a first command",
               "done": false
             }
+          ],
+          "commands": [
+            "./scripts/setup-persona.sh architect|developer|tester"
           ],
           "links": [
             {
@@ -1713,9 +1526,9 @@
       }
     },
     {
-      "id": "B11",
+      "id": "B12",
       "name": "Dry run",
-      "summary": "Whole circuit on a made-up feature with people at every gate (HC-9).",
+      "summary": "One made-up feature through every step, every persona, every app (HC-10).",
       "status": "TODO",
       "kind": "todo",
       "verified": "",
@@ -1723,10 +1536,10 @@
       "notes": "",
       "steps": [
         {
-          "id": "b11.vars",
+          "id": "b12.vars",
           "kind": "run",
           "title": "Dry-run settings",
-          "detail": "DEPLOY_ENVIRONMENT=production-dryrun (environment holding QA secrets under the PROD names) and AI_LOOP_DRY_RUN=false.",
+          "detail": "DEPLOY_ENVIRONMENT=production-dryrun (an environment whose CIRCUIT_RELEASE_ALIAS is the QA alias) and FIX_ROUTER_DRY_RUN=false. The person also signs the release runner in to QA for the dry run, and out afterwards.",
           "action": "Set dry-run variables",
           "verify": true,
           "links": [],
@@ -1747,51 +1560,59 @@
           "done": false
         },
         {
-          "id": "b11.hc9",
+          "id": "b12.hc10",
           "kind": "human",
           "title": "Run the circuit end to end",
-          "detail": "Push inputs/transcripts/000-sample-case-escalation.md on intake/sample and take it through every gate.",
-          "hc": "HC-9",
+          "detail": "One made-up feature (Jira label dryrun) through the v3 flow with people at every gate.",
+          "hc": "HC-10",
           "verify": true,
           "checklist": [
             {
-              "text": "spec-gate red until G1 by an architect",
+              "text": "Source added; Confluence design page with Decisions and Org snapshot",
               "done": false
             },
             {
-              "text": "Jira epic, Story 00, stories; second push creates nothing",
+              "text": "G1 by an architect at version N",
               "done": false
             },
             {
-              "text": "Test cases per AC linked in Jira",
+              "text": "Epic, Story 00 and stories with Approved design version N; a second push creates nothing",
               "done": false
             },
             {
-              "text": "Rule A fires only after Story 00 Done and G2",
+              "text": "Test cases per AC in Jira; G2",
               "done": false
             },
             {
-              "text": "Draft PR has only PLAN.md and TESTPLAN.md",
+              "text": "Start story creates feature/<KEY>-<slug> and a draft PR",
               "done": false
             },
             {
-              "text": "Build starts only after both labels by the right teams",
+              "text": "Tester adds tests to the PR; G3/G4 by the right teams",
               "done": false
             },
             {
-              "text": "Removing a TC reference fails static",
+              "text": "Removing a // TC: reference fails static",
               "done": false
             },
             {
-              "text": "Forced failure: 3 attempts then needs-human",
+              "text": "Re-approving the design at N+1 fails design-gate",
               "done": false
             },
             {
-              "text": "Blocked AI-tester case gives needs-qa",
+              "text": "A forced failure gives needs-fix, then needs-human after 3 attempts",
               "done": false
             },
             {
-              "text": "Merge is architect-only; deploy waits for approval",
+              "text": "A blocked AI-tester case gives needs-qa",
+              "done": false
+            },
+            {
+              "text": "Review room thread and verdict on the PR",
+              "done": false
+            },
+            {
+              "text": "Merge is architect-only; deploy waits for approval and runs on circuit-release",
               "done": false
             }
           ],
@@ -1799,12 +1620,12 @@
             {
               "kind": "github",
               "label": "Pull requests",
-              "target": "https://github.com/acme-org/salesDemoOrg/pulls?q=is%3Apr+head%3Aintake%2Fsample"
+              "target": "https://github.com/acme-org/acme-salesforce/pulls"
             },
             {
               "kind": "github",
               "label": "Actions",
-              "target": "https://github.com/acme-org/salesDemoOrg/actions"
+              "target": "https://github.com/acme-org/acme-salesforce/actions"
             }
           ],
           "status": {
@@ -1820,10 +1641,10 @@
           "done": false
         },
         {
-          "id": "b11.cleanup",
+          "id": "b12.cleanup",
           "kind": "run",
           "title": "Clean up",
-          "detail": "Sets DEPLOY_ENVIRONMENT back (removes the variable). Close dry-run issues and delete branches yourself; keep the PRs.",
+          "detail": "Removes DEPLOY_ENVIRONMENT so deploys target production again. Close dry-run issues and delete branches yourself; keep the PRs as evidence.",
           "action": "Reset variables",
           "verify": true,
           "links": [],
@@ -1851,7 +1672,7 @@
       }
     },
     {
-      "id": "B12",
+      "id": "B13",
       "name": "Go live",
       "summary": "One small real feature; retro per persona; mark the bootstrap COMPLETE.",
       "status": "TODO",
@@ -1861,10 +1682,10 @@
       "notes": "",
       "steps": [
         {
-          "id": "b12.live",
+          "id": "b13.live",
           "kind": "human",
           "title": "First real feature",
-          "detail": "One small feature with transcripts.source: file. People act at every gate. Then a retro per persona.",
+          "detail": "One small real feature. Claude only watches and reports; people act at every gate. Then a retro per persona.",
           "verify": true,
           "checklist": [
             {
@@ -1872,7 +1693,7 @@
               "done": false
             },
             {
-              "text": "Retro notes folded into constitution, CLAUDE.md, .coderabbit.yaml",
+              "text": "Retro notes folded into constitution, CLAUDE.md, .coderabbit.yaml and test conventions",
               "done": false
             }
           ],
@@ -1916,6 +1737,16 @@
         "type": "text"
       },
       {
+        "key": "github.visibility",
+        "label": "Visibility",
+        "type": "select",
+        "options": [
+          "private",
+          "public"
+        ],
+        "hint": "private: the circuit uses self-hosted runners"
+      },
+      {
         "key": "people.architects",
         "label": "Architects",
         "type": "people",
@@ -1932,6 +1763,38 @@
         "label": "Testers",
         "type": "people",
         "hint": "One per line: GitHub login, Atlassian email, Slack handle"
+      },
+      {
+        "key": "runners.circuit.name",
+        "label": "Circuit runner name",
+        "type": "text",
+        "hint": "PR checks with logins (labels self-hosted, circuit)"
+      },
+      {
+        "key": "runners.circuit.os",
+        "label": "Circuit runner OS",
+        "type": "select",
+        "options": [
+          "linux",
+          "macos",
+          "windows"
+        ]
+      },
+      {
+        "key": "runners.release.name",
+        "label": "Release runner name",
+        "type": "text",
+        "hint": "deploy-prod only (labels self-hosted, circuit-release)"
+      },
+      {
+        "key": "runners.release.os",
+        "label": "Release runner OS",
+        "type": "select",
+        "options": [
+          "linux",
+          "macos",
+          "windows"
+        ]
       },
       {
         "key": "jira.site",
@@ -1955,25 +1818,38 @@
         ]
       },
       {
+        "key": "jira.design_pending_statuses",
+        "label": "Design pending statuses",
+        "type": "text",
+        "hint": "Epic statuses that mean the design is not approved"
+      },
+      {
         "key": "confluence.space_key",
         "label": "Confluence space key",
         "type": "text"
       },
       {
-        "key": "salesforce.dev_sandbox_url",
-        "label": "DEV sandbox URL",
-        "type": "url"
-      },
-      {
-        "key": "salesforce.qa_sandbox_url",
-        "label": "QA sandbox URL",
-        "type": "url"
-      },
-      {
-        "key": "salesforce.prod_url",
-        "label": "Production URL",
+        "key": "confluence.architects_group",
+        "label": "Architects group",
         "type": "text",
-        "hint": "URL, or none"
+        "hint": "Only this group edits design pages / sets them to Approved"
+      },
+      {
+        "key": "salesforce.dev_alias",
+        "label": "DEV org alias",
+        "type": "text",
+        "hint": "sf CLI alias; any connected org"
+      },
+      {
+        "key": "salesforce.qa_alias",
+        "label": "QA org alias",
+        "type": "text"
+      },
+      {
+        "key": "salesforce.prod_alias",
+        "label": "Production alias",
+        "type": "text",
+        "hint": "The org the project names as production: AI never touches it"
       },
       {
         "key": "salesforce.api_version",
@@ -2001,18 +1877,23 @@
         "type": "text"
       },
       {
-        "key": "transcripts.source",
-        "label": "Transcript source",
+        "key": "slack.channels.review",
+        "label": "Review room channel",
+        "type": "text"
+      },
+      {
+        "key": "slack.transport",
+        "label": "Slack notices",
         "type": "select",
         "options": [
-          "file",
-          "fireflies",
-          "both"
+          "claude",
+          "github-app",
+          "off"
         ]
       },
       {
         "key": "ai.max_attempts",
-        "label": "Max AI attempts",
+        "label": "Max AI fix attempts",
         "type": "number"
       },
       {
@@ -2038,24 +1919,32 @@
     ],
     "values": {
       "github.org": "acme-org",
-      "github.repo": "salesDemoOrg",
+      "github.repo": "acme-salesforce",
       "github.default_branch": "main",
+      "github.visibility": "private",
       "people.architects": "",
       "people.developers": "",
       "people.testers": "",
-      "jira.site": "https://<site>.atlassian.net",
-      "jira.project_key": "ABC",
+      "runners.circuit.name": "circuit-1",
+      "runners.circuit.os": "linux",
+      "runners.release.name": "circuit-release-1",
+      "runners.release.os": "linux",
+      "jira.site": "https://acme.atlassian.net",
+      "jira.project_key": "ACME",
       "jira.test_tool": "none",
+      "jira.design_pending_statuses": "Backlog,Design Review",
       "confluence.space_key": "SD",
-      "salesforce.dev_sandbox_url": "https://acme-demo.my.salesforce.com",
-      "salesforce.qa_sandbox_url": "https://acme-demo.my.salesforce.com",
-      "salesforce.prod_url": "none",
-      "salesforce.api_version": "66.0",
-      "slack.workspace": "<name>",
+      "confluence.architects_group": "architects",
+      "salesforce.dev_alias": "dev",
+      "salesforce.qa_alias": "qa",
+      "salesforce.prod_alias": "prod",
+      "salesforce.api_version": "62.0",
+      "slack.workspace": "acme",
       "slack.channels.arch": "arch-gate",
       "slack.channels.dev": "dev-gate",
       "slack.channels.qa": "qa-gate",
-      "transcripts.source": "file",
+      "slack.channels.review": "review-room",
+      "slack.transport": "claude",
       "ai.max_attempts": "3",
       "ai.sf_ai_tester_in_ci": "false",
       "ai.sf_ai_tester_ref": "8a5b5c276901e1d6bf3a764015da0d3bf1cf0b78",

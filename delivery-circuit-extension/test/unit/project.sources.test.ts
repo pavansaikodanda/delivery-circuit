@@ -7,7 +7,8 @@ import {
   decrypt, docxToText, encrypt, extractText, loadUpload, newKey, parseIndex, readIndex, readZipEntry, serializeIndex, storeUpload,
   subtitlesToText, uploadFile, uploadId, upsertSource, withUsage, writeIndex,
 } from "../../src/project/sources";
-import { firefliesRecent, firefliesTranscript, firefliesMeta, formatSentences, jiraLabels, jiraSiteUrl, type FetchLike } from "../../src/project/remote";
+import { siteUrl } from "../../src/project/jira";
+import { firefliesPointer, readFirefliesMeta, readFirefliesRecent, type ClaudeExec } from "../../src/project/mcpReader";
 
 const FIX = path.join(__dirname, "..", "fixtures", "project", "repo");
 const tmpDirs: string[] = [];
@@ -125,67 +126,58 @@ describe("text extraction", () => {
   });
 });
 
-function fakeFetch(handler: (url: string, init: any) => { status?: number; body: any }): FetchLike & { calls: { url: string; init: any }[] } {
-  const calls: { url: string; init: any }[] = [];
-  const f = (async (url: string, init: any) => {
-    calls.push({ url, init });
-    const r = handler(url, init);
-    const status = r.status ?? 200;
-    return { ok: status >= 200 && status < 300, status, json: async () => r.body, text: async () => JSON.stringify(r.body) };
+const FF = path.join(__dirname, "..", "fixtures", "project", "confluence");
+
+/** A fake `claude -p` that records its args and prompt and answers with a recorded result. */
+function fakeClaude(answer: (prompt: string) => { code?: number; stdout: string; stderr?: string }): ClaudeExec & { calls: { args: string[]; prompt: string }[] } {
+  const calls: { args: string[]; prompt: string }[] = [];
+  const f = (async (args: string[], prompt: string) => {
+    calls.push({ args, prompt });
+    const r = answer(prompt);
+    return { code: r.code ?? 0, stdout: r.stdout, stderr: r.stderr ?? "" };
   }) as any;
   f.calls = calls;
   return f;
 }
 
-describe("Fireflies GraphQL", () => {
-  it("lists recent meetings with the key in the header only", async () => {
-    const f = fakeFetch(() => ({ body: { data: { transcripts: [{ id: "01ABC", title: "Kickoff", date: 1762000000000 }, { id: "../bad", title: "x", date: 0 }] } } }));
-    const list = await firefliesRecent("ff-key-123", 500, f);
-    expect(list).toEqual([{ id: "fireflies:01ABC", kind: "fireflies", title: "Kickoff", date: new Date(1762000000000).toISOString() }]);
-    expect(f.calls[0].url).toBe("https://api.fireflies.ai/graphql");
-    expect(f.calls[0].init.headers.Authorization).toBe("Bearer ff-key-123");
-    expect(JSON.parse(f.calls[0].init.body).variables).toEqual({ limit: 50 });
-    expect(f.calls[0].init.body).not.toContain("ff-key-123");
+describe("Fireflies through the person's Fireflies MCP (read-only claude call)", () => {
+  it("lists recent meetings with read-only tools only and drops bad ids", async () => {
+    const out = await fsp.readFile(path.join(FF, "fireflies-recent.json"), "utf8");
+    const c = fakeClaude(() => ({ stdout: out }));
+    const list = await readFirefliesRecent(c, 500);
+    expect(list).toEqual([{ id: "fireflies:01JD7K2M9Q", kind: "fireflies", title: "Support escalations call", date: "2026-11-01T15:00:00.000Z" }]);
+    const args = c.calls[0].args;
+    const allowed = args[args.indexOf("--allowedTools") + 1].split(",");
+    expect(allowed.every((t) => /^mcp__[A-Za-z_]+__fireflies_get_transcripts?$/.test(t))).toBe(true);
+    expect(args[args.indexOf("--disallowedTools") + 1]).toContain("Bash");
+    expect(c.calls[0].prompt).toContain("50 most recent");
+    expect(args.join(" ")).not.toMatch(/api[_-]?key|token/i);
   });
-  it("fetches metadata and the transcript as speaker lines", async () => {
-    const f = fakeFetch((_u, init) => {
-      const q = JSON.parse(init.body).query as string;
-      const t = { id: "01ABC", title: "Kickoff", dateString: "2026-11-01T10:00:00.000Z", sentences: [
-        { speaker_name: "Anna", text: "Hi." }, { speaker_name: "Anna", text: "We need escalation." }, { speaker_name: "Ben", text: "Why?" }] };
-      return { body: { data: { transcript: q.includes("sentences") ? t : { id: t.id, title: t.title, dateString: t.dateString } } } };
-    });
-    expect(await firefliesMeta("k", "01ABC", f)).toEqual({ id: "fireflies:01ABC", kind: "fireflies", title: "Kickoff", date: "2026-11-01T10:00:00.000Z" });
-    expect(await firefliesTranscript("k", "01ABC", f)).toBe("# Kickoff\nDate: 2026-11-01T10:00:00.000Z\nSource: fireflies:01ABC\n\nAnna: Hi. We need escalation.\nBen: Why?");
-    await expect(firefliesTranscript("k", "bad id!", f)).rejects.toThrow(/Invalid/);
+  it("reads one meeting's metadata and never copies the transcript", async () => {
+    const c = fakeClaude(() => ({ stdout: JSON.stringify({ type: "result", result: JSON.stringify({ meetings: [{ id: "01ABC", title: "Kickoff", date: "2026-11-01T10:00:00Z" }] }) }) }));
+    expect(await readFirefliesMeta(c, "01ABC")).toEqual({ id: "fireflies:01ABC", kind: "fireflies", title: "Kickoff", date: "2026-11-01T10:00:00.000Z" });
+    await expect(readFirefliesMeta(c, "bad id!")).rejects.toThrow(/Invalid/);
+    const p = firefliesPointer("01ABC");
+    expect(p).toContain("fireflies_get_transcript");
+    expect(p).toContain("Source: fireflies:01ABC");
   });
-  it("reports errors without the key", async () => {
-    const f = fakeFetch(() => ({ status: 401, body: {} }));
-    await expect(firefliesRecent("secret-key", 5, f)).rejects.toThrow("Fireflies request failed (HTTP 401)");
-    const g = fakeFetch(() => ({ body: { errors: [{ message: "Invalid API key" }] } }));
-    await expect(firefliesRecent("secret-key", 5, g)).rejects.toThrow("Fireflies: Invalid API key");
-    expect(formatSentences({ id: "x", title: "T", sentences: [] })).toContain("# T");
+  it("reports reader errors", async () => {
+    const none = fakeClaude(() => ({ stdout: JSON.stringify({ type: "result", result: JSON.stringify({ meetings: [], error: "Fireflies MCP not connected" }) }) }));
+    await expect(readFirefliesRecent(none, 5)).rejects.toThrow("Fireflies: Fireflies MCP not connected");
+    const fail = fakeClaude(() => ({ code: 1, stdout: "", stderr: "" }));
+    await expect(readFirefliesRecent(fail, 5)).rejects.toThrow(/not installed/);
+    const isErr = fakeClaude(() => ({ stdout: JSON.stringify({ type: "result", is_error: true, result: "Not logged in" }) }));
+    await expect(readFirefliesRecent(isErr, 5)).rejects.toThrow("claude: Not logged in");
   });
 });
 
-describe("Jira labels", () => {
+describe("Jira site", () => {
   it("normalises the site", () => {
-    expect(jiraSiteUrl("https://acme.atlassian.net/")).toBe("https://acme.atlassian.net");
-    expect(jiraSiteUrl("acme.atlassian.net")).toBe("https://acme.atlassian.net");
-    expect(jiraSiteUrl("acme")).toBe("https://acme.atlassian.net");
-    expect(jiraSiteUrl("https://<site>.atlassian.net")).toBeUndefined();
-    expect(jiraSiteUrl("http://evil")).toBeUndefined();
-  });
-  it("queries labels with basic auth, falls back to the classic search", async () => {
-    const f = fakeFetch((url) => url.includes("/search/jql")
-      ? { status: 410, body: {} }
-      : { body: { issues: [{ key: "ABC-1", fields: { labels: ["ai-ready"] } }, { key: "ABC-2", fields: {} }] } });
-    const labels = await jiraLabels({ site: "acme", email: "a@b.c", token: "tok" }, ["ABC-1", "ABC-2", "bad key)"], f);
-    expect(labels).toEqual({ "ABC-1": ["ai-ready"], "ABC-2": [] });
-    expect(f.calls).toHaveLength(2);
-    expect(decodeURIComponent(f.calls[1].url)).toContain("key in (ABC-1,ABC-2)");
-    expect(f.calls[1].url).not.toContain("bad");
-    expect(f.calls[0].init.headers.Authorization).toBe("Basic " + Buffer.from("a@b.c:tok").toString("base64"));
-    const g = fakeFetch(() => ({ status: 401, body: {} }));
-    await expect(jiraLabels({ site: "acme", email: "a", token: "tok" }, ["ABC-1"], g)).rejects.toThrow("Jira search failed (HTTP 401)");
+    expect(siteUrl("https://acme.atlassian.net/")).toBe("https://acme.atlassian.net");
+    expect(siteUrl("acme.atlassian.net")).toBe("https://acme.atlassian.net");
+    expect(siteUrl("acme")).toBe("https://acme.atlassian.net");
+    expect(siteUrl("https://<site>.atlassian.net")).toBeUndefined();
+    expect(siteUrl("http://evil")).toBeUndefined();
+    expect(siteUrl(undefined)).toBeUndefined();
   });
 });

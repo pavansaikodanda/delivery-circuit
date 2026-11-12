@@ -1,5 +1,19 @@
 # Autonomous Build Plan: Transcript → Spec → Jira → Tests → Code → Deploy
 
+> **v3 notice (2026-11-12).** This runbook describes the v2 circuit and is kept for history. The current design is
+> [`docs/CIRCUIT-V3.md`](docs/CIRCUIT-V3.md). Where the two disagree, v3 wins. In short, v3 changes:
+>
+> - **No stored credentials.** No GitHub App key, no `CLAUDE_CODE_OAUTH_TOKEN`, no Salesforce JWT keys, no Jira, Slack
+>   or Fireflies tokens. Every connection is a login; see [`ConnectionsSetup.md`](ConnectionsSetup.md).
+> - **Specs live in Confluence, stories and test cases in Jira.** `.specify/specs/` is a local, gitignored drafting
+>   space. G1 is the Confluence design page status Approved, set by an `architects` member.
+> - **AI runs on laptops, not in CI.** `claude-plan`, `claude-build` and `spec-from-transcript` are gone. The Developer
+>   clicks "Start story", which writes the plan and opens a draft PR. Salesforce and Claude checks run on a
+>   **self-hosted runner** that uses its own `sf` and `claude` logins.
+> - **Architects never create PRs.** Developers own their PRs; the Jira key in the branch and PR title links them.
+>
+> Sections that v3 replaces are marked **Superseded in v3** or **Changed in v3** below.
+
 This is the master runbook for Claude, using the browser and desktop connections, to **build the whole AI + Human Salesforce delivery pipeline**. The only business input is a client-call **transcript**.
 
 **Three files go together:**
@@ -15,6 +29,8 @@ This is the master runbook for Claude, using the browser and desktop connections
 ---
 
 ## 0. Start here (paste this into Claude)
+
+> **Superseded in v3:** do not use this prompt for a new setup. Run `/circuit-bootstrap` (or the extension's Project Setup) and follow [`ConnectionsSetup.md`](ConnectionsSetup.md). There are no secrets to move, and CI does not use `CLAUDE_CODE_OAUTH_TOKEN`.
 
 Attach all three files, then send:
 
@@ -79,6 +95,8 @@ ai:
 
 ## 2. Tool routing
 
+> **Changed in v3:** the rows about GitHub secrets, the GitHub App, Jira REST with a token, Slack webhooks and Salesforce JWT logins no longer apply. Jira goes through `acli` or the Atlassian MCP, Slack through the Slack MCP, and Salesforce through `sf org login web`.
+
 | Work | Tool | Why |
 |---|---|---|
 | git, `gh`, `sf`, `uv`/`specify`, `npm`, `openssl`, `claude -p` tests | **Desktop shell** (device bash on the linked computer) | Runs with your local logins and keeps keys on your disk |
@@ -95,6 +113,8 @@ ai:
 
 
 ### 2.1 Claude authentication: subscription, no API key
+
+> **Superseded in v3:** CI no longer runs Claude with a stored token. Each person uses their own `claude` login, and the self-hosted runner uses the `claude` login of its service account. See ConnectionsSetup.md.
 
 The whole pipeline runs on Claude Code accounts (Pro, Max, Team or Enterprise). Nothing uses a Console API key.
 
@@ -116,6 +136,8 @@ Rules for the CI token:
 ---
 
 ## 3. Human checkpoints
+
+> **Superseded in v3 for HC-2, HC-3, HC-5, HC-6 and HC-7:** there is no App key, Claude token, JWT key, Jira token or Jira-held PAT to create. HC-1, HC-4, HC-8 and HC-9 still apply as logins and reviews.
 
 Claude stops at each of these and tells you exactly what to do.
 
@@ -159,6 +181,8 @@ Each phase lists **Goal**, **Steps** (with the tool) and **Verify**. Claude mark
 **Verify:** every tool prints a version. `gh auth status` is OK. The browser shows you signed in to GitHub, Jira, both sandboxes and Slack.
 
 ### B1. GitHub organisation and bot
+
+> **Superseded in v3 for steps 3 to 5:** there is no delivery-bot App and no secrets, so drop those steps and the Verify lines about them. Teams, labels and the `production` environment still apply.
 
 1. Teams (`gh api`):
    ```bash
@@ -211,6 +235,8 @@ Each phase lists **Goal**, **Steps** (with the tool) and **Verify**. Claude mark
 - A throwaway workflow using `actions/create-github-app-token` gets a token. Delete that workflow afterwards.
 
 ### B2. Salesforce access (DEV and QA by Claude; production by you)
+
+> **Superseded in v3:** no integration users or JWT apps. People log in with `sf org login web`; the self-hosted runner logs in to QA (and, on the release runner, the named production org) with its own `sf` login.
 
 1. Desktop, one key pair per org (keys never leave your disk except into GitHub secrets):
    ```bash
@@ -279,6 +305,8 @@ Each phase lists **Goal**, **Steps** (with the tool) and **Verify**. Claude mark
 
 ### B4. Spec Kit (SK §S1)
 
+> **Changed in v3:** Spec Kit stays as the Architect's local drafting scaffold. `.specify/specs/` is gitignored; the output is published to Confluence and Jira.
+
 1. Desktop, on branch `pipeline/speckit`:
    ```bash
    specify init --here --integration claude          # verify flags with: specify init --help
@@ -297,6 +325,8 @@ Each phase lists **Goal**, **Steps** (with the tool) and **Verify**. Claude mark
 - The deploy and PR skills are blocked: running them gives a denial.
 
 ### B5. Jira (browser + REST checks)
+
+> **Superseded in v3 for step 1, Rule A in step 6, and the REST checks:** Jira is reached through `acli` and the Atlassian MCP with personal logins, and nothing in Jira calls GitHub. Stories carry *Design page*, *Approved design version* and *Acceptance criteria* fields.
 
 1. **Service account** (recommended): an Atlassian user `delivery-bot@…` with access to project `ABC`.
    - HC-6: create its API token and run `gh secret set JIRA_API_TOKEN`.
@@ -346,6 +376,8 @@ Each phase lists **Goal**, **Steps** (with the tool) and **Verify**. Claude mark
 
 ### B6. Confluence, Lucid, Fireflies
 
+> **Changed in v3:** the Confluence design page is the spec. Fireflies is read through the Fireflies MCP (no webhook relay).
+
 1. Confluence space `SD` "Solution Designs". Page statuses: only `architects` can set Approved (space permissions + page status).
 2. Lucid: install "Lucid for Confluence" and connect the Lucid MCP for the Architect (OAuth at first use).
 3. Fireflies (only if `transcripts.source` includes fireflies):
@@ -356,6 +388,8 @@ Each phase lists **Goal**, **Steps** (with the tool) and **Verify**. Claude mark
 
 ### B7. Slack
 
+> **Superseded in v3:** no webhooks. Claude sessions use the Slack MCP, and the review room runs in `#review-room` (see ReviewRoom.md).
+
 1. Create channels `#arch-gate`, `#dev-gate` and `#qa-gate`, and invite the people from config.
 2. api.slack.com → create the app "Delivery Gates" → Incoming Webhooks → one webhook per channel (browser).
 3. Copy each webhook URL straight into `gh secret set SLACK_WEBHOOK_ARCH|DEV|QA` on the desktop (paste into the prompt, not into chat).
@@ -363,6 +397,8 @@ Each phase lists **Goal**, **Steps** (with the tool) and **Verify**. Claude mark
 **Verify:** `curl` a test message to each webhook from a throwaway workflow. All three channels receive it.
 
 ### B8. Workflows and CodeRabbit
+
+> **Superseded in v3:** `claude-plan`, `claude-build` and `spec-from-transcript` are removed, `spec-gate` becomes `design-gate`, `ai-fix-loop` becomes `fix-router`, and Salesforce and Claude jobs run on `[self-hosted, circuit]`.
 
 1. On branch `pipeline/workflows`, create these files:
 
@@ -388,6 +424,8 @@ Each phase lists **Goal**, **Steps** (with the tool) and **Verify**. Claude mark
 - CodeRabbit comments on the PR.
 
 ### B9. Protect `main` and production (gh api, HC-8)
+
+> **Changed in v3:** the required check is `design-gate`, not `spec-gate`, and there is no bot App or App token. Merge stays architects-only and `production` keeps its required reviewers.
 
 1. Ruleset on `main`:
    - Require PRs.
@@ -421,6 +459,8 @@ Claude writes this script. Each person runs it once: `./scripts/setup-persona.sh
 
 ### B11. Dry run with a sample transcript (all acceptance tests)
 
+> **Superseded in v3:** use the live test script in [`docs/E2E-TEST-PLAN.md`](docs/E2E-TEST-PLAN.md).
+
 1. Claude writes `inputs/transcripts/000-sample-case-escalation.md`. It is a short, realistic, made-up client call: one new field, one Flow or trigger, one LWC, and two personas with different access, with clear answers so clarify has no blockers.
 2. Run it through the real pipeline (§6) on the Jira project with label `dryrun`. People act at each gate (**HC-9**).
 3. Check every acceptance test, and tick each one in `build-state.md`:
@@ -448,6 +488,8 @@ Claude writes this script. Each person runs it once: `./scripts/setup-persona.sh
 
 ## 5. Who does what at runtime
 
+> **Superseded in v3:** see section 3 of [`docs/CIRCUIT-V3.md`](docs/CIRCUIT-V3.md).
+
 | Step | Actor | Tool | Gate |
 |---|---|---|---|
 | Transcript in | Architect, or Fireflies relay | file drop or Fireflies | |
@@ -470,6 +512,8 @@ Claude writes this script. Each person runs it once: `./scripts/setup-persona.sh
 ---
 
 ## 6. Transcript entry point
+
+> **Superseded in v3:** sources are added on the extension's Sources page (paste, file, Fireflies, Wispr Flow) and kept out of git. No transcript workflow runs in CI.
 
 ### 6.1 `.github/workflows/spec-from-transcript.yml` (new)
 
@@ -595,6 +639,8 @@ There are two ways:
 
 ## 8. Failure handling
 
+> **Changed in v3:** the rows about JWT, Jira rule A, `claude-build` and the AI workflows no longer apply. To stop AI in v3, stop the self-hosted `circuit` runner service; AI on laptops is stopped by the guard and the gates.
+
 | Symptom | Fix |
 |---|---|
 | `specify` flags changed | Run `specify init --help` and the extension docs, then update SK §S1 commands in the repo docs |
@@ -608,5 +654,5 @@ There are two ways:
 ## 9. Notes
 
 - **Verify-tagged facts:** the versions, Setup labels, MCP URLs, action majors and CLI flags marked "verify" were last checked on 10 Nov 2026 (spec-kit-sf v2.0.1, Spec Kit integration key `claude`, Jira extension v3.0.0). Claude must re-check them at the start of each phase.
-- **Usage:** every AI job runs on the Claude subscription behind `CLAUDE_CODE_OAUTH_TOKEN`, so it counts against that account's usage limits, not API billing. Keep `MAX_AI_ATTEMPTS=3`, `--max-turns` and the per-story `concurrency` groups. If CI hits limits, add `concurrency: { group: claude-ci }` to all AI jobs so they queue one at a time. Renew the token before it expires (1 year; put a calendar reminder in `build-state.md`).
+- **Usage (superseded in v3):** each person's AI runs on their own Claude Team seat, and the runner's checks on the runner's seat; there is no token to renew. The v2 note follows. Every AI job runs on the Claude subscription behind `CLAUDE_CODE_OAUTH_TOKEN`, so it counts against that account's usage limits, not API billing. Keep `MAX_AI_ATTEMPTS=3`, `--max-turns` and the per-story `concurrency` groups. If CI hits limits, add `concurrency: { group: claude-ci }` to all AI jobs so they queue one at a time. Renew the token before it expires (1 year; put a calendar reminder in `build-state.md`).
 - **Community extensions:** spec-kit-sf and the Jira extension are community code. They are pinned to the reviewed version and changed only through Architect-approved PRs.

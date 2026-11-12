@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # Install the SF AI Tester CLI from source (https://github.com/pavansaikodanda/sf-ai-tester) at a pinned ref.
-# Used by pr-checks (Linux runner) and by Tester laptops on macOS/Linux. On Windows, install the VSIX from the repo's
-# releases/ folder instead; it includes the CLI at <extension dir>/dist/cli.js.
+# Used by pr-checks on the self-hosted circuit runner and by Tester laptops on macOS/Linux. On Windows, install the
+# VSIX from the repo's releases/ folder instead; it includes the CLI at <extension dir>/dist/cli.js.
 #
 #   bash scripts/ci/install-sf-ai-tester.sh [<dir>]      # prints the tool dir on the last line
 #   env: SF_AI_TESTER_REPO (default pavansaikodanda/sf-ai-tester), SF_AI_TESTER_REF (commit SHA or tag; required),
-#        SF_AI_TESTER_WITH_DEPS=1 to install the browsers' system packages (CI runners)
+#        SF_AI_TESTER_WITH_DEPS=1 to also install the browsers' system packages (needs sudo: do it once while setting
+#        up the runner, not in every job). Default <dir>: $CIRCUIT_TOOLS_DIR or ~/.circuit-tools (kept between jobs).
+# The CLI drives the org through the runner's sf CLI login and the runner's logged-in claude CLI (no stored token).
 # Run it as:  node "<dir>/dist/cli.js" run <suite.yaml> --mode manual --login headless   (from the repo root)
 set -euo pipefail
 
-DIR="${1:-${RUNNER_TEMP:-${TMPDIR:-/tmp}}/sf-ai-tester}"
+DIR="${1:-${CIRCUIT_TOOLS_DIR:-$HOME/.circuit-tools}/sf-ai-tester}"
 REPO="${SF_AI_TESTER_REPO:-pavansaikodanda/sf-ai-tester}"
 REF="${SF_AI_TESTER_REF:-}"
 

@@ -1,5 +1,4 @@
 // GitHub REST/GraphQL client used by ConnectionsService. No vscode import; token and fetch are injected.
-import { sealSecret, validateEnvironmentName, validateSecretName, type Sodium } from "./secrets";
 
 export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => Promise<{
@@ -88,15 +87,6 @@ export class GitHubClient {
     return list.map((s) => s.name).sort();
   }
 
-  async setSecret(owner: string, repo: string, name: string, value: string, env?: string, sodium?: Sodium): Promise<void> {
-    const bad = validateSecretName(name) ?? (env !== undefined ? validateEnvironmentName(env) : undefined);
-    if (bad) throw new Error(bad);
-    if (!value) throw new Error(`Refusing to store an empty value for ${name}.`);
-    const base = env ? `/repos/${enc(owner)}/${enc(repo)}/environments/${enc(env)}/secrets` : `/repos/${enc(owner)}/${enc(repo)}/actions/secrets`;
-    const key = await this.request<{ key_id: string; key: string }>("GET", `${base}/public-key`);
-    const encrypted_value = await sealSecret(value, key.key, sodium);
-    await this.request("PUT", `${base}/${name}`, { encrypted_value, key_id: key.key_id });
-  }
 }
 
 const enc = (s: string) => encodeURIComponent(s);

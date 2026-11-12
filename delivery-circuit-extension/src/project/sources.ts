@@ -5,10 +5,12 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypt
 import { promises as fs } from "fs";
 import * as path from "path";
 import { inflateRawSync } from "zlib";
-import type { SourceRef } from "../core/contracts";
+import type { SourceOrigin, SourceRef } from "../core/contracts";
 
 export const SOURCES_INDEX = ".circuit/sources.json";
 export const SOURCE_REF_RE = /^(fireflies|upload):([A-Za-z0-9][A-Za-z0-9_-]{2,})$/;
+const ORIGINS: readonly SourceOrigin[] = ["paste", "file", "fireflies", "fireflies-export", "wispr-flow", "watch-folder"];
+export const isSourceOrigin = (x: unknown): x is SourceOrigin => typeof x === "string" && (ORIGINS as readonly string[]).includes(x);
 
 interface IndexFile { version: 1; sources: SourceRef[] }
 
@@ -20,15 +22,17 @@ export function parseIndex(json: string | undefined): SourceRef[] {
     if (!Array.isArray(list)) return [];
     return list.filter((s: any) => s && typeof s.id === "string" && SOURCE_REF_RE.test(s.id)).map((s: any): SourceRef => ({
       id: s.id, kind: s.id.startsWith("fireflies:") ? "fireflies" : "upload",
-      title: String(s.title ?? s.id), date: String(s.date ?? ""), ...(Array.isArray(s.usedBy) ? { usedBy: s.usedBy.map(String) } : {}),
+      title: String(s.title ?? s.id), date: String(s.date ?? ""), ...(isSourceOrigin(s.origin) ? { origin: s.origin } : {}),
+      ...(Array.isArray(s.usedBy) ? { usedBy: s.usedBy.map(String) } : {}),
     }));
   } catch { return []; }
 }
 
-/** Only ids, kinds, titles, dates and usedBy are written. Anything else on the objects is dropped. */
+/** Only ids, kinds, titles, dates, origin and usedBy are written. Anything else on the objects is dropped. */
 export function serializeIndex(sources: SourceRef[]): string {
   const clean = [...sources].sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id)).map((s) => {
     const o: SourceRef = { id: s.id, kind: s.kind, title: s.title, date: s.date };
+    if (isSourceOrigin(s.origin)) o.origin = s.origin;
     if (s.usedBy?.length) o.usedBy = [...new Set(s.usedBy)].sort();
     return o;
   });
@@ -50,7 +54,7 @@ export async function writeIndex(root: string, sources: SourceRef[]): Promise<vo
 export function upsertSource(list: SourceRef[], s: SourceRef): SourceRef[] {
   const i = list.findIndex((x) => x.id === s.id);
   if (i === -1) return [...list, s];
-  const merged: SourceRef = { ...list[i], title: s.title, date: s.date };
+  const merged: SourceRef = { ...list[i], title: s.title, date: s.date, ...(s.origin ? { origin: s.origin } : {}) };
   const usedBy = [...new Set([...(list[i].usedBy ?? []), ...(s.usedBy ?? [])])];
   if (usedBy.length) merged.usedBy = usedBy.sort();
   return list.map((x, j) => (j === i ? merged : x));

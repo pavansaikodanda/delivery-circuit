@@ -47,13 +47,8 @@ mustNot("node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/claude.exe");
 
 // esbuild externals (build.mjs) must resolve from the unpacked extension, like the extension host loads them.
 const req = createRequire(path.join(ext, "dist", "extension.js"));
-const cjs = ["playwright", "playwright-core", "exceljs", "libsodium-wrappers", "@playwright/mcp/package.json"];
+const cjs = ["playwright", "playwright-core", "exceljs", "@playwright/mcp/package.json"];
 for (const m of cjs) { try { req.resolve(m); } catch (e) { problems.push(`cannot resolve ${m}: ${e.code ?? e.message}`); } }
-try {
-  const sodium = req("libsodium-wrappers");
-  await sodium.ready;
-  if (typeof sodium.crypto_box_seal !== "function") problems.push("libsodium-wrappers has no crypto_box_seal");
-} catch (e) { problems.push(`libsodium-wrappers does not load: ${e.message}`); }
 try {
   const sdkDir = path.join(ext, "node_modules", "@anthropic-ai", "claude-agent-sdk");
   const sdk = await import(pathToFileURL(path.join(sdkDir, "sdk.mjs")).href);

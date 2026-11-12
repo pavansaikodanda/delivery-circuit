@@ -3,13 +3,16 @@
 // Enforces the hard rules no matter which persona, skill or prompt is active:
 //   - nobody (AI) touches production, merges, approves, or pushes to main
 //   - separation of duties by persona (CIRCUIT_PERSONA = architect | developer | tester)
-//   - AI never ticks the Architect Sign-Off (G1)
+//   - v3: Architects never create PRs; the Developer's Claude opens draft PRs only; the Tester commits only
+//     tests/ and test-cases/ on story branches (feature/<KEY>-<slug>)
+//   - AI never approves a design (G1: Confluence status Approved) or marks a story ai-ready (G2)
+//   - no stored credentials: no token logins, no CLAUDE_CODE_OAUTH_TOKEN / ANTHROPIC_API_KEY / JIRA_API_TOKEN secrets
 //   - secrets and Salesforce session files are never read
 // Input: hook JSON on stdin. Output: a deny decision as JSON, or nothing (= no opinion, normal permissions apply).
 // Mode "--plugin": used by the plugin copy; it steps aside when the project ships its own registered guard.
 
 import { readFileSync, existsSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { join, relative, isAbsolute, resolve } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -78,10 +81,30 @@ function flag(seg, names) {
   }
   return null;
 }
-function currentBranch() {
-  try { return execSync('git rev-parse --abbrev-ref HEAD', { cwd: projectDir, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); }
-  catch { return ''; }
+const gitCwd = input.cwd || projectDir;
+function git(args) {
+  try { return execFileSync('git', args, { cwd: gitCwd, stdio: ['ignore', 'pipe', 'ignore'] }).toString(); }
+  catch { return null; }
 }
+function currentBranch() {
+  // symbolic-ref also works on a branch with no commits yet; rev-parse covers a detached HEAD.
+  return (git(['symbolic-ref', '--short', '-q', 'HEAD']) ?? git(['rev-parse', '--abbrev-ref', 'HEAD']) ?? '').trim();
+}
+const lines = t => (t || '').split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+// Story branches: feature/<KEY>-<slug>, e.g. feature/ACME-12-shipping-rates
+const STORY_BRANCH = /^feature\/[A-Z][A-Z0-9_]+-\d+(?:-|$)/;
+const TESTER_COMMIT_PATHS = [/^tests\//, /^test-cases\//];
+// Files a `git commit` segment would record: the index, plus tracked changes with -a/--all, plus `-- <pathspec>`.
+function filesCommittedBy(seg) {
+  const files = new Set(lines(git(['diff', '--cached', '--name-only'])));
+  if (/\s(--all|-[a-zA-Z]*a[a-zA-Z]*)(\s|=|$)/.test(seg)) for (const f of lines(git(['diff', '--name-only']))) files.add(f);
+  const dd = seg.indexOf(' -- ');
+  if (dd > -1) for (const p of seg.slice(dd + 4).split(/\s+/)) if (p) files.add(p.replace(/^["']|["']$/g, '').replace(/^\.\//, ''));
+  return [...files];
+}
+const WRITE_API = /-X\s*(POST|PUT|PATCH|DELETE)|--method\s+(POST|PUT|PATCH|DELETE)|\s-f\s|\s-F\s|--field\b|--raw-field\b|--input\b/;
+// Credentials v3 never stores: Claude, Anthropic, Jira/Atlassian, Fireflies tokens and Salesforce JWT keys.
+const STORED_SECRET = /\b(CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY|JIRA_API_TOKEN|ATLASSIAN_API_TOKEN|CONFLUENCE_API_TOKEN|FIREFLIES_API_KEY|SF_JWT_[A-Z_]*)\b/;
 
 function checkBash(cmd) {
   for (const s of segments(cmd)) {
@@ -90,7 +113,23 @@ function checkBash(cmd) {
     // Secrets and Salesforce sessions
     if (/\b(cat|type|less|more|head|tail|bat|Get-Content|gc|cp|scp|curl\s+.*-T)\b/.test(seg) &&
         /(\.key\b|\.pem\b|\.p12\b|\.env\b|[\\/]\.sf[\\/]|[\\/]\.sfdx[\\/]|\.sfkeys)/i.test(seg)) {
-      deny('reading key, .env or Salesforce session files is not allowed. Move secrets with `gh secret set NAME < file`.');
+      deny('reading key, .env or Salesforce session files is not allowed. The circuit uses logins, not stored keys.');
+    }
+
+    // No stored credentials (v3): every connection is a login (gh, claude, sf, acli --web, MCP OAuth).
+    if (/^gh\s+(secret|variable)\s+set\b/.test(seg) && STORED_SECRET.test(seg)) {
+      deny('the circuit stores no API tokens or keys (v3). Use logins: claude CLI, sf CLI, `acli jira auth login --web`, MCP OAuth, and the self-hosted runner.');
+    }
+    if (/^claude\s+setup-token\b/.test(seg)) deny('long-lived Claude tokens are not used (v3). Claude runs on the logged-in claude CLI.');
+    if (/^(export\s+|set\s+|\$env:)?ANTHROPIC_API_KEY\s*=|^setx\s+ANTHROPIC_API_KEY\b/i.test(seg)) {
+      deny('ANTHROPIC_API_KEY is never used. Claude runs on subscription logins.');
+    }
+
+    // Atlassian CLI: web login only, run by the person; G2 (ai-ready) is the human Tester's.
+    if (/^acli(\.exe)?\s/.test(seg)) {
+      if (/\bauth\s+login\b/.test(seg) && /\s--token(\s|=|$)/.test(seg)) deny('API-token logins are not used (v3). Run `acli jira auth login --web` in your own terminal.');
+      if (/\bauth\s+login\b/.test(seg) && persona) deny('logins are a person\'s action: run `acli jira auth login --web` in your own terminal.');
+      if (/\bworkitem\s+(edit|create|create-bulk)\b/.test(seg) && /\bai-ready\b/.test(seg)) deny('the label ai-ready is gate G2: only the human Tester sets it in Jira.');
     }
     if (/^(sf|sfdx)\s+org\s+display\b/.test(seg) && /--verbose|\buser\b/.test(seg)) {
       deny('`sf org display --verbose` prints access tokens. Use `sf org display` without --verbose.');
@@ -135,9 +174,17 @@ function checkBash(cmd) {
     // GitHub CLI
     if (/^gh\s/.test(seg)) {
       if (/^gh\s+pr\s+merge\b/.test(seg)) deny('merging is a human gate (G8, Architect).');
+      if (/^gh\s+pr\s+create\b/.test(seg)) {
+        if (persona === 'architect') deny('Architects never create PRs (v3). Developers start stories and own their PRs; link work through Jira keys instead.');
+        if (persona === 'tester') deny('the Tester does not open PRs; commit tests to the Developer\'s story PR with qa-add-tests.');
+        if (persona === 'developer' && !/\s(--draft|-d)(\s|=|$)/.test(seg + ' ')) deny('the Developer\'s Claude opens draft PRs only (`gh pr create --draft ...`). The human Developer marks it ready.');
+      }
       if (/^gh\s+pr\s+review\b/.test(seg) && /(\s--approve|\s-a)(\s|$)/.test(seg)) deny('approving a PR is a human gate (G3-G7).');
       if (/^gh\s+api\b/.test(seg)) {
         if (/\/merge\b/.test(seg)) deny('merging through the API is a human gate (G8).');
+        if (persona && persona !== 'developer' && /\brepos\/[^/\s]+\/[^/\s]+\/pulls\/?(["'\s]|$)/.test(seg + ' ') && WRITE_API.test(seg + ' ')) {
+          deny(`the ${persona} persona may not create PRs through the API (v3: Developers own PRs).`);
+        }
         if (/\/reviews\b/.test(seg) && /APPROVE/i.test(seg)) deny('approving through the API is a human gate.');
         if (persona && /(rulesets|\/protection\b|\/environments\/)/.test(seg) && /-X\s+(POST|PUT|PATCH|DELETE)|--method\s+(POST|PUT|PATCH|DELETE)|\s-f\s|\s-F\s|--input/.test(seg)) {
           deny('personas may not change rulesets, branch protection or environments.');
@@ -149,8 +196,14 @@ function checkBash(cmd) {
       }
     }
 
+    // Tester: commits on a story branch may hold only tests/ and test-cases/
+    if (persona === 'tester' && /^git\s+commit\b/.test(seg) && STORY_BRANCH.test(currentBranch())) {
+      const outside = filesCommittedBy(seg).filter(f => !match(f, TESTER_COMMIT_PATHS));
+      if (outside.length) deny(`on a story branch the Tester commits only tests/ and test-cases/. Unstage: ${outside.slice(0, 5).join(', ')}${outside.length > 5 ? ' ...' : ''}`);
+    }
+
     // Spec Kit SF commands that deploy or push
-    if (/speckit[.-]sf[.-](deploy|hotfix|pr)\b/.test(seg)) deny('spec-kit-sf deploy/hotfix/pr are disabled in the circuit. CI opens PRs; deploy-prod.yml deploys.');
+    if (/speckit[.-]sf[.-](deploy|hotfix|pr)\b/.test(seg)) deny('spec-kit-sf deploy/hotfix/pr are disabled in the circuit. Developers open draft PRs with dev-start-story; deploy-prod.yml deploys.');
   }
 }
 
@@ -164,10 +217,10 @@ const match = (r, pats) => pats.some(p => p.test(r));
 
 const ALL_PERSONA_DENY = [/^\.github\//, /^\.claude\/settings(\.local)?\.json$/, /^\.claude\/hooks\//, /(^|\/)CODEOWNERS$/, /^\.specify\/extensions\//];
 const PERSONA_DENY = {
-  developer: [/^test-cases\//, /^\.specify\/specs\/[^/]+\/tests\//, /^\.specify\/memory\//,
+  developer: [/^tests\//, /^test-cases\//, /^\.specify\/specs\/[^/]+\/tests\//, /^\.specify\/memory\//,
               /^\.specify\/specs\/[^/]+\/(spec|plan|data-model)\.md$/, /^\.specify\/specs\/[^/]+\/task_story_\d+\.md$/],
-  tester:    [/^force-app\//, /^\.specify\/memory\//, /^\.specify\/specs\/[^/]+\/(plan|data-model)\.md$/],
-  architect: [/^force-app\//, /^test-cases\//, /^\.specify\/specs\/[^/]+\/tests\//],
+  tester:    [/^force-app\//, /^docs\/plans\/[^/]+\/PLAN\.md$/, /^\.specify\/memory\//, /^\.specify\/specs\/[^/]+\/(plan|data-model)\.md$/],
+  architect: [/^force-app\//, /^tests\//, /^test-cases\//, /^docs\/plans\//, /^\.specify\/specs\/[^/]+\/tests\//],
 };
 const SECRET_FILES = [/\.(key|pem|p12)$/i, /(^|\/)\.env(\.|$)/, /(^|\/)\.sfkeys\//];
 
@@ -203,6 +256,25 @@ function checkFile(kind) {
   }
 }
 
+// ---------- MCP tools (Atlassian, Slack, ...) ----------
+// Tool names: mcp__<server>__<tool> (persona config) or mcp__claude_ai_<Connector>__<tool> (claude.ai connectors).
+// The hook matcher in settings.json must include mcp__.* for these rules to run.
+function checkMcp() {
+  const m = tool.match(/^mcp__(.+?)__(.+)$/);
+  if (!m) return;
+  const [, server, name] = m;
+  const body = JSON.stringify(ti);
+  if (/atlassian|confluence|jira/i.test(server)) {
+    if (/^setConfluenceContentStatus$/i.test(name) && /approved|verified/i.test(body)) {
+      deny('approving a design page is gate G1: only an `architects` member sets the Confluence status to Approved.');
+    }
+    if (/^(createJiraIssue|editJiraIssue|transitionJiraIssue)$/i.test(name) && /ai-ready|testability\s*confirmed/i.test(body)) {
+      deny('ai-ready / Testability confirmed is gate G2: only the human Tester sets it in Jira.');
+    }
+    if (/^(delete|manage)/i.test(name) && persona) deny(`${name} is not used by circuit personas.`);
+  }
+}
+
 switch (tool) {
   case 'Bash':
   case 'PowerShell':
@@ -215,6 +287,7 @@ switch (tool) {
     checkFile('read');
     break;
   default:
+    if (tool.startsWith('mcp__')) checkMcp();
     break;
 }
 process.exit(0);

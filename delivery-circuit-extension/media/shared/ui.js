@@ -515,9 +515,9 @@
   const BRAND_OF = {
     "sf-dev": "salesforce", "sf-qa": "salesforce", "mcp-salesforce": "salesforce", "code-analyzer": "salesforce",
     "mcp-atlassian": "atlassian", "mcp-github": "github", "mcp-slack": "slack", "mcp-lucid": "lucid", "mcp-fireflies": "fireflies",
-    "ai-reviewer": "anthropic",
+    "ai-reviewer": "anthropic", acli: "atlassian", "github-jira": "jira",
   };
-  const OTHER_ICON = { "testing-browsers": "browser", "sf-ai-tester": "beaker", human: "person", file: "file", report: "report", url: "link-external" };
+  const OTHER_ICON = { "testing-browsers": "browser", runner: "server", "sf-ai-tester": "beaker", human: "person", file: "file", report: "report", url: "link-external" };
   function brandId(id) { return BRAND_OF[id] || id; }
   function brandLabel(id) { const b = brandId(id); return BRAND_LABEL[b] || (id ? cap(String(id).replace(/[-_]/g, " ")) : ""); }
   /** DC.brand(id, {size: 16|12|20, label}): monochrome app logo from window.DC_BRANDS (simple-icons, CC0); Slack,

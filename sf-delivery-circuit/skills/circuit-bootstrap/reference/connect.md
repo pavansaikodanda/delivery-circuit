@@ -1,67 +1,99 @@
-# Connecting the external systems (screens and checks)
+# Connecting the external systems (v3: logins only)
 
-VERIFY every Setup label and menu path against current vendor docs on the day you do it.
+VERIFY every Setup label, menu path and command against current vendor docs on the day you do it. Nothing here
+creates a token, key, webhook or GitHub secret. Sample values are placeholders (acme-org, ACME,
+acme.atlassian.net, demo.user@example.com).
 
-## Salesforce (per sandbox, DEV and QA; PROD is done by a person, HC-5)
-1. Setup → Users → New User: `ai-dev@<client>.dev` / `ai-qa@<client>.qa`. Licence: Salesforce Integration or a full
-   licence if the permission set needs it.
-2. Permission set `Circuit_CI_<Org>`:
-   - DEV: API Enabled, View Setup and Configuration, read on the objects in scope, Author Apex (for running tests),
-     Modify Metadata Through Metadata API Functions **only if** check-only validation needs it in your edition. No
-     Modify All Data, no Manage Users.
-   - QA: API Enabled, deploy metadata, Author Apex, create/edit/delete on test-data objects.
-3. Setup → External Client App Manager → New: Local; Enable OAuth; callback `http://localhost:1717/OauthRedirect`;
-   scopes `api`, `refresh_token offline_access`; Enable JWT Bearer Flow; upload `<org>.crt`.
-   Policies: Admin approved users are pre-authorised; add the permission set. Copy the Consumer Key.
-   (If the org still allows Connected Apps, the same settings work there.)
-4. A sandbox refresh replaces these: re-run this section and update the secrets after each refresh.
+## Self-hosted runners (B2)
+Docs: docs.github.com → Actions → Hosting your own runners.
+- Two runners: `circuit` (PR checks with logins) and `circuit-release` (deploy-prod only). Separate machines, or at
+  least separate service users, so the circuit runner never holds the production login.
+- Registration token (repo admin; expires after 1 hour):
+  `gh api -X POST repos/acme-org/acme-salesforce/actions/runners/registration-token --jq .token`
+- Download the runner from Settings → Actions → Runners → New self-hosted runner (it shows the current version), then:
+  - Linux / macOS: `./config.sh --url https://github.com/acme-org/acme-salesforce --token <token> --labels circuit`
+    then `sudo ./svc.sh install <service-user> && sudo ./svc.sh start` (macOS: `./svc.sh install && ./svc.sh start`).
+  - Windows (admin shell, folder `C:\actions-runner`): `.\config.cmd --url … --token <token> --labels circuit` and
+    answer **Y** to "run as service"; manage it with `Get-Service "actions.runner.*"`.
+  - `config` cannot add labels to an already registered runner: change them in Settings → Actions → Runners →
+    the runner → Labels.
+- Workflows target `runs-on: [self-hosted, circuit]` / `[self-hosted, circuit-release]` (all listed labels must
+  match). `.github/actionlint.yaml` declares the custom labels for actionlint.
+- Fork safety (GitHub: "self-hosted runners should almost never be used for public repositories"):
+  - keep the repo private and leave "Run workflows from fork pull requests" off;
+  - public repo: "Require approval for all external contributors" (the first-time-contributor options can be bypassed);
+  - every self-hosted job in the circuit also has `if: github.event.pull_request.head.repo.full_name == github.repository`
+    (or the `workflow_run` equivalent), and `guard` (GitHub-hosted, required) fails fork PRs so they never merge.
+- Service-user logins, done once by a person in a terminal on the runner, as that user:
+  | Login | Command | Used by |
+  |---|---|---|
+  | GitHub | `gh auth login` (scopes `repo, read:org`) | team membership in persona-gates / fix-router |
+  | Claude | `claude` (sign in with the Claude Team seat), then `/mcp` → Slack | AI Reviewer, SF AI Tester, slack.sh |
+  | Jira | `acli jira auth login --web` | design-gate, jira.sh comments, AI Reviewer story context |
+  | Salesforce (circuit) | `sf org login web --alias qa` (`sf org login device --alias qa` if headless); also `dev` if useful | qa job |
+  | Salesforce (release) | `sf org login web --alias prod` (HC-5, the person) | deploy-prod |
+- Check: `bash scripts/ci/runner-check.sh --gh --acli --claude --sf qa --not-sf prod` on `circuit`;
+  `gh api repos/acme-org/acme-salesforce/actions/runners --jq '.runners[] | {name, status, labels: [.labels[].name]}'`.
+- Logins expire (org refresh, session policy, password change): re-run the login as the service user. A failed
+  "Runner logins" step is routed by fix-router to a re-run, then `needs-human`.
 
-## Jira
-- Fields: create in Settings → Issues → Custom fields; add each to the Story / Test (Case) screens.
-  Types: Spec file (short text), Feature (short text), Story type (select: foundation, feature), Schema change
-  (select: yes, no), Persona (short text), Test level (select: ui, unit, manual), AC id (short text),
-  Testability confirmed (checkbox or select), Acceptance criteria (paragraph).
-- Rule A "Dispatch AI plan":
-  - Trigger: Work item transitioned to **Ready for Dev**.
-  - Conditions: labels contains `ai-ready`; Testability confirmed is set; Related issues condition "all issues that
-    *block* this one are Done".
-  - Action: Send web request, POST `https://api.github.com/repos/<org>/<repo>/dispatches`, headers
-    `Authorization: Bearer <PAT>` (HC-7, hidden value if available), `Accept: application/vnd.github+json`,
-    `X-GitHub-Api-Version: 2022-11-28`. Body (custom data), **key only**:
-    ```json
-    { "event_type": "jira-ready", "client_payload": { "key": "{{issue.key}}" } }
-    ```
-    CI reads everything else from the repo (`jira-map.json`) and Jira REST, so no free text leaves Jira.
-  - Then: transition to **Plan Review**.
-- Rule B "Status sync" (one rule per row; trigger "Comment added", condition "comment contains", author = bot account):
-  | Comment starts with | Transition to |
-  |---|---|
-  | `AI plan ready for review` | Plan Review |
-  | `Developer approved the AI plan` / `Tester approved the AI test plan` | (no transition; audit only) |
-  | `Build complete` | Code Review |
-  | `AI stopped` | (add label `needs-human`) |
-  | Trigger "Pull request merged" | Done |
-- PAT for Rule A: fine-grained, resource owner = org, this repo only, Contents: Read and write, expiry ≤ 90 days,
-  created on a machine user.
+## Atlassian CLI (acli, B6)
+Docs: developer.atlassian.com/cloud/acli. acli covers **Jira only** (no Confluence commands in the official
+reference); Confluence goes through the Atlassian Rovo MCP server.
+- Install:
+  - Windows: `Invoke-WebRequest -Uri https://acli.atlassian.com/windows/latest/acli_windows_amd64/acli.exe -OutFile acli.exe`
+    (arm64: `acli_windows_arm64`), put it on PATH, `acli --help`.
+  - macOS: `brew tap atlassian/homebrew-acli && brew install acli`.
+  - Linux: apt repo `https://acli.atlassian.com/linux/deb` (key `https://acli.atlassian.com/gpg/public-key.asc`),
+    yum repo `https://acli.atlassian.com/linux/rpm/acli.repo`, or the binary from
+    `https://acli.atlassian.com/linux/latest/acli_linux_amd64/acli`.
+- Each acli version is supported for 6 months: update laptops and runners before then (Reminders in build-state.md).
+- Login: `acli jira auth login --web` (browser OAuth; then pick the site, e.g. acme.atlassian.net, in the terminal).
+  Do **not** use the `--token` form. Check: `acli jira auth status` (its output and signed-out exit code are not
+  documented: VERIFY once and note it in build-state.md).
 
-## Slack
-api.slack.com/apps → Create app "Delivery Gates" → Incoming Webhooks → On → Add New Webhook → pick `#arch-gate`;
-repeat for `#dev-gate`, `#qa-gate`. Each URL goes straight into `gh secret set SLACK_WEBHOOK_ARCH|DEV|QA` in the
-person's terminal.
+## Jira (B6)
+- Groups `architects`, `developers`, `testers` with the same people as the GitHub teams.
+- Fields (Settings → Issues → Custom fields; add each to the Epic / Story / Test screens):
+  *Design page* (URL), *Approved design version* (number), *Acceptance criteria* (paragraph), *Story type*
+  (select: foundation, feature), *Schema change* (select: yes, no), *Persona* (short text), *Test level* (select:
+  ui, unit, manual), *AC id* (short text), *Testability confirmed* (checkbox or select).
+- Epic workflow: Backlog → Design Review → **Approve design** → Design Approved. Restrict the Approve design
+  transition to group `architects` (condition "User is in group") and show *Approved design version* on its screen.
+  If the design is reopened, transition the epic back to Design Review (design-gate then fails every story).
+- Story workflow: Backlog → **Ready for Dev** (condition: group `testers`, *Testability confirmed* set, label
+  `ai-ready`: G2) → In Build → Code Review → QA → Done. Optional automation: on "Pull request merged" → Done.
+- No Jira automation calls GitHub: Developers start stories from the extension. No PAT in any Jira rule.
+- GitHub for Atlassian: Jira → Apps → Explore more apps → "GitHub for Atlassian" → Get app; connect the GitHub org
+  (needs a Jira site admin and a GitHub org owner). Keys in branch names (`feature/ACME-12-…`) and PR titles
+  (`ACME-12 …`) link development info to the work item; use uppercase keys.
 
-## GitHub App token check (throwaway workflow)
-```yaml
-name: verify-bootstrap
-on: workflow_dispatch
-jobs:
-  t:
-    runs-on: ubuntu-latest
-    steps:
-      - id: app
-        uses: actions/create-github-app-token@v2
-        with: { app-id: "${{ secrets.APP_ID }}", private-key: "${{ secrets.APP_PRIVATE_KEY }}" }
-      - env: { GH_TOKEN: "${{ steps.app.outputs.token }}" }
-        run: gh api "repos/$GITHUB_REPOSITORY" --jq .full_name
-      - run: npm i -g @anthropic-ai/claude-code && claude -p "Reply with the single word ok" --max-turns 1
-        env: { CLAUDE_CODE_OAUTH_TOKEN: "${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}" }
-```
+## Confluence, Atlassian MCP, Lucid, Fireflies (B7)
+- Atlassian Rovo MCP: `https://mcp.atlassian.com/v2/mcp` (OAuth 2.1, the user's own permissions). Already in
+  `.claude/personas/*.mcp.json`; or `claude mcp add --transport http atlassian https://mcp.atlassian.com/v2/mcp`.
+  Sign in with `/mcp` in an interactive session (`claude -p` cannot run OAuth). Connectors added on claude.ai also
+  appear in Claude Code. Do not enable API-token auth for the MCP server.
+- Confluence space: Space settings → Content status → add **Approved** as a suggested status. Status changes cannot
+  be limited to a group natively: restrict **edit** of approved design pages to `architects`, and `arch-approve-design`
+  checks the approver from page history.
+- Lucid for Confluence: installed by a Confluence admin; Architects sign in to the Lucid MCP via `/mcp`.
+- Fireflies: `https://api.fireflies.ai/mcp` (Streamable HTTP; OAuth through the claude.ai connector, or
+  `claude mcp add --transport http fireflies https://api.fireflies.ai/mcp` then `/mcp`: VERIFY). No Fireflies API key.
+
+## Slack (B8)
+- Slack MCP: `https://mcp.slack.com/mcp`; use the claude.ai Slack connector (a workspace admin approves it), which
+  appears in Claude Code as an MCP server (default name `claude_ai_Slack`: VERIFY with `claude mcp list`). Each
+  person signs in once; so does the `circuit` runner's service user when `CIRCUIT_SLACK_TRANSPORT=claude`.
+- GitHub app for Slack: `/github subscribe acme-org/acme-salesforce deployments` in `#arch-gate`, pulls and labels in
+  `#dev-gate` (it also serves as the transport when `CIRCUIT_SLACK_TRANSPORT=github-app`).
+- `#review-room`: invite CodeRabbit and Claude; the `review-room` skill posts the kick-off brief through the
+  Developer's Slack MCP.
+- No incoming webhooks, no bot tokens.
+
+## Salesforce (B3)
+- Any connected org can be DEV or QA (sandbox, scratch, Developer Edition, demo org). Each person logs in with their
+  own user: `sf org login web --alias dev`, `sf org login web --alias qa`. No integration user, no External Client
+  App, no JWT certificate.
+- The production org is the one the project names (`salesforce.prod_alias`, also `prod|production|live` and
+  `CIRCUIT_PROD_ALIASES`). Only Architects (manually) and the `circuit-release` runner hold that login; the guard
+  blocks AI sessions from it.

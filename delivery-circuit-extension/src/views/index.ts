@@ -191,7 +191,7 @@ class ViewsController implements vscode.Disposable, vscode.WebviewViewProvider {
         const panel = this.featurePanels.get(surface.id);
         if (!panel) return;
         const data = await this.loadFeature(surface.id);
-        if (data.feature) panel.title = `Feature ${data.feature.slug}`;
+        if (data.feature) panel.title = data.feature.epicKey ? `${data.feature.epicKey} ${data.feature.title}`.slice(0, 60) : `Feature ${data.feature.slug}`;
         await panel.webview.postMessage({ type: "state", data });
       }
     } catch (e) {
@@ -219,8 +219,9 @@ class ViewsController implements vscode.Disposable, vscode.WebviewViewProvider {
     return this.remote;
   }
 
+  /** v3: specs live in Confluence and .specify/specs/ is gitignored, so the guard hook alone marks an installed circuit. */
   private circuitInstalled(): boolean {
-    return fs.existsSync(path.join(this.s.root, ".specify")) && fs.existsSync(path.join(this.s.root, ".claude", "hooks", "circuit-guard.mjs"));
+    return fs.existsSync(path.join(this.s.root, ".claude", "hooks", "circuit-guard.mjs"));
   }
 
   private teams(): Record<string, string> {
@@ -266,7 +267,7 @@ class ViewsController implements vscode.Disposable, vscode.WebviewViewProvider {
     const direct = await this.safe("feature", () => this.s.project.feature(fid), undefined, errs);
     if (direct) return direct;
     const all = await this.safe("features", () => this.s.project.features(), [], errs);
-    return all.find((f) => f.id === fid || f.slug === fid);
+    return all.find((f) => f.id === fid || f.slug === fid || M.featureKey(f) === fid);
   }
 
   private async loadFeature(fid: string): Promise<M.FeatureState> {
@@ -277,18 +278,10 @@ class ViewsController implements vscode.Disposable, vscode.WebviewViewProvider {
       this.safe("pull requests", () => this.s.project.prs(), [], errs),
       id?.personas.includes("architect") ? this.safe("sources", () => this.s.project.sources(), [], errs) : Promise.resolve([] as SourceRef[]),
     ]);
-    const existingFiles: string[] = [];
-    if (feature) {
-      const dir = feature.dir.replace(/\\/g, "/").replace(/\/$/, "");
-      for (const n of ["spec.md", "plan.md", "data-model.md", "jira-map.json"]) {
-        const rel = `${dir}/${n}`;
-        if (fs.existsSync(path.join(this.s.root, rel))) existingFiles.push(rel);
-      }
-    }
     const remote = await this.getRemote();
     return M.buildFeature({
       feature, featureId: fid, identity: id, sources, prs, owner: id?.owner ?? remote?.owner ?? "", repo: id?.repo ?? remote?.repo ?? "",
-      jiraUrl: this.jiraUrl, existingFiles, allowed: this.allowed, now: Date.now(), error: errs.join(" · ") || undefined,
+      jiraUrl: this.jiraUrl, allowed: this.allowed, now: Date.now(), error: errs.join(" · ") || undefined,
     });
   }
 
@@ -364,19 +357,21 @@ class ViewsController implements vscode.Disposable, vscode.WebviewViewProvider {
 
   private async pickArg(a: ActionRef): Promise<string | number | undefined> {
     const kind = a.args?.argKind;
-    const what = kind === "feature" ? "feature" : kind === "pr" ? "pull request" : "source";
+    const what = kind === "feature" ? "feature" : kind === "pr" ? "pull request" : kind === "story" ? "story" : "source";
     const errs: string[] = [];
     let indexed = new Set<string>();
     const data = { features: [] as Feature[], prs: [] as Awaited<ReturnType<CircuitServices["project"]["prs"]>>, sources: [] as SourceRef[] };
-    if (kind === "feature") data.features = await this.safe("features", () => this.s.project.features(), [], errs);
+    if (kind === "feature" || kind === "story") data.features = await this.safe("features", () => this.s.project.features(), [], errs);
     if (kind === "pr") data.prs = await this.safe("pull requests", () => this.s.project.prs(), [], errs);
     if (kind === "source") { const r = await this.loadSources(); data.sources = r.sources; indexed = r.indexed; }
     type Item = vscode.QuickPickItem & { value?: string | number; upload?: boolean };
     const items: Item[] = M.argPickItems(a, data).map((p) => ({ label: p.label, description: p.description, detail: p.detail, value: p.value }));
-    if (kind === "source") items.push({ label: "$(cloud-upload) Upload a transcript file…", detail: "Stored encrypted on this machine, never in git", upload: true });
+    if (kind === "source") items.push({ label: "$(cloud-upload) Add a transcript file…", detail: "txt, md, docx, vtt, srt or pdf; stored encrypted on this machine, never in git", upload: true });
     if (!items.length) {
       void vscode.window.showInformationMessage(errs.length ? `Delivery Circuit: couldn't load ${what}s (${errs[0]}).`
-        : kind === "pr" ? "Delivery Circuit: no open pull requests." : "Delivery Circuit: no features yet. Start with Intake.");
+        : kind === "pr" ? "Delivery Circuit: no open pull requests."
+        : kind === "story" ? "Delivery Circuit: no stories in Jira yet. The Architect pushes them after the design is approved."
+        : "Delivery Circuit: no features yet. Start with Intake.");
       return undefined;
     }
     const pick = await vscode.window.showQuickPick(items, {
@@ -385,7 +380,7 @@ class ViewsController implements vscode.Disposable, vscode.WebviewViewProvider {
     if (!pick) return undefined;
     if (pick.upload) {
       const uris = await vscode.window.showOpenDialog({
-        canSelectMany: false, openLabel: "Use transcript", filters: { Transcripts: ["txt", "md", "vtt", "srt", "json", "docx"] },
+        canSelectMany: false, openLabel: "Use transcript", filters: { Transcripts: ["txt", "md", "docx", "vtt", "srt", "pdf", "json"] },
       });
       if (!uris?.[0]) return undefined;
       const ref = await this.s.project.addUpload(uris[0]);
@@ -402,8 +397,12 @@ class ViewsController implements vscode.Disposable, vscode.WebviewViewProvider {
     const id = this.s.identity.get();
     if (!M.navAllowed(id, target)) return;
     if (target.startsWith("persona:")) { this.openPersona(target.slice(8)); return; }
-    const cmd = { testing: "deliveryCircuit.openTesting", connections: "deliveryCircuit.openConnections", setup: "deliveryCircuit.openSetup" }[target];
-    if (cmd) await this.exec(cmd, target === "setup" ? "Project setup" : target === "testing" ? "Testing" : "Connections");
+    const NAV: Record<string, [string, string]> = {
+      testing: ["deliveryCircuit.openTesting", "Testing"], connections: ["deliveryCircuit.openConnections", "Connections"],
+      setup: ["deliveryCircuit.openSetup", "Project setup"], sources: ["deliveryCircuit.openSources", "Sources"],
+    };
+    const nav = NAV[target];
+    if (nav) await this.exec(nav[0], nav[1]);
   }
 
   private async exec(cmd: string, label: string): Promise<boolean> {

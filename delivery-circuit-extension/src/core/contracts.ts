@@ -42,13 +42,15 @@ export interface IdentityService {
 }
 
 // ---------- connections ----------
+/** v3: every connection is a login (docs/CIRCUIT-V3.md section 1); none of them holds a stored token. */
 export type ConnectionId =
-  | "github" | "claude" | "sf-dev" | "sf-qa" | "jira" | "confluence" | "slack"
-  | "fireflies" | "lucid" | "testing-browsers"
+  | "github" | "claude" | "sf-dev" | "sf-qa" | "acli" | "slack" | "lucid" | "testing-browsers"
   // review tools
   | "coderabbit" | "code-analyzer" | "ai-reviewer"
   // vendor MCP servers that Claude uses (sign-in happens in Claude Code's /mcp)
-  | "mcp-atlassian" | "mcp-github" | "mcp-salesforce" | "mcp-slack" | "mcp-lucid" | "mcp-fireflies";
+  | "mcp-atlassian" | "mcp-github" | "mcp-salesforce" | "mcp-slack" | "mcp-lucid" | "mcp-fireflies"
+  // project rows: the self-hosted runner and the GitHub for Jira app
+  | "runner" | "github-jira";
 
 export type ConnectionState = "connected" | "disconnected" | "expiring" | "error" | "checking" | "unknown";
 export type ConnectionScope = "personal" | "project";
@@ -69,8 +71,6 @@ export interface ConnectionStatus {
   manageUrl?: string;
 }
 
-export interface JiraCredentials { site: string; email: string; token: string }
-
 export interface SfOrgGuard {
   alias: string;
   instanceUrl?: string;
@@ -82,14 +82,12 @@ export interface SfOrgGuard {
 export interface ConnectionsService {
   list(): Promise<ConnectionStatus[]>;
   check(id: ConnectionId): Promise<ConnectionStatus>;
-  /** Interactive connect flow (sign-in, token prompt, sf org login web, ...). */
+  /** Interactive connect flow (sign-in, acli web login, sf org login web, /mcp, ...). Never prompts for a token. */
   connect(id: ConnectionId): Promise<ConnectionStatus>;
   disconnect(id: ConnectionId): Promise<void>;
   onDidChange: vscode.Event<void>;
   /** GitHub session token (VS Code auth provider). Throws if not signed in. */
   githubToken(): Promise<string>;
-  jira(): Promise<JiraCredentials | undefined>;
-  firefliesKey(): Promise<string | undefined>;
   /** sf CLI alias for an org role, e.g. "dev" / "qa". */
   sfAlias(role: "dev" | "qa"): string;
   /** Resolves the role's alias with the sf CLI and decides whether AI may work in that org (browser agent, org
@@ -99,32 +97,17 @@ export interface ConnectionsService {
   githubRequest<T = any>(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<T>;
   /** GitHub GraphQL call as the signed-in person. */
   githubGraphql<T = any>(query: string, variables?: Record<string, unknown>): Promise<T>;
-  /** Names of the repo's Actions secrets (values are never readable). */
+  /** Names of the repo's Actions secrets (values are never readable). v3 stores none; setup uses this only to find
+   *  leftover v2 credentials so an admin can delete them. */
   repoSecretNames(): Promise<string[]>;
-  /** Encrypt (libsodium sealed box, repo public key) and store an Actions secret; env = environment name for env secrets. */
-  setRepoSecret(name: string, value: string, env?: string): Promise<void>;
-  /** Secrets the circuit's workflows need (CI secrets, Slack webhooks, environment secrets) and whether each exists.
-   *  present is undefined when the person can't list secrets (needs repo admin). */
-  projectSecrets(): Promise<ProjectSecret[]>;
 }
 
-export interface ProjectSecret {
-  name: string;
-  /** "ci" | "webhook" | ... (what the secret is for) */
-  kind: string;
-  present?: boolean;
-  /** GitHub environment, for environment secrets */
-  env?: string;
-  /** True when a build-state.md reminder says it expires within 30 days */
-  expiring?: boolean;
-}
-
-// ---------- project context (Spec Kit, GitHub, Jira, sources) ----------
+// ---------- project context (Jira, Confluence, GitHub, sources) ----------
 export type GateId = "G1" | "G2" | "G3" | "G4" | "G5" | "G6" | "G7" | "G8" | "G9";
 export type GateState = "done" | "waiting" | "blocked" | "not-started";
 
 export const GATES: Record<GateId, { owner: Persona; label: string }> = {
-  G1: { owner: "architect", label: "Plan signed off" },
+  G1: { owner: "architect", label: "Design approved" },
   G2: { owner: "tester", label: "Testability confirmed (ai-ready)" },
   G3: { owner: "developer", label: "AI plan approved" },
   G4: { owner: "tester", label: "AI test plan approved" },
@@ -135,7 +118,8 @@ export const GATES: Record<GateId, { owner: Persona; label: string }> = {
   G9: { owner: "architect", label: "Production approval" },
 };
 
-/** Spec Kit lifecycle stages, read from .specify/specs/NNN-slug/ */
+/** Feature lifecycle stages, derived from the Confluence design page (intake..signoff), Jira (stories, tests; "jira" =
+ *  testability) and GitHub (build, qa, release). Nothing is read from .specify/specs (gitignored local drafts). */
 export type StageId = "intake" | "clarify" | "plan" | "signoff" | "stories" | "tests" | "jira" | "build" | "qa" | "release";
 export type StageState = "done" | "active" | "todo" | "blocked";
 
@@ -146,6 +130,8 @@ export interface DeepLink {
   target: string;
 }
 
+export type SourceOrigin = "paste" | "file" | "fireflies" | "fireflies-export" | "wispr-flow" | "watch-folder";
+
 export interface SourceRef {
   /** "fireflies:<meetingId>" or "upload:<sha256-12>" */
   id: string;
@@ -153,33 +139,76 @@ export interface SourceRef {
   title: string;
   /** ISO date of the call or upload */
   date: string;
-  /** Feature ids whose spec cites this source */
+  /** How the Architect added it (Sources page). */
+  origin?: SourceOrigin;
+  /** Feature ids whose design page cites this source */
   usedBy?: string[];
 }
 
 export interface TestCaseRef { id: string; level: "ui" | "unit" | "manual"; ac?: string; jiraKey?: string }
 
+/** C5: the story's Approved design version compared with the design page's current approved version. */
+export type DesignSync = "ok" | "changed" | "missing" | "ahead" | "unknown";
+export type DesignApprovalState = "approved" | "changed" | "draft" | "unverified-approver" | "missing" | "unknown";
+
+/** A Jira story of a feature epic. */
 export interface Story {
   num: string;               // "00", "01", ...
   title: string;
-  file: string;              // workspace-relative path of task_story_NN.md
   jiraKey?: string;
   testCases: TestCaseRef[];
   prNumber?: number;
+  status?: string;
+  /** Jira status category key: "new" | "indeterminate" | "done" */
+  statusCategory?: string;
+  labels: string[];
+  acceptanceCriteria?: string;
+  /** Jira field *Approved design version* */
+  approvedDesignVersion?: number;
+  /** Jira field *Testability confirmed* (G2 together with label ai-ready) */
+  testabilityConfirmed?: boolean;
+  designSync: DesignSync;
+  /** keys of issues that block this story (Jira "is blocked by") */
+  blockedBy: string[];
+  url?: string;
 }
 
+/** G1: a feature's Confluence design page and its approval. */
+export interface FeatureDesign {
+  pageId: string;
+  url?: string;
+  title?: string;
+  status?: string;
+  version?: number;
+  approval: {
+    state: DesignApprovalState;
+    approvedVersion?: number;
+    approvedBy?: string;
+    /** true = a configured architect; false = not one; undefined = cannot tell */
+    approverIsArchitect?: boolean;
+    changedSinceApproval: boolean;
+    detail: string;
+  };
+  orgSnapshotUrl?: string;
+  readAt?: string;
+  error?: string;
+}
+
+/** A Jira epic with its Confluence design page, or a design page (label circuit-design) that has no epic yet. */
 export interface Feature {
-  id: string;                // "001"
-  slug: string;              // "001-case-escalation"
+  /** the epic key ("ACME-10"), or "page-<confluencePageId>" for a design page without an epic */
+  id: string;
+  slug: string;
   title: string;
-  dir: string;               // workspace-relative
+  epicKey?: string;
+  design?: FeatureDesign;
   stages: Record<StageId, StageState>;
   gates: Partial<Record<GateId, GateState>>;
   openQuestions: number;
   signedOff: boolean;
   stories: Story[];
-  sources: string[];         // SourceRef ids cited by the spec
-  score?: number;            // speckit-sf-score, if present
+  sources: string[];         // SourceRef ids cited by the design page
+  score?: number;
   links: DeepLink[];
 }
 
@@ -203,7 +232,7 @@ export interface PrRef {
   draft: boolean;
   author: string;
   labels: string[];
-  /** commit statuses and check runs by name: guard, static, qa, spec-gate, gate/developer, ... */
+  /** commit statuses and check runs by name: guard, static, qa, design-gate, gate/developer, ... */
   checks: Record<string, CheckState>;
   reviews: ReviewSignal[];
   storyKey?: string;         // Jira key from branch feature/ABC-12-...
@@ -212,6 +241,8 @@ export interface PrRef {
   updatedAt: string;
   state?: "open" | "merged" | "closed";
   mergedAt?: string;
+  /** paths changed by the PR (first 100), e.g. to tell whether tests/<KEY>.tc.json is on it */
+  files?: string[];
 }
 
 export interface QueueItem {
@@ -219,7 +250,9 @@ export interface QueueItem {
   persona: Persona;
   gate?: GateId;
   kind: "sign-off" | "clarify" | "review-stories" | "design-tests" | "testability" | "approve-plan" | "approve-testplan"
-    | "review-pr" | "qa-pr" | "needs-human" | "needs-qa" | "merge" | "deploy-approval" | "connect";
+    | "review-pr" | "qa-pr" | "needs-human" | "needs-qa" | "merge" | "deploy-approval" | "connect"
+    // v3
+    | "create-stories" | "design-changed" | "start-story" | "add-tests" | "fix" | "review-room" | "record-verdict";
   title: string;
   detail?: string;
   featureId?: string;
@@ -236,17 +269,25 @@ export interface ProjectContextService {
   prs(): Promise<PrRef[]>;
   /** Everything waiting on this persona now. */
   queue(id: Identity, persona: Persona): Promise<QueueItem[]>;
-  /** jira-map.json (refs -> keys) of a feature */
-  jiraMap(featureId: string): Promise<Record<string, string>>;
   jiraBrowseUrl(key: string): string | undefined;
+  /** Design page of a feature: status, versions, G1 approval (Circuit MCP design_get). */
+  design(featureId: string): Promise<unknown>;
+  /** Decisions section of the design page (C1, Circuit MCP decisions_get). */
+  decisions(featureId: string): Promise<unknown>;
+  /** "Org snapshot" child page of the design page (C4, Circuit MCP org_snapshot_get). */
+  orgSnapshot(featureId: string): Promise<unknown>;
+  /** One Jira story with ACs, versions, test cases and PR (Circuit MCP story_get). */
+  story(key: string): Promise<unknown>;
   sources(): Promise<SourceRef[]>;
-  /** Recent Fireflies meetings (not necessarily indexed yet). Empty when Fireflies isn't connected. */
+  /** Recent Fireflies meetings, read through the person's Fireflies MCP login. Empty when it isn't signed in. */
   firefliesRecent(limit?: number): Promise<SourceRef[]>;
-  /** Add a Fireflies meeting to .circuit/sources.json (metadata only). */
-  indexFireflies(meetingId: string): Promise<SourceRef>;
+  /** Add a Fireflies meeting to .circuit/sources.json (metadata only). meta avoids a second Fireflies read. */
+  indexFireflies(meetingId: string, meta?: { title: string; date: string }): Promise<SourceRef>;
   /** Store an uploaded transcript outside git (encrypted, local) and index it. */
   addUpload(fileUri: vscode.Uri, title?: string): Promise<SourceRef>;
-  /** Full transcript text. Callers must enforce persona (Architect only). */
+  /** Store pasted or dictated text (or text from a PDF / Wispr Flow) encrypted with no temp file, and index it. */
+  addText(text: string, opts: { title: string; origin: SourceOrigin; date?: string }): Promise<SourceRef>;
+  /** Text of an upload; for Fireflies a pointer to read it at the source. Callers enforce Architect only. */
   transcript(sourceId: string): Promise<string>;
   refresh(): Promise<void>;
   onDidChange: vscode.Event<void>;
@@ -303,8 +344,12 @@ export interface TestingService {
 // ---------- actions and sessions ----------
 export interface ActionRef {
   /** Grammar (src/actions/grammar.ts): "ai:<skill command>" (e.g. "ai:/dev-review-plan"), "gate:label" or
-   *  "gate:label:<label>", "gate:review", "gate:merge", "gate:signoff", "gate:deploy", "nav:feature", "nav:testing",
-   *  "nav:connections". */
+   *  "gate:label:<label>", "gate:review", "gate:merge", "gate:deploy", "nav:feature", "nav:testing",
+   *  "nav:connections", and the v3 named actions:
+   *  dev:start-story {storyKey, featureId?, pr?, phase?: "build"}, qa:add-tests {storyKey, pr?},
+   *  dev:fix {pr, checks?, attempt?, failure?}, review:open-room {pr}, review:record-verdict {pr},
+   *  decision:record {featureId, text?}, arch:approve-design {featureId | pageId | url} (opens the Confluence page;
+   *  G1 is a human status change, never AI). AI-run named actions may also carry {command, arg}. */
   id: string;
   label: string;
   persona: Persona;

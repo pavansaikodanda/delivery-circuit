@@ -53,11 +53,14 @@ export function sanitizePersona(x: unknown): Persona | undefined {
   return typeof x === "string" && PERSONAS.includes(x as Persona) ? (x as Persona) : undefined;
 }
 
-/** Feature ids are "001" or slugs "001-case-escalation". */
+/** Feature ids: a Jira epic key "ACME-12" or its slug "ACME-12-case-escalation" (v3), a design page that has no epic
+ *  yet "page-2240011", or a Spec Kit id "001" / slug "001-case-escalation". */
 export function sanitizeFeatureId(x: unknown): string | undefined {
-  return typeof x === "string" && /^\d{3}(-[\w-]{1,80})?$/.test(x) ? x : undefined;
+  if (typeof x !== "string") return undefined;
+  return /^[A-Z][A-Z0-9_]{0,19}-\d{1,9}(-[\w-]{1,80})?$/.test(x) || /^page-\d{1,20}$/.test(x) || /^\d{3}(-[\w-]{1,80})?$/.test(x) ? x : undefined;
 }
 
+/** Source ids: "fireflies:<id>", "upload:<sha>", and the v3 local kinds "paste:", "file:", "wispr:". */
 export function sanitizeSourceId(x: unknown): string | undefined {
-  return typeof x === "string" && /^(fireflies|upload):[\w-]{1,100}$/.test(x) ? x : undefined;
+  return typeof x === "string" && /^(fireflies|upload|paste|file|wispr):[\w-]{1,100}$/.test(x) ? x : undefined;
 }

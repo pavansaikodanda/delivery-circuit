@@ -1,0 +1,67 @@
+{
+  "issues": [
+    {
+      "key": "ABC-10",
+      "fields": {
+        "summary": "Feature: Case escalation",
+        "issuetype": {
+          "name": "Epic"
+        },
+        "status": {
+          "name": "In Progress",
+          "statusCategory": {
+            "key": "indeterminate"
+          }
+        },
+        "labels": [
+          "circuit"
+        ],
+        "description": {
+          "type": "doc",
+          "version": 1,
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Design page:"
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "inlineCard",
+                  "attrs": {
+                    "url": "https://acme.atlassian.net/wiki/spaces/SD/pages/123456/Case+escalation"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "updated": "2026-11-10T10:00:00.000+0000"
+      }
+    },
+    {
+      "key": "ABC-20",
+      "fields": {
+        "summary": "Partner onboarding",
+        "issuetype": {
+          "name": "Epic"
+        },
+        "status": {
+          "name": "To Do",
+          "statusCategory": {
+            "key": "new"
+          }
+        },
+        "labels": [],
+        "customfield_10050": "https://acme.atlassian.net/wiki/spaces/SD/pages/222222/Partner+onboarding",
+        "updated": "2026-11-09T10:00:00.000+0000"
+      }
+    }
+  ]
+}

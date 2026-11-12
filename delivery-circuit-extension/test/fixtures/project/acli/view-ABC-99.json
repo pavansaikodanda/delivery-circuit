@@ -1,0 +1,19 @@
+{
+  "key": "ABC-99",
+  "fields": {
+    "summary": "Loose task",
+    "issuetype": {
+      "name": "Task"
+    },
+    "status": {
+      "name": "Done",
+      "statusCategory": {
+        "key": "done"
+      }
+    },
+    "labels": [
+      "misc"
+    ],
+    "description": "Not under an epic"
+  }
+}

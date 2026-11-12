@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import type { Identity, QueueItem } from "../../src/core/contracts";
 import * as M from "../../src/views/model";
 import {
-  ARCHITECT, CONNECTIONS, DEVELOPER, EXISTING_FILES, FEATURES, NOW, OWNER, PRS, QUEUE, REPO, SOURCES, TEAMS, TESTER, allowedFor, jiraUrl,
+  ARCHITECT, CONNECTIONS, DEVELOPER, FEATURES, NOW, OWNER, PRS, QUEUE, REPO, SOURCES, TEAMS, TESTER, allowedFor, jiraUrl,
 } from "../fixtures/views/sample";
 
 const dir = path.resolve(__dirname, "../../preview/fixtures");
@@ -20,6 +20,10 @@ function home(id: Identity | null, over: Partial<M.HomeInput> = {}) {
 }
 const persona = (id: Identity, requested?: Identity["active"]) => M.buildPersona({
   identity: id, requested, queue: QUEUE, features: FEATURES, prs: PRS, allowed: allowedFor(id), jiraUrl, now: NOW,
+});
+const feature = (id: Identity, n: number) => M.buildFeature({
+  feature: FEATURES[n], featureId: FEATURES[n].id, identity: id, sources: SOURCES, prs: PRS, owner: OWNER, repo: REPO,
+  jiraUrl, allowed: allowedFor(id), now: NOW,
 });
 
 /** The item buildQueue adds when GitHub can't be read: a notice with a way to fix it, not waiting work. */
@@ -40,21 +44,14 @@ const FIXTURES: Record<string, unknown> = {
   "views.persona.architect": persona(ARCHITECT, "developer"),
   "views.persona.developer": persona(DEVELOPER),
   "views.persona.tester": persona(TESTER),
-  "views.feature.default": M.buildFeature({
-    feature: FEATURES[0], featureId: "001", identity: ARCHITECT, sources: SOURCES, prs: PRS, owner: OWNER, repo: REPO,
-    jiraUrl, existingFiles: EXISTING_FILES, allowed: allowedFor(ARCHITECT), now: NOW,
-  }),
-  "views.feature.developer": M.buildFeature({
-    feature: FEATURES[0], featureId: "001", identity: DEVELOPER, sources: SOURCES, prs: PRS, owner: OWNER, repo: REPO,
-    jiraUrl, existingFiles: EXISTING_FILES, allowed: allowedFor(DEVELOPER), now: NOW,
-  }),
-  "views.feature.clarify": M.buildFeature({
-    feature: FEATURES[1], featureId: "002", identity: ARCHITECT, sources: SOURCES, prs: PRS, owner: OWNER, repo: REPO,
-    jiraUrl, existingFiles: [], allowed: allowedFor(ARCHITECT), now: NOW,
-  }),
+  "views.feature.default": feature(ARCHITECT, 0),
+  "views.feature.developer": feature(DEVELOPER, 0),
+  "views.feature.tester": feature(TESTER, 0),
+  "views.feature.clarify": feature(ARCHITECT, 1),
+  "views.feature.changed": feature(DEVELOPER, 2),
   "views.feature.missing": M.buildFeature({
-    feature: undefined, featureId: "009", identity: DEVELOPER, sources: [], prs: [], owner: OWNER, repo: REPO,
-    jiraUrl, existingFiles: [], allowed: allowedFor(DEVELOPER), now: NOW,
+    feature: undefined, featureId: "ACME-99", identity: DEVELOPER, sources: [], prs: [], owner: OWNER, repo: REPO,
+    jiraUrl, allowed: allowedFor(DEVELOPER), now: NOW,
   }),
 };
 

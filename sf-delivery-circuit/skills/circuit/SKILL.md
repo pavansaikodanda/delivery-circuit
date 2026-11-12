@@ -1,98 +1,142 @@
 ---
 name: circuit
-description: Map, conventions and status of the AI + Human Salesforce delivery circuit (transcript → spec → Jira → tests → code → deploy, gates G1-G9, Architect/Developer/Tester personas). Use to find which skill and persona handles a task, to check where a feature or Jira story is in the circuit, or when another circuit skill refers to "circuit conventions".
+description: Map, conventions and status of the AI + Human Salesforce delivery circuit v3 (source → Confluence design page → Jira epic/stories/test cases → Developer-started draft PR → checks → Slack review room → gates G1-G9 → release), with Architect/Developer/Tester personas. Use to find which skill and persona handles a task, to check where a feature or Jira story is, or when another circuit skill refers to "circuit conventions".
 ---
 
-# Delivery circuit: map, conventions, status
+# Delivery circuit v3: map, conventions, status
 
-## The circuit
+Contract: `docs/CIRCUIT-V3.md` in the circuit repo. Principles: connections are logins (no stored credentials); the
+repo holds code and tests only (design in Confluence, work in Jira); people keep creative control (AI drafts, people
+decide; Architects never create PRs; Developers start stories and own their PRs); only the org the project names as
+production is off limits; everything shared is written down in Confluence, Jira, the PR or Slack.
+
+## The flow
 
 ```
-transcript ─▶ circuit-intake ─▶ spec.md + clarification ─▶ arch-design ─▶ plan.md ──[G1 Architect signs plan]
-   ─▶ /speckit-sf-stories + /speckit-sf-review ─▶ dev-review-stories ─▶ qa-design-tests ─▶ spec PR merged
-   ─▶ arch-jira-push ─▶ qa-push-tests ──[G2 Tester: testability + ai-ready]
-   ─▶ CI claude-plan: PLAN.md + TESTPLAN.md ──[G3 Developer: plan-approved] [G4 Tester: testplan-approved]
-   ─▶ CI claude-build ─▶ pr-checks + CodeRabbit + Reviewer ─▶ ai-fix-loop (max 3)
-   ──[G5 Developer code review] [G6 Tester QA: qa-explore] [G7 Architect schema: arch-review-pr]
-   ──[G8 Architect merges] ─▶ deploy-prod.yml (no AI) ──[G9 Architect approves production environment]
+source (paste / file / Fireflies / Wispr Flow, in the extension) ─▶ circuit-intake ─▶ Confluence design page
+  ─▶ arch-design (+ record-decision) ─▶ [G1 an architect sets the page Approved; epic gets Approved design version]
+  ─▶ arch-jira-push (epic, Story 00 first, stories with Approved design version) ─▶ dev-review-stories (Jira comments)
+  ─▶ qa-design-tests ─▶ qa-push-tests ─▶ [G2 Tester: Testability confirmed + ai-ready]
+  ─▶ dev-start-story: PLAN.md + TESTPLAN.md, branch feature/<KEY>-<slug>, DRAFT PR "<KEY> …"
+  ─▶ qa-add-tests: tests/<KEY>.tc.json + test-cases/<KEY>.sf-tests.yaml committed to the PR by the Tester
+  ─▶ [G3 Developer: plan-approved] [G4 Tester: testplan-approved] ─▶ build (dev-start-story build)
+  ─▶ checks: GitHub-hosted (guard, lint, Jest, TC coverage, design-gate) + self-hosted runner (QA deploy, Apex,
+     SF AI Tester, AI Reviewer, Code Analyzer) ─▶ dev-fix (max 3 AI attempts, then needs-human; UI blocks → needs-qa)
+  ─▶ review-room open (Slack #review-room: CodeRabbit + Claude Tag) ─▶ review-room verdict (PR comment)
+  ─▶ [G5 dev-review-pr] [G6 qa-explore] [G7 arch-review-pr] ─▶ [G8 architects merge] ─▶ deploy-prod (no AI) [G9]
 ```
 
-| Gate | Owner | Evidence | Mechanism |
+| Gate | Owner | Source of truth | Mechanism |
 |---|---|---|---|
-| G1 | Architect | `plan.md` Architect Sign-Off ticked by a human | `spec-gate` check + architect review |
-| G2 | Tester | Jira "Testability confirmed" + label `ai-ready` | Jira transition restricted to `testers` |
-| G3 | Developer | label `plan-approved` | `persona-gates` checks team, removes it otherwise |
-| G4 | Tester | label `testplan-approved` | same |
-| G5 | Developer | PR approval by `developers` member | status `gate/developer` |
-| G6 | Tester | PR approval by `testers` member after `qa-explore` | status `gate/tester` |
-| G7 | Architect | PR approval by `architects` member after `arch-review-pr` | status `gate/architect` |
-| G8 | Architect | merge (ruleset: only `architects` can merge) | ruleset |
+| G1 | Architect | design page status Approved by an `architects` member + version on the epic | `design-gate` check (C5) |
+| G2 | Tester | Jira *Testability confirmed* + label `ai-ready` | Jira transition restricted to testers |
+| G3 | Developer | PR label `plan-approved` added by a `developers` member | `persona-gates` |
+| G4 | Tester | PR label `testplan-approved` added by a `testers` member | `persona-gates` |
+| G5 / G6 / G7 | Developer / Tester / Architect | approving reviews → statuses `gate/developer`, `gate/tester`, `gate/architect` | `persona-gates` |
+| G8 | Architect | merge | ruleset: architects only |
 | G9 | Architect | `production` environment approval | environment reviewers |
+
+**C5 (re-sign on change):** if the epic's approved version is newer than the story's *Approved design version*, the
+check fails with "Design changed since this story was planned: re-plan or re-approve".
 
 ## Which skill for which task
 
-| Persona (`cc-arch` / `cc-dev` / `cc-qa`) | Task | Skill |
+| Persona | Task | Skill |
 |---|---|---|
 | any | install the circuit into a repo | `circuit-bootstrap` |
-| Architect | transcript to draft spec | `circuit-intake` |
-| Architect | answer open questions, plan, Lucid + Confluence | `arch-design` |
-| Architect | push stories to Jira | `arch-jira-push` |
+| Architect | source → draft spec → Confluence design page | `circuit-intake` |
+| Architect | clarify, plan, data model, org snapshot, Lucid diagram | `arch-design` |
+| Architect (human) | approve the design (G1) | `arch-approve-design` |
+| Architect | epic + stories to Jira | `arch-jira-push` |
 | Architect | schema/design review of a PR (G7) | `arch-review-pr` |
-| Developer | review stories before Jira | `dev-review-stories` |
-| Developer | review AI plan (G3) | `dev-review-plan` |
-| Developer | review AI code (G5) | `dev-review-pr` |
-| Tester | design test cases | `qa-design-tests` |
-| Tester | push test cases to Jira | `qa-push-tests` |
-| Tester | review AI test plan (G4) | `qa-review-testplan` |
-| Tester | run, explore and triage on QA (G6) | `qa-explore` |
+| any | record a decision on the design page (C1) | `record-decision` |
+| Developer | review stories (Jira comments) | `dev-review-stories` |
+| Developer | start a story: plan, branch, draft PR; later build | `dev-start-story` |
+| Developer | review the plan (G3) | `dev-review-plan` |
+| Developer | fix failed checks | `dev-fix` |
+| Developer | open the Slack review room / record its verdict | `review-room` |
+| Developer | code review (G5) | `dev-review-pr` |
+| Tester | design test cases, draft the suite | `qa-design-tests` |
+| Tester | test cases to Jira, prepare G2 | `qa-push-tests` |
+| Tester | commit suite + tc index to the story PR | `qa-add-tests` |
+| Tester | review the test plan (G4) | `qa-review-testplan` |
+| Tester | run, explore, triage on QA (G6) | `qa-explore` |
 
-Spec Kit commands (`/speckit-sf-*`) are installed per repo by `circuit-bootstrap`. `deploy`, `hotfix` and `pr` are
-disabled by the circuit guard: CI opens PRs, and only `deploy-prod.yml` deploys to production.
+`/speckit-sf-*` commands are the Architect's local drafting scaffold. `deploy`, `hotfix` and `pr` are disabled by the
+circuit guard.
 
-## Conventions (all circuit skills rely on these)
+## Connections (logins only)
+
+| Service | Claude sessions | Scripts / extension / runner |
+|---|---|---|
+| GitHub | `gh` CLI (person's login) | `gh`, VS Code GitHub sign-in |
+| Salesforce | `sf` CLI (`dev`, `qa`) | `sf` CLI; the runner's login for QA and the named production org |
+| Jira | Atlassian Remote MCP (`https://mcp.atlassian.com/v2/mcp`, OAuth) | `acli jira auth login --web` (Jira only) |
+| Confluence | Atlassian Remote MCP (Content tools) | Atlassian MCP through Claude; `acli` has no Confluence commands |
+| Lucid / Fireflies / Slack | their MCP servers (OAuth in `/mcp` or claude.ai connectors) | the extension asks Claude |
+| Circuit | Circuit MCP (`circuit`), added by the extension per session | — |
+
+Never ask for, store, print or commit a token. If a login is missing, name it and stop.
+
+Circuit MCP tools (when the session comes from the extension): `circuit_status`, `queue_get`, `prs_list`, `pr_get`,
+`test_results_get`, `sources_list` + `transcript_get` (Architect), `design_get` (design page at its approved version),
+`decisions_get`, `story_get` (Jira story with ACs and test cases), `org_snapshot_get`. If one is missing, use the
+Atlassian MCP or `acli` for the same read.
+
+## Conventions
 
 | Thing | Location / format |
 |---|---|
-| Feature folder | `.specify/specs/NNN-slug/` (spec.md, clarification report, plan.md, data-model.md, `task_story_NN.md`) |
-| Test-case index | `.specify/specs/NNN-slug/tests/story_NN.tc.json` (schema below) |
-| UI test suite | `test-cases/NNN-slug-story-NN.sf-tests.yaml` (SF AI Tester format; case id = TC id) |
-| Jira mapping | `.specify/specs/NNN-slug/jira-map.json` `{ "refs": { "epic": "ABC-1", "00": "ABC-2", "02": "ABC-4", "S02-TC-01": "ABC-31" } }` (written only by `jira-sync.mjs`) |
-| Per-story build docs | `docs/plans/<KEY>/PLAN.md`, `TESTPLAN.md`, `verification-evidence.md` |
-| Branches | `intake/<slug>`, `spec/NNN-slug`, `feature/<KEY>-<slug>` |
-| TC id | `S<story>-TC-<nn>`, e.g. `S02-TC-03`. Unit tests reference it in a comment: `// TC: S02-TC-03` |
-| Labels | `sdd`, `needs-clarification`, `plan-review`, `plan-approved`, `testplan-approved`, `ai-generated`, `ai-attempt-1..3`, `needs-human`, `needs-qa` |
-| Org aliases | `dev` (DEV sandbox, check-only deploys), `qa` (QA sandbox). No production alias exists on any laptop. |
+| Feature id | `NNN-slug` (3 digits), e.g. `001-shipping-rates`; used in page titles, labels, `cref-` labels |
+| Local Spec Kit drafts | `.specify/specs/NNN-slug/` (gitignored; never committed) |
+| Design page | Confluence page "Design: NNN Feature name" in `confluence.space_key`, labels `circuit-design`, `feature-NNN` |
+| Design page sections | Summary · Sources · Requirements (user stories, Given/When/Then) · Open questions · **Decisions** · Technical plan · Data model · Security model · Diagram · Risks |
+| Decisions (C1) | table on the design page: Date · Decision · Who · Why · Source |
+| Org snapshot (C4) | child page "Org snapshot: NNN slug": objects, fields, flows, permission sets the feature touches |
+| Approved version | epic field *Approved design version* (set by an architect in Jira, G1); story field of the same name (the version it was planned against, set by `arch-jira-push`) |
+| Epic / stories | summaries `[NNN] Feature`, `[NNN-S00] Foundation …`, `[NNN-S02] …`; labels `circuit`, `feature-NNN`, `cref-NNN-<ref>`; Story 00 **blocks** the others |
+| Story fields | *Design page*, *Approved design version*, *Acceptance criteria*, *Story type*, *Schema change*, *Testability confirmed* |
+| Test case id | `<KEY>-TC-<nn>`, e.g. `ACME-12-TC-03`; unit tests reference it: `// TC: ACME-12-TC-03` |
+| Test cases in Jira | per `jira.test_tool`: sub-task "Test Case" (none) or "Test" issues linked "Tests" (xray/zephyr) |
+| Runnable tests (story PR) | `tests/<KEY>.tc.json` + `test-cases/<KEY>.sf-tests.yaml` (Tester commits) |
+| Story plan (story PR) | `docs/plans/<KEY>/PLAN.md`, `TESTPLAN.md`, `verification-evidence.md` (Developer) |
+| Branch / PR | `feature/<KEY>-<slug>`; draft PR titled `<KEY> <summary>`; GitHub for Jira links it to the story |
+| Labels (PR) | `plan-approved`, `testplan-approved`, `ai-generated`, `ai-attempt-1..3`, `needs-human`, `needs-qa` |
+| Org aliases | `dev` (check-only deploys, read queries), `qa` (QA org); any org type; the named production org is off limits |
+| Slack | `#review-room` (review rooms), persona channels from `build.config.yml` |
 
-Test-case index schema:
+`tests/<KEY>.tc.json`:
 
 ```json
 {
-  "feature": "001-case-escalation",
-  "story": "02",
+  "story": "ACME-12",
+  "feature": "001-shipping-rates",
+  "designVersion": 7,
   "cases": [
-    { "id": "S02-TC-01", "ac": "AC-02.1", "title": "Agent escalates a Case with a reason",
-      "level": "ui", "persona": "Support Agent", "type": "positive", "automated": true },
-    { "id": "S02-TC-02", "ac": "AC-02.1", "title": "Escalation handler bulk-updates 201 Cases",
-      "level": "unit", "persona": "System", "type": "boundary", "automated": true },
-    { "id": "S02-TC-03", "ac": "AC-02.2", "title": "Read-only user cannot see Escalate",
-      "level": "manual", "persona": "Read Only", "type": "negative", "automated": false }
+    { "id": "ACME-12-TC-01", "ac": "AC-1", "title": "Agent sees the Acme Shipping rate on an Order",
+      "level": "ui", "persona": "Support Agent", "type": "positive", "automated": true, "jira": "ACME-31" },
+    { "id": "ACME-12-TC-02", "ac": "AC-1", "title": "Rate handler bulk-updates 201 Orders",
+      "level": "unit", "persona": "System", "type": "boundary", "automated": true, "jira": "ACME-32" },
+    { "id": "ACME-12-TC-03", "ac": "AC-2", "title": "Read-only user cannot edit the rate",
+      "level": "manual", "persona": "Read Only", "type": "negative", "automated": false, "jira": "ACME-33" }
   ]
 }
 ```
 
-`level`: `ui` (a case with the same id exists in the SF AI Tester suite), `unit` (an Apex or Jest test names the id),
-`manual` (a step-by-step script in `task_story_NN_test_scripts.md` from `/speckit-sf-qa`).
+`level`: `ui` (a case with the same id is in the SF AI Tester suite), `unit` (an Apex or Jest test names the id),
+`manual` (steps in the Jira test case). Checks: `node scripts/ci/check-tc-coverage.mjs --key <KEY> --design|--testplan|--code`.
 
 ## Status of a feature or story
 
-When asked "where is X?", report each line as done / pending / blocked with evidence:
+When asked "where is X?", report each line as done / pending / blocked with evidence (links, keys, versions):
 
-1. Spec folder exists; clarification report has no `OPEN` items.
-2. `plan.md` sign-off ticked (G1). Check `git log -p -- <plan.md>` for who ticked it.
-3. Stories exist, including `task_story_00.md`; `/speckit-sf-review` report present.
-4. Each story has a `tests/story_NN.tc.json` and, if it has `ui` cases, a suite in `test-cases/`.
-5. `jira-map.json` has keys for the epic, every story and every test case.
-6. For a Jira key: `gh pr list --search "<KEY> in:title" --state all --json number,title,labels,isDraft,statusCheckRollup`
-   and report labels (G3/G4), checks, and `gate/*` statuses (G5–G7), merge (G8) and the last `deploy-prod` run (G9).
+1. Design page exists; no open questions; Decisions section current; org snapshot child page and Lucid link present.
+2. G1: page status Approved, the epic's *Approved design version* set, and the approver is an `architects` member
+   (page versions: `listConfluenceContentVersions`).
+3. Epic and stories in Jira (Story 00 first, blocks links), each story's *Approved design version* = the epic's (C5).
+4. Test cases linked to each story; G2 (`ai-ready` + *Testability confirmed*).
+5. For a story key: `gh pr list --search "<KEY> in:title" --state all --json number,title,labels,isDraft,statusCheckRollup`:
+   draft PR, tests committed, `plan-approved` / `testplan-approved` (G3/G4), checks, review-room verdict comment,
+   `gate/*` statuses (G5–G7), merge (G8) and the last `deploy-prod` run (G9).
 
 Finish with the next gate and its owner.

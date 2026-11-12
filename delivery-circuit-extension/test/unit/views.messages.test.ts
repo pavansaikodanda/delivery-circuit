@@ -35,6 +35,10 @@ describe("webview message validation", () => {
     expect(sanitizeFeatureId("001")).toBe("001");
     expect(sanitizeFeatureId("001-case-escalation")).toBe("001-case-escalation");
     expect(sanitizeFeatureId("../001")).toBeUndefined();
+    expect(sanitizeFeatureId("ACME-12")).toBe("ACME-12");
+    expect(sanitizeFeatureId("ACME-12-case-escalation")).toBe("ACME-12-case-escalation");
+    expect(sanitizeFeatureId("page-2240011")).toBe("page-2240011");
+    expect(sanitizeFeatureId("acme-12; rm")).toBeUndefined();
     expect(sanitizeSourceId("fireflies:01JD8Q2KX7")).toBe("fireflies:01JD8Q2KX7");
     expect(sanitizeSourceId("upload:../../x")).toBeUndefined();
   });

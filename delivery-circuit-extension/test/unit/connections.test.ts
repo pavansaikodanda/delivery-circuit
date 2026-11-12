@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
 import * as fs from "fs";
 import * as path from "path";
-import type { ConnectionStatus, Persona } from "../../src/core/contracts";
-import { actionable, baseStatus, CONNECTIONS, visibleRows } from "../../src/connections/catalog";
+import type { Persona } from "../../src/core/contracts";
+import { actionable, baseStatus, CONNECTIONS, visibleRows, type RowStatus } from "../../src/connections/catalog";
 import { isPlaceholder, normalizeSite, parseBuildConfig, parseDate, parseReminders, slackWorkspaceUrl } from "../../src/connections/config";
 import { applyExpiry, claudeTokenExpiry, expiryState, expiryText } from "../../src/connections/expiry";
 import { checkLoginUrl, classifySfUrl, safeRelPath, sfOrgDecision, terminalCommand } from "../../src/connections/safety";
-import { isFileSecret, scanWorkflows, sealSecret, loadSodium, validateEnvironmentName, validateSecretName } from "../../src/connections/secrets";
 import {
   findCodeAnalyzer, findServerFor, isSubscriptionAuth, mcpListStateFor, parseClaudeAuth, parseMcpConfigs, parseMcpList,
   parseSfOrgDisplay, parseSfPlugins, requiredBrowsers, browserDir,
@@ -17,15 +16,15 @@ import { buildPanelState, buildProjectInfo } from "../../src/connections/panelSt
 
 const FX = path.join(__dirname, "..", "fixtures", "connections");
 const fx = (f: string) => fs.readFileSync(path.join(FX, f), "utf8");
-const rows = (): ConnectionStatus[] => CONNECTIONS.map((c) => baseStatus(c.id));
+const rows = (): RowStatus[] => CONNECTIONS.map((c) => baseStatus(c.id));
 
 describe("neededBy filtering", () => {
   it("matches the persona matrix", () => {
     const need = (p: Persona) => CONNECTIONS.filter((c) => c.scope === "personal" && c.neededBy.includes(p)).map((c) => c.id).sort();
-    expect(need("architect")).toEqual(["claude", "confluence", "fireflies", "github", "jira", "lucid", "mcp-atlassian", "mcp-fireflies", "mcp-github",
-      "mcp-lucid", "mcp-salesforce", "sf-dev", "slack"].sort());
-    expect(need("developer")).toEqual(["claude", "github", "jira", "mcp-atlassian", "mcp-github", "mcp-salesforce", "sf-dev", "slack"].sort());
-    expect(need("tester")).toEqual(["claude", "github", "jira", "mcp-atlassian", "mcp-salesforce", "sf-dev", "sf-qa", "slack", "testing-browsers"].sort());
+    expect(need("architect")).toEqual(["acli", "claude", "github", "lucid", "mcp-atlassian", "mcp-fireflies", "mcp-github", "mcp-lucid", "mcp-salesforce",
+      "mcp-slack", "sf-dev", "slack"].sort());
+    expect(need("developer")).toEqual(["acli", "claude", "github", "mcp-atlassian", "mcp-github", "mcp-salesforce", "mcp-slack", "sf-dev", "slack"].sort());
+    expect(need("tester")).toEqual(["acli", "claude", "github", "mcp-atlassian", "mcp-salesforce", "sf-dev", "sf-qa", "slack", "testing-browsers"].sort());
   });
   it("review tools are project scope", () => {
     for (const id of ["coderabbit", "code-analyzer", "ai-reviewer"]) expect(CONNECTIONS.find((c) => c.id === id)!.scope).toBe("project");
@@ -57,7 +56,7 @@ describe("neededBy filtering", () => {
     expect(actionable({ scope: "personal" }, false)).toBe(true);
   });
   it("extra neededBy from persona configs is merged", () => {
-    expect(baseStatus("mcp-slack", ["tester"]).neededBy).toEqual(["tester"]);
+    expect(baseStatus("mcp-lucid", ["tester"]).neededBy).toEqual(["architect", "tester"]);
     expect(baseStatus("mcp-github", ["architect", "tester"]).neededBy.sort()).toEqual(["architect", "developer", "tester"]);
   });
 });
@@ -152,42 +151,6 @@ describe("build.config.yml parsing", () => {
     expect(parseReminders(md)).toEqual([{ label: "Jira PAT for Rule A", date: "2027-01-15" }, { label: "Salesforce JWT certificates", date: "2027-03-01" }]);
     expect(parseDate("2027-02-30")).toBeUndefined();
     expect(parseDate("soon")).toBeUndefined();
-  });
-});
-
-describe("secret names and workflow needs", () => {
-  it("validates names", () => {
-    expect(validateSecretName("SLACK_WEBHOOK_DEV")).toBeUndefined();
-    expect(validateSecretName("_X1")).toBeUndefined();
-    expect(validateSecretName("")).toBeDefined();
-    expect(validateSecretName("1ABC")).toMatch(/digit/);
-    expect(validateSecretName("GITHUB_TOKEN")).toMatch(/GITHUB_/);
-    expect(validateSecretName("github_x")).toMatch(/GITHUB_/);
-    expect(validateSecretName("A-B")).toBeDefined();
-    expect(validateSecretName("A B")).toBeDefined();
-    expect(validateSecretName("A".repeat(256))).toBeDefined();
-    expect(validateEnvironmentName("production")).toBeUndefined();
-    expect(validateEnvironmentName("prod/../x")).toBeDefined();
-    expect(isFileSecret("SF_JWT_KEY_DEV")).toBe(true);
-    expect(isFileSecret("APP_PRIVATE_KEY")).toBe(true);
-    expect(isFileSecret("JIRA_EMAIL")).toBe(false);
-  });
-  it("scans workflows for secrets and environments", () => {
-    const w = scanWorkflows([fx("pr-checks.yml"), fx("deploy-prod.yml")]);
-    expect(w.secrets).toContain("CLAUDE_CODE_OAUTH_TOKEN");
-    expect(w.secrets).toContain("SF_JWT_KEY_PROD");
-    expect(w.secrets).not.toContain("GITHUB_TOKEN");
-    expect(w.environments).toEqual(["production"]);
-    expect(w.envOf.SF_JWT_KEY_PROD).toBe("production");
-    expect(w.envOf.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
-  });
-  it("seals with libsodium so only the key holder can open it", async () => {
-    const sodium: any = await loadSodium();
-    const kp = sodium.crypto_box_keypair();
-    const sealed = await sealSecret("s3cret-value", sodium.to_base64(kp.publicKey, sodium.base64_variants.ORIGINAL));
-    expect(sealed).not.toContain("s3cret");
-    const opened = sodium.crypto_box_seal_open(sodium.from_base64(sealed, sodium.base64_variants.ORIGINAL), kp.publicKey, kp.privateKey);
-    expect(sodium.to_string(opened)).toBe("s3cret-value");
   });
 });
 
@@ -294,24 +257,6 @@ describe("GitHub client", () => {
     expect(err.message).not.toContain("tok_SECRET");
     await expect(c.request("GET", "https://evil.example.com")).rejects.toThrow(/Invalid/);
   });
-  it("sets a secret with the repo public key", async () => {
-    const sodium: any = await loadSodium();
-    const kp = sodium.crypto_box_keypair();
-    const calls: any[] = [];
-    const f: FetchLike = async (url, init) => {
-      calls.push({ url, init });
-      const body = url.endsWith("/public-key") ? JSON.stringify({ key_id: "k1", key: sodium.to_base64(kp.publicKey, sodium.base64_variants.ORIGINAL) }) : "";
-      return { ok: true, status: url.endsWith("/public-key") ? 200 : 201, headers: hdr(), text: async () => body };
-    };
-    await new GitHubClient(async () => "t", f).setSecret("o", "r", "MY_SECRET", "hello", "production");
-    expect(calls[0].url).toBe("https://api.github.com/repos/o/r/environments/production/secrets/public-key");
-    expect(calls[1].init.method).toBe("PUT");
-    expect(calls[1].url).toBe("https://api.github.com/repos/o/r/environments/production/secrets/MY_SECRET");
-    const body = JSON.parse(calls[1].init.body);
-    expect(body.key_id).toBe("k1");
-    expect(body.encrypted_value).not.toContain("hello");
-    await expect(new GitHubClient(async () => "t", f).setSecret("o", "r", "GITHUB_X", "v")).rejects.toThrow(/GITHUB_/);
-  });
 });
 
 describe("identity", () => {
@@ -373,17 +318,42 @@ describe("panel state", () => {
       .toEqual(base.filter((r) => r.state === "checking" || r.id === "github").map((r) => r.id).filter((x) => s.groups.flatMap((g) => g.rows).some((r) => r.id === x)));
     expect(buildPanelState({ identity: id(["architect"], true), statuses: base, links: {} }).refreshing).toBe(false);
   });
-  it("project info marks missing, env and expiring secrets", () => {
-    const p = buildProjectInfo({ needed: ["CLAUDE_CODE_OAUTH_TOKEN", "SF_JWT_KEY_PROD", "SLACK_WEBHOOK_DEV", "JIRA_API_TOKEN"], envOf: { SF_JWT_KEY_PROD: "production" },
-      environments: ["production"], repoSecrets: ["CLAUDE_CODE_OAUTH_TOKEN", "JIRA_API_TOKEN"], envSecrets: { production: ["SF_JWT_KEY_PROD"] },
-      reminders: [{ label: "Jira PAT for Rule A", date: "2026-11-20" }], claudeTokenExpiresAt: "2027-06-01T00:00:00Z", now: new Date("2026-11-11T00:00:00Z") });
-    expect(p.webhooks).toEqual([expect.objectContaining({ name: "SLACK_WEBHOOK_DEV", present: false })]);
-    expect(p.secrets.find((x) => x.name === "SF_JWT_KEY_PROD")).toMatchObject({ present: true, env: "production" });
-    expect(p.secrets.find((x) => x.name === "JIRA_API_TOKEN")).toMatchObject({ expiring: true });
-    expect(p.secrets.find((x) => x.name === "CLAUDE_CODE_OAUTH_TOKEN")).toMatchObject({ expiring: false, expiryText: "expires 2027-06-01" });
+  it("v3: no secrets section; project rows go to the Project section", () => {
+    const s = buildPanelState({ identity: id(["developer"], false), statuses: rows(), links: {} });
+    expect(s.projectRows.map((r) => r.id)).toEqual(["runner", "github-jira", "coderabbit"]);
+    expect(s.projectRows.every((r) => !r.actionable)).toBe(true);
+    expect(s.groups.flatMap((g) => g.rows).some((r) => r.group === "project")).toBe(false);
+    expect(JSON.stringify(s)).not.toMatch(/secrets|webhooks/);
+    const a = buildPanelState({ identity: id(["architect"], true), statuses: rows(), links: {} });
+    expect(a.projectRows.find((r) => r.id === "runner")).toMatchObject({ actionable: true, connectLabel: "Add runner" });
+    expect(a.groups.flatMap((g) => g.rows).find((r) => r.id === "acli")).toMatchObject({ connectLabel: "Connect" });
+    expect(a.groups.flatMap((g) => g.rows).find((r) => r.id === "mcp-fireflies")).toMatchObject({ connectLabel: "Sign in", group: "mcp" });
+    const ok = buildPanelState({ identity: id(["architect"], true), statuses: rows().map((r) => ({ ...r, state: "connected" as const })), links: {} });
+    const all = [...ok.groups.flatMap((g) => g.rows), ...ok.projectRows];
+    const label = (x: string) => all.find((r) => r.id === x)!.connectLabel;
+    expect([label("runner"), label("github-jira"), label("mcp-fireflies"), label("coderabbit"), label("code-analyzer"), label("acli")])
+      .toEqual([null, null, null, "Repo access", "Update", "Reconnect"]);
+  });
+  it("project info: rulesets, production environment, workflows without stored credentials, reminders", () => {
+    const now = new Date("2026-11-11T00:00:00Z");
+    const p = buildProjectInfo({
+      repoUrl: "https://github.com/acme-org/app", defaultBranch: "main",
+      rulesets: [{ id: 1, name: "main-protect", target: "branch", enforcement: "active" }, { id: 2, name: "tags", target: "tag", enforcement: "active" }],
+      environments: [{ name: "production", reviewers: ["team architects"], waitMinutes: 5, branchPolicy: true }],
+      bannedRefs: [], workflowCount: 3, reminders: [{ label: "acli version support ends", date: "2026-11-20" }], now,
+    });
+    expect(p.settings.map((x) => [x.key, x.state])).toEqual([["rulesets", "connected"], ["environment", "connected"], ["workflows", "connected"]]);
+    expect(p.settings[0].detail).toMatch(/main-protect/);
+    expect(p.settings[0].detail).not.toMatch(/tags/);
+    expect(p.settings[1].detail).toMatch(/team architects · wait 5 min/);
     expect(p.reminders[0].state).toBe("expiring");
-    const q = buildProjectInfo({ needed: ["JIRA_EMAIL", "JIRA_BASE_URL"], envOf: {}, environments: [], repoSecrets: ["JIRA_EMAIL", "JIRA_BASE_URL"], envSecrets: {},
-      reminders: [{ label: "Jira PAT for Rule A", date: "2026-11-20" }], now: new Date("2026-11-11T00:00:00Z") });
-    expect(q.secrets.every((x) => !x.expiring && !x.expiryText)).toBe(true);
+    const q = buildProjectInfo({ rulesets: [], environments: [{ name: "Prod", reviewers: [], branchPolicy: false }],
+      bannedRefs: [{ file: ".github/workflows/pr-checks.yml", names: ["CLAUDE_CODE_OAUTH_TOKEN"] }], workflowCount: 2, reminders: [], now });
+    expect(q.settings.map((x) => x.state)).toEqual(["disconnected", "error", "error"]);
+    expect(q.settings[2].detail).toMatch(/pr-checks.yml reads CLAUDE_CODE_OAUTH_TOKEN/);
+    expect(q.settings[2].links).toEqual([{ kind: "file", label: "pr-checks.yml", target: ".github/workflows/pr-checks.yml" }]);
+    const u = buildProjectInfo({ bannedRefs: [], workflowCount: 0, reminders: [], now, error: "No GitHub repository known" });
+    expect(u.settings.map((x) => x.state)).toEqual(["unknown", "unknown", "unknown"]);
+    expect(u.error).toMatch(/No GitHub/);
   });
 });

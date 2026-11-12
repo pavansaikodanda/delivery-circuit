@@ -1,8 +1,11 @@
 name: persona-gates
 # G3/G4: only a `developers` member may add plan-approved, only a `testers` member may add testplan-approved.
-#        Anyone else's label is removed. When both are present on an AI PR, claude-build is dispatched.
+#        Anyone else's label is removed. When both are present the Developer builds the story from their own
+#        Claude session (the circuit no longer runs AI in CI).
 # G5/G6/G7: a PR approval by a member of developers / testers / architects sets commit status
 #        gate/developer / gate/tester / gate/architect on the approved commit. A new push needs new approvals.
+# Team membership is read with the self-hosted runner's own `gh` sign-in (read:org); labels, comments and statuses
+# are written with the job's GITHUB_TOKEN. No stored credentials. Fork PRs are skipped (and fail `guard`).
 on:
   pull_request:
     types: [labeled]
@@ -20,63 +23,60 @@ jobs:
   label-gate:
     if: >
       github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
       (github.event.label.name == 'plan-approved' || github.event.label.name == 'testplan-approved')
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, circuit]
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
     steps:
       - uses: actions/checkout@v5
         with: { persist-credentials: false, sparse-checkout: scripts/ci }
-      - id: app
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
+      - name: Runner logins
+        run: bash scripts/ci/runner-check.sh --gh --tools jq
       - name: Check who set the gate label
         env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           LABEL: ${{ github.event.label.name }}
           ACTOR: ${{ github.event.sender.login }}
           PR: ${{ github.event.pull_request.number }}
           BRANCH: ${{ github.event.pull_request.head.ref }}
           ORG: ${{ github.repository_owner }}
-          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
-          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
-          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
         run: |
           R="$GITHUB_REPOSITORY"
-          TEAM=$([ "$LABEL" = plan-approved ] && echo developers || echo testers)
-          STATE=$(gh api "orgs/$ORG/teams/$TEAM/memberships/$ACTOR" --jq .state 2>/dev/null || echo none)
-          if [ "$STATE" != active ]; then
+          if [ "$LABEL" = plan-approved ]; then TEAM=developers; GATE=G3; else TEAM=testers; GATE=G4; fi
+          if ! bash scripts/ci/team-member.sh "$TEAM" "$ACTOR"; then
             gh pr edit "$PR" --repo "$R" --remove-label "$LABEL"
-            gh pr comment "$PR" --repo "$R" --body "Removed \`$LABEL\`: @$ACTOR is not in team \`$TEAM\`. Only $TEAM can set this gate."
+            gh pr comment "$PR" --repo "$R" --body "Removed \`$LABEL\`: @$ACTOR is not in team \`$TEAM\`. Only $TEAM can set $GATE."
             exit 0
           fi
-          KEY=$(printf '%s' "$BRANCH" | grep -oE '^feature/[A-Z][A-Z0-9]+-[0-9]+' | cut -d/ -f2 || true)
-          [ -n "$KEY" ] || { echo "Not a story branch"; exit 0; }
-          MSG=$([ "$LABEL" = plan-approved ] && echo "Developer approved the AI plan" || echo "Tester approved the AI test plan")
-          bash scripts/ci/jira.sh comment "$KEY" "$MSG (@$ACTOR)" || true
-          LABELS=$(gh pr view "$PR" --repo "$R" --json labels --jq '[.labels[].name]')
-          if echo "$LABELS" | jq -e 'index("plan-approved") and index("testplan-approved") and index("ai-generated")' >/dev/null; then
-            jq -n --arg key "$KEY" --arg branch "$BRANCH" \
-              '{event_type:"claude-build", client_payload:{key:$key, branch:$branch, attempt:1}}' \
-              | gh api "repos/$R/dispatches" --input -
+          eval "$(bash scripts/ci/resolve-story.sh --branch "$BRANCH")"
+          if [ -z "${KEY:-}" ]; then echo "Not a story branch"; exit 0; fi
+          if [ "$LABEL" = plan-approved ]; then MSG="Developer approved the plan"; else MSG="Tester approved the test plan"; fi
+          bash scripts/ci/jira.sh comment "$KEY" "$MSG (@$ACTOR, PR #$PR)" || echo "::warning::Jira comment skipped (runner acli login?)"
+          CURRENT=$(gh pr view "$PR" --repo "$R" --json labels --jq '[.labels[].name]')
+          if jq -e 'index("plan-approved") and index("testplan-approved")' >/dev/null <<<"$CURRENT"; then
             gh pr edit "$PR" --repo "$R" --remove-label plan-review || true
-            gh pr comment "$PR" --repo "$R" --body "G3 and G4 passed. AI build dispatched (attempt 1)."
+            gh pr comment "$PR" --repo "$R" --body "G3 and G4 passed for $KEY. Developer: build the story from your own Claude session (Delivery Circuit extension), prove it with a check-only validate on DEV, then push."
           fi
 
   review-gate:
-    if: github.event_name == 'pull_request_review' && github.event.review.state == 'approved'
-    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'pull_request_review' && github.event.review.state == 'approved' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, circuit]
+    permissions:
+      contents: read
+      statuses: write
     steps:
-      - id: app
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
+      - uses: actions/checkout@v5
+        with: { persist-credentials: false, sparse-checkout: scripts/ci }
+      - name: Runner logins
+        run: bash scripts/ci/runner-check.sh --gh
       - name: Set gate statuses for the reviewer's persona team
         env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           ACTOR: ${{ github.event.review.user.login }}
           SHA: ${{ github.event.review.commit_id }}
           HEAD: ${{ github.event.pull_request.head.sha }}
@@ -86,8 +86,7 @@ jobs:
           n=0
           for pair in developers:developer:G5 testers:tester:G6 architects:architect:G7; do
             TEAM=${pair%%:*}; rest=${pair#*:}; CTX=${rest%%:*}; GATE=${rest#*:}
-            STATE=$(gh api "orgs/$ORG/teams/$TEAM/memberships/$ACTOR" --jq .state 2>/dev/null || echo none)
-            if [ "$STATE" = active ]; then
+            if bash scripts/ci/team-member.sh "$TEAM" "$ACTOR"; then
               gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=success -f "context=gate/$CTX" \
                 -f "description=$GATE approved by $ACTOR" >/dev/null
               echo "gate/$CTX set by $ACTOR"; n=$((n+1))

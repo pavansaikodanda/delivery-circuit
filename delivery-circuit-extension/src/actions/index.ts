@@ -1,15 +1,18 @@
-// Actions: AI actions start a Claude session as the persona; gate actions are human actions done with the person's
-// own GitHub token after a modal confirmation; nav actions open other views. Every run is logged (no secrets).
-import * as fs from "fs";
-import * as path from "path";
+// Actions: AI actions start a Claude session as the persona (the person's logged-in claude, no tokens); gate actions
+// are human actions done with the person's own GitHub token after a modal confirmation; nav actions open other views.
+// v3: dev:start-story, qa:add-tests, dev:fix, review:open-room, review:record-verdict and decision:record are skill
+// sessions; arch:approve-design opens the Confluence design page and explains the human approval (G1). Every run is
+// logged (no secrets).
 import * as vscode from "vscode";
 import type { ActionRef, ActionsService, ConnectionsService, Identity, IdentityService, ProjectContextService, SessionsService } from "../core/contracts";
-import { gitBranch, run, type ModuleBase } from "../core/util";
+import { openLink, type ModuleBase } from "../core/util";
 import {
-  ActionError, approvableEnvironments, confirmText, denyReason, isProtectedBranch, mergeMethods, parseAction, pinnedHead, signoffMessage,
+  ActionError, approvableEnvironments, confirmText, denyReason, failureContext, mergeMethods, parseAction, pinnedHead,
   type ConfirmContext, type ParsedAction,
 } from "./grammar";
-import { applySignOff, signOffItems } from "./signoff";
+
+const str = (v: unknown): string | undefined => (v === undefined || v === null || String(v).trim() === "" ? undefined : String(v).trim());
+import { designPageOf } from "./design";
 
 type Deps = { identity: IdentityService; connections: ConnectionsService; sessions: SessionsService; project: ProjectContextService };
 
@@ -103,67 +106,61 @@ export function createActions(base: ModuleBase, deps: Deps): ActionsService {
         vscode.window.showInformationMessage(`Deployment of run #${p.runId} approved.`);
         break;
       }
-      case "signoff":
-        await signOff(id, p);
-        break;
       default:
         throw new ActionError("Not a gate action");
     }
   }
 
-  async function git(args: string[], input?: string) {
-    const r = await run("git", args, { cwd: base.root, timeoutMs: 120_000, input, shell: false });
-    if (r.code !== 0) throw new ActionError(`git ${args[0]} failed: ${(r.stderr || r.stdout).trim().split(/\r?\n/).slice(-3).join(" ")}`);
-    return r.stdout.trim();
+  /** G1 is a human act in Confluence: open the design page and say exactly what to do there. */
+  async function approveDesign(id: Identity, p: Extract<ParsedAction, { type: "approve-design" }>): Promise<void> {
+    let url = p.url;
+    if (!url && p.key) {
+      const f = await project.feature(p.key).catch(() => undefined);
+      url = designPageOf(f);
+    }
+    const text = confirmText(p, ctxFor(id));
+    const detail = [
+      "1. Read the page (and its Org snapshot child page) as it is now.",
+      "2. Set the page status to Approved (status menu next to the title). Only members of the architects group may do this; the circuit checks who set it from the page history.",
+      "3. Refresh Delivery Circuit: the approved version number is recorded on the epic's stories, and any later page change fails design-gate until it is re-approved (C5).",
+      "Claude cannot approve a design.",
+    ].join("\n");
+    if (!url) {
+      await vscode.window.showWarningMessage(`${text}\n\nNo design page is linked to ${p.key ?? "this feature"} yet. Run Design first so the page exists.`, { modal: true, detail });
+      return log(`approve-design: no page for ${p.key ?? "?"}`);
+    }
+    const pick = await vscode.window.showInformationMessage(text, { modal: true, detail }, "Open design page");
+    if (pick !== "Open design page") return log(`cancelled: approve design ${p.key ?? url}`);
+    await openLink(base.root, { kind: "confluence", label: "Design", target: url });
+    log(`approve-design: opened ${p.key ?? ""} design page for ${id.login}`);
   }
 
-  async function signOff(id: Identity, p: Extract<ParsedAction, { type: "signoff" }>): Promise<void> {
-    const feature = await project.feature(p.featureId);
-    if (!feature) throw new ActionError(`Feature ${p.featureId} not found under .specify/specs`);
-    const rel = path.posix.join(feature.dir.split(path.sep).join("/"), "plan.md");
-    const abs = path.join(base.root, rel);
-    if (!fs.existsSync(abs)) throw new ActionError(`${rel} does not exist yet`);
-    if (!/^[\w./-]+$/.test(rel)) throw new ActionError(`Unexpected characters in the path ${rel}`);
+  /** decision:record without a text asks for it (optional: the skill asks for what is missing). */
+  async function withDecisionText(action: ActionRef): Promise<ActionRef | undefined> {
+    if (action.id !== "decision:record" || (action.args?.text !== undefined && String(action.args.text).trim())) return action;
+    const text = await vscode.window.showInputBox({
+      title: "Record decision", prompt: "What was decided? Claude adds it to the design page's Decisions (date, who, why, source link).",
+      placeHolder: "e.g. Escalations route to the Tier 2 queue, not to the account owner", ignoreFocusOut: true,
+    });
+    if (text === undefined) return undefined;
+    return text.trim() ? { ...action, args: { ...(action.args ?? {}), text: text.trim() } } : action;
+  }
 
-    const branch = await gitBranch(base.root);
-    if (isProtectedBranch(branch)) throw new ActionError(`You are on ${branch || "a detached HEAD"}. Switch to the spec branch (spec/${feature.slug}) first; sign-off is never committed on main.`);
-    if (!/^[\w./-]+$/.test(branch)) throw new ActionError(`Branch name ${branch} has characters this action does not push`);
-    const gitName = await git(["config", "user.name"]).catch(() => "");
-    const gitEmail = await git(["config", "user.email"]).catch(() => "");
-    if (!gitName || !gitEmail) throw new ActionError("Set your git identity first (git config user.name / user.email); the commit must be yours");
-
-    const dirty = await git(["status", "--porcelain", "--", rel]);
-    const doc = await vscode.workspace.openTextDocument(abs);
-    await vscode.window.showTextDocument(doc, { preview: false });
-    if (doc.isDirty) throw new ActionError(`${rel} has unsaved edits. Save or revert them first.`);
-
-    const plan = doc.getText();
-    const items = signOffItems(plan);
-    if (!items.length) throw new ActionError(`${rel} has no Architect Sign-Off section`);
-    const picks = await vscode.window.showQuickPick(
-      items.map((it) => ({ label: it.text, description: it.section, picked: true, it, detail: it.checked ? "already ticked" : undefined })),
-      { canPickMany: true, title: `Architect Sign-Off: ${feature.slug}`, placeHolder: "Untick anything you have not reviewed. Overall APPROVED is required.", ignoreFocusOut: true },
-    );
-    if (!picks) return log(`cancelled: sign-off ${feature.slug}`);
-    if (!picks.some((x) => x.it.overall)) throw new ActionError("Sign-off not recorded: the Overall APPROVED box was not ticked");
-
-    const text = confirmText(p, ctxFor(id, { planPath: rel, branch, gitName, gitEmail }));
-    if (!(await confirm(dirty ? `${text}\n\nplan.md also has your uncommitted edits; they are included in this commit.` : text, "Sign off"))) return log(`cancelled: ${text}`);
-
-    const updated = applySignOff(plan, picks.map((x) => x.it.line), gitName, new Date().toISOString());
-    fs.writeFileSync(abs, updated, "utf8");
-    await git(["add", "--", rel]);
-    // Message via stdin: user-visible text never goes through a shell.
-    await git(["commit", "-F", "-", "--", rel], signoffMessage(feature.slug) + "\n");
-    const push = await run("git", ["push", "-u", "origin", branch], { cwd: base.root, timeoutMs: 120_000, shell: false });
-    if (push.code !== 0) {
-      log(`committed but push failed: ${text}`);
-      vscode.window.showErrorMessage(`Signed off and committed locally, but the push failed: ${(push.stderr || push.stdout).trim().split(/\r?\n/).slice(-2).join(" ")}`);
-      return;
+  /** dev:fix without a failure text: read the failed check runs of the PR head (person's GitHub login) as context. */
+  async function withFailureContext(id: Identity, action: ActionRef): Promise<ActionRef> {
+    if (action.id !== "dev:fix" || str(action.args?.failure)) return action;
+    try {
+      const pr = Number(action.args?.pr ?? action.args?.arg);
+      const repo = repoPath(id);
+      const head = (await connections.githubRequest<any>("GET", `${repo}/pulls/${pr}`))?.head?.sha;
+      if (!/^[0-9a-f]{40}$/i.test(head ?? "")) return action;
+      const runs = await connections.githubRequest<any>("GET", `${repo}/commits/${head}/check-runs?per_page=100`);
+      const failure = failureContext(runs?.check_runs ?? []);
+      return failure ? { ...action, args: { ...(action.args ?? {}), failure } } : action;
+    } catch (e: any) {
+      log(`dev:fix: could not read check runs (${e?.message ?? e}); the skill reads them itself`);
+      return action;
     }
-    log(`done: ${text}`);
-    vscode.window.showInformationMessage(`Architect sign-off for ${feature.slug} committed and pushed on ${branch}.`);
-    project.refresh().catch(() => {});
   }
 
   async function runAction(action: ActionRef): Promise<void> {
@@ -176,6 +173,14 @@ export function createActions(base: ModuleBase, deps: Deps): ActionsService {
     }
     let p: ParsedAction;
     try { p = parseAction(action); } catch (e: any) { vscode.window.showErrorMessage(e.message); return; }
+    if (p.type === "ai" && p.named === "decision:record") {
+      const withText = await withDecisionText(action);
+      if (!withText) return log(`cancelled: ${action.id}`);
+      try { p = parseAction(withText); } catch (e: any) { vscode.window.showErrorMessage(e.message); return; }
+    }
+    if (p.type === "ai" && p.named === "dev:fix") {
+      try { p = parseAction(await withFailureContext(id, action)); } catch (e: any) { vscode.window.showErrorMessage(e.message); return; }
+    }
     log(`start ${action.id} as ${id.login} (${action.persona}) ${JSON.stringify(action.args ?? {})}`);
     try {
       switch (p.type) {
@@ -191,6 +196,9 @@ export function createActions(base: ModuleBase, deps: Deps): ActionsService {
           break;
         case "nav-connections":
           await vscode.commands.executeCommand("deliveryCircuit.openConnections");
+          break;
+        case "approve-design":
+          await approveDesign(id, p);
           break;
         default:
           await runGate(id, p);

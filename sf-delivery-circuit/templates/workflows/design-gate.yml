@@ -1,0 +1,50 @@
+name: design-gate
+# G1 + C5 for story PRs (replaces the v2 spec-gate). Required check. Runs on the self-hosted runner because it reads
+# Jira with the runner's own Atlassian CLI login (acli jira auth login --web); no Jira token is stored anywhere.
+#   G1  the story's epic carries an "Approved design version" set through the architects-only Jira transition, and
+#       the epic is no longer in a design status (vars.DESIGN_PENDING_STATUSES, default "Backlog,Design Review").
+#   C5  the story's "Approved design version" equals the epic's: otherwise
+#       "Design changed since this story was planned: re-plan or re-approve".
+# Non-story PRs (no feature/<KEY>-* branch) pass: the repo holds code and tests only, the design lives in Confluence.
+# Fork PRs are skipped here and fail `guard` in pr-checks, so they can never be merged.
+# When the design is re-approved after this ran, re-run the check (the extension's "Re-run checks" or the Actions tab).
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: design-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  design-gate:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, circuit]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/ci
+            .specify/extensions/jira
+      - name: Story key
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          eval "$(bash scripts/ci/resolve-story.sh --branch "$BRANCH")"
+          if [ -z "${KEY:-}" ]; then echo "Not a story PR: no design to check."; else echo "KEY=$KEY" >> "$GITHUB_ENV"; fi
+      - name: Runner logins
+        if: env.KEY != ''
+        run: bash scripts/ci/runner-check.sh --acli --tools node
+      - name: G1 design approved and C5 design unchanged
+        if: env.KEY != ''
+        env:
+          DESIGN_PENDING_STATUSES: ${{ vars.DESIGN_PENDING_STATUSES || 'Backlog,Design Review' }}
+          JIRA_FIELD_APPROVED_DESIGN_VERSION: ${{ vars.JIRA_FIELD_APPROVED_DESIGN_VERSION }}
+          JIRA_FIELD_DESIGN_PAGE: ${{ vars.JIRA_FIELD_DESIGN_PAGE }}
+        run: node scripts/ci/design-gate.mjs --key "$KEY"

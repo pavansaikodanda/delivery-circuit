@@ -1,4 +1,4 @@
-| B4 Spec Kit | PARTIAL | `specify extension list` shows sf 2.0.1 | commit 876212c on pipeline/speckit | deploy/hotfix/pr skills removed; constitution not yet generated || B3 Repo foundation | DONE (local) | guard checks run in repo | commit 55be182 on pipeline/foundation | not pushed: no GitHub repo yet; workflows held for B8; MCP URLs still VERIFY || B2 Salesforce access | PARTIAL | aliases only | `sf alias list` | DEV and QA = SDO trial org salesOrgSDO (demo.user@example.com); CI JWT users not yet created || B0 Preflight | PARTIAL | tools: yes; gh admin: no | versions below | gh token has repo,workflow but not admin:org; user is a plain member of acme-org |# Build state
+| B4 Spec Kit | PARTIAL | `specify extension list` shows sf 2.0.1 | commit 876212c on pipeline/speckit | deploy/hotfix/pr skills removed; constitution not yet generated || B3 Repo foundation | DONE (local) | guard checks run in repo | commit 55be182 on pipeline/foundation | not pushed: no GitHub repo yet; workflows held for B8; MCP URLs still VERIFY || B2 Salesforce access | PARTIAL | aliases only | `sf alias list` | DEV and QA = SDO trial org acme-demo-org (demo.user@example.com); CI JWT users not yet created || B0 Preflight | PARTIAL | tools: yes; gh admin: no | versions below | gh token has repo,workflow but not admin:org; user is a plain member of acme-org |# Build state
 
 Updated by Claude after every step. Resume from here after an interruption.
 
@@ -27,7 +27,7 @@ Updated by Claude after every step. Resume from here after an interruption.
 - 2026-11-10 GitHub API: spec-kit-sf latest release is still v2.0.1. It installed 19 commands and 2 optional hooks (after_tasks → review, after_implement → verify).
 
 ## Deviations from the runbook (and why)
-- DEV and QA are the same org: the SDO trial org salesOrgSDO (Enterprise Edition, not a sandbox). The owner confirmed on 2026-11-10 that it is a trial org the AI may use freely. There is no production org (sf-config prod: "none").
+- DEV and QA are the same org: the SDO trial org acme-demo-org (Enterprise Edition, not a sandbox). The owner confirmed on 2026-11-10 that it is a trial org the AI may use freely. There is no production org (sf-config prod: "none").
 - CI logins to this org use https://login.salesforce.com, not test.salesforce.com: set SF_INSTANCE_URL_SANDBOX accordingly in B1.
 
 ## Open issues

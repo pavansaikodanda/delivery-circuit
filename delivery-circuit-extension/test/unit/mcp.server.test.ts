@@ -19,7 +19,7 @@ const tmpDirs: string[] = [];
 const tmp = async () => { const d = await fsp.mkdtemp(path.join(os.tmpdir(), "dc-mcp-")); tmpDirs.push(d); return d; };
 
 const feature: Feature = {
-  id: "001", slug: "001-case-escalation", title: "Case Escalation", dir: ".specify/specs/001-case-escalation",
+  id: "001", slug: "001-case-escalation", title: "Case Escalation",
   stages: { intake: "done", clarify: "done", plan: "done", signoff: "active", stories: "todo", tests: "todo", jira: "todo", build: "todo", qa: "todo", release: "todo" },
   gates: { G1: "waiting" }, openQuestions: 0, signedOff: false, stories: [], sources: ["fireflies:01ABC"], links: [],
 };
@@ -29,7 +29,10 @@ const fakeData = (): CircuitData => ({
   features: async () => [feature],
   feature: async (id) => (id === "001" ? feature : undefined),
   queue: async (p) => [item(p)],
-  jiraMap: async () => ({ epic: "ABC-1" }),
+  story: async (key) => ({ key, design: { c5: "ok" } }),
+  design: async (id) => ({ featureId: id, approvedVersion: 3 }),
+  decisions: async (id) => ({ featureId: id, decisions: [{ decision: "Picklist" }] }),
+  orgSnapshot: async (id) => ({ featureId: id, snapshot: { objects: ["Case"] } }),
   testResults: async () => [],
   prs: async () => [{ number: 42, url: "https://github.com/a/b/pull/42", title: "t", branch: "feature/ABC-1-x", draft: false, author: "x", labels: [], checks: {}, reviews: [], updatedAt: "" }],
   sources: async () => [{ id: "fireflies:01ABC", kind: "fireflies", title: "Kickoff", date: "2026-11-01" }],
@@ -40,18 +43,19 @@ const fakeData = (): CircuitData => ({
 describe("tool visibility per scope", () => {
   const names = (s: McpScope, d: CircuitData = fakeData()) => toolsFor(s, d).map((t) => t.name).sort();
   it("Architect gets sources and transcripts; Developer and Tester do not", () => {
-    expect(names("architect")).toEqual(["circuit_status", "connections_status", "feature_get", "jira_map_get", "pr_get", "prs_list", "queue_get", "sources_list", "test_results_get", "transcript_get"]);
-    for (const p of ["developer", "tester"] as const) {
-      expect(names(p)).toEqual(["circuit_status", "connections_status", "feature_get", "jira_map_get", "pr_get", "prs_list", "queue_get", "test_results_get"]);
-    }
+    const people = ["circuit_status", "connections_status", "decisions_get", "design_get", "feature_get", "org_snapshot_get", "pr_get", "prs_list", "queue_get", "story_get", "test_results_get"];
+    expect(names("architect")).toEqual([...people, "sources_list", "transcript_get"].sort());
+    for (const p of ["developer", "tester"] as const) expect(names(p)).toEqual(people);
+    expect(names("architect")).not.toContain("jira_map_get");
   });
   it("the repo (stdio) scope gets repository tools only", () => {
-    expect(names("repo")).toEqual(["circuit_status", "feature_get", "jira_map_get", "queue_get", "test_results_get"]);
+    expect(names("repo")).toEqual(["circuit_status", "feature_get", "queue_get", "story_get", "test_results_get"]);
   });
   it("hides tools whose data the host does not provide", () => {
-    const d = fakeData(); delete d.transcript; delete d.prs;
+    const d = fakeData(); delete d.transcript; delete d.prs; delete d.design;
     expect(names("architect", d)).not.toContain("transcript_get");
     expect(names("architect", d)).not.toContain("pr_get");
+    expect(names("architect", d)).not.toContain("design_get");
   });
 });
 
@@ -174,29 +178,48 @@ describe("Streamable HTTP server", () => {
 });
 
 describe("stdio repository tools on the fixture repo", () => {
-  it("serve status, features, queue, Jira map and test results without secrets", async () => {
-    const server = createCircuitServer("repo", repoData(FIX));
+  const ACLI = path.join(__dirname, "..", "fixtures", "project", "acli");
+  const calls: string[][] = [];
+  const acli = async (args: string[]) => {
+    calls.push(args);
+    const line = args.join(" ");
+    const file = line.includes("issuetype = Epic") ? "epics.json" : line.includes("parent in (") ? "children.json" : line.includes("test-case") ? "tests.json"
+      : line.startsWith("jira workitem view ABC-99") ? "view-ABC-99.json" : undefined;
+    return file ? { code: 0, stdout: await fsp.readFile(path.join(ACLI, file), "utf8"), stderr: "" } : { code: 1, stdout: "", stderr: "unexpected" };
+  };
+  it("serve status, features, queue, stories and test results from Jira (acli) without secrets", async () => {
+    const server = createCircuitServer("repo", repoData(FIX, acli));
     const [a, b] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: "t", version: "1" });
     await Promise.all([server.connect(a), client.connect(b)]);
     try {
-      expect((await client.listTools()).tools.map((t) => t.name).sort()).toEqual(["circuit_status", "feature_get", "jira_map_get", "queue_get", "test_results_get"]);
+      expect((await client.listTools()).tools.map((t) => t.name).sort()).toEqual(["circuit_status", "feature_get", "queue_get", "story_get", "test_results_get"]);
       const st: any = await client.callTool({ name: "circuit_status", arguments: {} });
       const status = JSON.parse(st.content[0].text);
-      expect(status.features.map((f: any) => f.slug)).toEqual(["001-case-escalation", "002-partner-onboarding"]);
+      expect(status.features.map((f: any) => f.id)).toEqual(["ABC-10", "ABC-20"]);
       expect(status.features[1].next).toMatchObject({ gate: "G1", owner: "architect" });
-      expect(status.waitingOn.architect).toBe(2);
-      const f: any = await client.callTool({ name: "feature_get", arguments: { id: "001-case-escalation" } });
-      expect(JSON.parse(f.content[0].text).stories).toHaveLength(3);
+      const f: any = await client.callTool({ name: "feature_get", arguments: { id: "ABC-10" } });
+      expect(JSON.parse(f.content[0].text).stories).toHaveLength(5);
       const q: any = await client.callTool({ name: "queue_get", arguments: {} });
       expect(q.isError).toBe(true);
-      const jm: any = await client.callTool({ name: "jira_map_get", arguments: { featureId: "001" } });
-      expect(JSON.parse(jm.content[0].text).epic).toBe("ABC-10");
+      const story: any = await client.callTool({ name: "story_get", arguments: { key: "ABC-12" } });
+      expect(JSON.parse(story.content[0].text)).toMatchObject({ key: "ABC-12", branch: "feature/ABC-12-agent-escalates-a-case", design: { storyApprovedVersion: 3 } });
+      const loose: any = await client.callTool({ name: "story_get", arguments: { key: "ABC-99" } });
+      expect(JSON.parse(loose.content[0].text).summary).toBe("Loose task");
+      const bad: any = await client.callTool({ name: "story_get", arguments: { key: "abc; rm" } }).catch(() => ({ isError: true }));
+      expect(bad.isError).toBe(true);
       const tr: any = await client.callTool({ name: "test_results_get", arguments: { suite: "test-cases/001-case-escalation-story-01.sf-tests.yaml" } });
       const runs = JSON.parse(tr.content[0].text);
       expect(runs).toHaveLength(1);
       expect(tr.content[0].text).not.toContain("trail");
+      expect(calls.every((c) => c[0] === "jira" && c.includes("--json"))).toBe(true);
     } finally { await client.close(); await server.close(); }
+  });
+  it("reports a missing acli login as an error, not as empty data", async () => {
+    const out = repoData(FIX, async () => ({ code: 1, stdout: "", stderr: "unauthorized" }));
+    expect(await out.features()).toEqual([]);
+    const q = await out.queue("architect");
+    expect(q[0]).toMatchObject({ kind: "connect", detail: "Atlassian CLI is not logged in. Run: acli jira auth login --web" });
   });
 });
 
@@ -277,8 +300,8 @@ describe("createMcp service", () => {
       identity: { get: () => id, refresh: async () => id, setActive: async () => {}, onDidChange: () => ({ dispose() {} }) } as any,
       connections: { list: d.connections } as any,
       project: {
-        features: d.features, feature: d.feature, prs: d.prs, queue: async (_i: Identity, p: Persona) => d.queue(p), jiraMap: d.jiraMap,
-        sources: d.sources, transcript: d.transcript,
+        features: d.features, feature: d.feature, prs: d.prs, queue: async (_i: Identity, p: Persona) => d.queue(p),
+        sources: d.sources, transcript: d.transcript, story: d.story, design: d.design, decisions: d.decisions, orgSnapshot: d.orgSnapshot,
       } as any,
     });
     return { svc, root, logs };
@@ -313,7 +336,12 @@ describe("createMcp service", () => {
     await Promise.all([cfg.instance.connect(a), client.connect(b)]);
     const names = (await client.listTools()).tools.map((t) => t.name);
     expect(names).not.toContain("transcript_get");
-    expect(names).toContain("test_results_get");
+    expect(names).not.toContain("jira_map_get");
+    expect(names).toEqual(expect.arrayContaining(["test_results_get", "design_get", "decisions_get", "story_get", "org_snapshot_get"]));
+    const d: any = await client.callTool({ name: "design_get", arguments: { featureId: "ABC-10" } });
+    expect(JSON.parse(d.content[0].text)).toEqual({ featureId: "ABC-10", approvedVersion: 3 });
+    const st: any = await client.callTool({ name: "story_get", arguments: { key: "ABC-12" } });
+    expect(JSON.parse(st.content[0].text).key).toBe("ABC-12");
     await client.close();
   });
   it("revokes tokens, local configs and in-process access when the identity changes", async () => {
@@ -324,7 +352,7 @@ describe("createMcp service", () => {
     const svc = createMcp({ ctx: { subscriptions: [] } as any, root, pluginRoot: "", log: () => {} }, {
       identity: { get: () => id, refresh: async () => id, setActive: async () => {}, onDidChange: (l: any) => { listeners.push(l); return { dispose() {} }; } } as any,
       connections: { list: d.connections } as any,
-      project: { features: d.features, feature: d.feature, prs: d.prs, queue: async (_i: Identity, p: Persona) => d.queue(p), jiraMap: d.jiraMap, sources: d.sources, transcript: d.transcript } as any,
+      project: { features: d.features, feature: d.feature, prs: d.prs, queue: async (_i: Identity, p: Persona) => d.queue(p), sources: d.sources, transcript: d.transcript } as any,
     });
     const change = (next: Identity | null) => { id = next; listeners.forEach((l) => l(next)); };
     const post = (url: string, token: string) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", Authorization: `Bearer ${token}` },

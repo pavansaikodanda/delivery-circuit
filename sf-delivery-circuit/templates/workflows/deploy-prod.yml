@@ -1,6 +1,10 @@
 name: deploy-prod
-# NO AI. Merge to main (G8, Architect) -> environment approval (G9, Architect) -> delta validate -> quick deploy.
-# DEPLOY_ENVIRONMENT=production-dryrun (holding QA secrets) lets the dry run (B11) exercise this without production.
+# NO AI. Merge to main (G8, Architect) -> environment approval (G9, architects) -> delta validate -> quick deploy.
+# Runs only on the release runner ([self-hosted, circuit-release]): a separate machine or service user whose sf CLI
+# holds the one login to the org the project names as production (alias vars.CIRCUIT_RELEASE_ALIAS, default prod).
+# The circuit runner must never hold that login. No stored credentials: no JWT key, no token, no secrets.
+# Dry run: set DEPLOY_ENVIRONMENT=production-dryrun and give that environment the variable CIRCUIT_RELEASE_ALIAS=qa.
+# Slack: the GitHub app for Slack, subscribed to deployments in #arch-gate, reports the result (no AI here).
 on:
   push:
     branches: [main]
@@ -16,59 +20,49 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, circuit-release]
     environment: ${{ vars.DEPLOY_ENVIRONMENT || 'production' }}
     timeout-minutes: 120
+    permissions:
+      contents: write
+    env:
+      RELEASE_ALIAS: ${{ vars.CIRCUIT_RELEASE_ALIAS || 'prod' }}
     steps:
       - uses: actions/checkout@v5
         with: { fetch-depth: 0, persist-credentials: false }
-      - uses: actions/setup-node@v5
-        with: { node-version: 22 }
-      - run: npm i -g @salesforce/cli && echo y | sf plugins install sfdx-git-delta
+      - name: Runner logins
+        run: bash scripts/ci/runner-check.sh --tools sf,jq,git --sf-plugin sfdx-git-delta --sf "$RELEASE_ALIAS"
       - name: Build delta since last production deploy
         run: |
           FROM=$(git rev-list -n1 prod-deployed 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -1)
-          mkdir -p delta
+          rm -rf delta && mkdir -p delta
           sf sgd source delta --from "$FROM" --to HEAD --output-dir delta --generate-delta   # VERIFY flags for your sgd version
           echo "--- package.xml"; cat delta/package/package.xml
           echo "--- destructiveChanges.xml"; cat delta/destructiveChanges/destructiveChanges.xml 2>/dev/null || true
           if ! grep -q '<members>' delta/package/package.xml && ! grep -q '<members>' delta/destructiveChanges/destructiveChanges.xml 2>/dev/null; then
             echo "EMPTY=1" >> "$GITHUB_ENV"
           fi
-      - name: Login target org
-        if: env.EMPTY != '1'
-        env:
-          SF_JWT_KEY: ${{ secrets.SF_JWT_KEY_PROD }}
-          SF_CLIENT_ID: ${{ secrets.SF_CLIENT_ID_PROD }}
-          SF_USERNAME: ${{ secrets.SF_USERNAME_PROD }}
-          SF_URL: ${{ vars.SF_INSTANCE_URL_PROD }}
-        run: bash scripts/ci/sf-login.sh release
       - name: Validate, then quick deploy
         if: env.EMPTY != '1'
         run: |
-          ARGS=(--manifest delta/package/package.xml --target-org release --test-level RunLocalTests --wait 120 --json)
+          ARGS=(--manifest delta/package/package.xml --target-org "$RELEASE_ALIAS" --test-level RunLocalTests --wait 120 --json)
           if grep -q '<members>' delta/destructiveChanges/destructiveChanges.xml 2>/dev/null; then
             ARGS+=(--post-destructive-changes delta/destructiveChanges/destructiveChanges.xml)
           fi
           JOB=$(sf project deploy validate "${ARGS[@]}" | jq -r '.result.id')
-          [ -n "$JOB" ] && [ "$JOB" != null ] || { echo "Validation failed"; exit 1; }
-          sf project deploy quick --job-id "$JOB" --target-org release --wait 60
-      - id: app
-        if: env.EMPTY != '1'
-        uses: actions/create-github-app-token@v2
-        with: { app-id: "${{ secrets.APP_ID }}", private-key: "${{ secrets.APP_PRIVATE_KEY }}" }
+          if [ -z "$JOB" ] || [ "$JOB" = null ]; then echo "Validation failed"; exit 1; fi
+          sf project deploy quick --job-id "$JOB" --target-org "$RELEASE_ALIAS" --wait 60
       - name: Move prod-deployed tag
         if: env.EMPTY != '1' && vars.DEPLOY_ENVIRONMENT != 'production-dryrun'
         env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/prod-deployed" -X PATCH -f sha="$GITHUB_SHA" -F force=true >/dev/null \
             || gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref=refs/tags/prod-deployed -f sha="$GITHUB_SHA" >/dev/null
       - name: Report
         if: always()
         env:
-          HOOK: ${{ secrets.SLACK_WEBHOOK_ARCH }}
           STATUS: ${{ job.status }}
           ENVN: ${{ vars.DEPLOY_ENVIRONMENT || 'production' }}
         run: |
-          bash scripts/ci/slack.sh "Deploy to $ENVN: $STATUS for ${GITHUB_SHA:0:8}${EMPTY:+ (no metadata changes)}"
+          echo "Deploy to $ENVN: $STATUS for ${GITHUB_SHA:0:8}${EMPTY:+ (no metadata changes)}" | tee -a "$GITHUB_STEP_SUMMARY"

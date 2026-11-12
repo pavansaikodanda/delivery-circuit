@@ -1,19 +1,113 @@
 // View models for the sidebar, persona panel and feature panel. No "vscode" import: everything here is pure and
 // unit-tested (test/unit/views*.test.ts). index.ts loads data through the contracts and hands it to these builders;
 // the webview pages only render what they receive.
+//
+// v3 (docs/CIRCUIT-V3.md): a feature is a Jira epic with a Confluence design page. The page status and version are G1;
+// each story carries the approved design version it was planned on (C5). Stories start from the Developer's queue
+// ("Start story") and get their tests from the Tester ("Add tests"). Specs are not in the repo: no spec-file links.
 import {
   GATES, PERSONAS, canAct, canView,
   type ActionRef, type CheckState, type ConnectionStatus, type DeepLink, type Feature, type GateId, type GateState,
-  type Identity, type Persona, type PrRef, type QueueItem, type ReviewSignal, type SourceRef, type StageId,
+  type Identity, type Persona, type PrRef, type QueueItem, type ReviewSignal, type SourceRef, type StageId, type Story,
 } from "../core/contracts";
+
+// ---------- v3 fields, read structurally until the contract names them (contract request) ----------
+// The project module serves FeatureInfo / StoryInfo (src/project/model.ts) as contract Features. This module must not
+// import it, so the shapes below mirror the fields the views read; designOf() / storyOf() normalise them.
+
+/** G1 evaluation as the project module sends it (FeatureInfo.design.approval). */
+export interface DesignApprovalRaw {
+  state?: "approved" | "changed" | "draft" | "unverified-approver" | "missing" | "unknown";
+  approvedVersion?: number;
+  approvedBy?: string;
+  /** true = a configured architect; false = not one; undefined = cannot tell */
+  approverIsArchitect?: boolean;
+  changedSinceApproval?: boolean;
+  detail?: string;
+}
+
+/** Confluence design page of a feature (epic), normalised for the views. */
+export interface DesignInfo {
+  pageId?: string;
+  url?: string;
+  title?: string;
+  /** Confluence content status name: "Approved", "In progress", "Rough draft", ... */
+  status?: string;
+  /** current page version */
+  version?: number;
+  /** page version an architect approved (G1) */
+  approvedVersion?: number;
+  approvedBy?: string;
+  approvedAt?: string;
+  /** false when whoever set Approved is not in the architects group (then it does not count) */
+  approvedByArchitect?: boolean;
+  /** true when the page changed after the approved version (else derived: version > approvedVersion) */
+  changedSinceApproval?: boolean;
+  /** project module's evaluation; its state wins over the derived one when present */
+  approval?: DesignApprovalRaw;
+  orgSnapshotUrl?: string;
+  /** set when the page could not be read */
+  error?: string;
+}
+/** A contract Feature as the views accept it: design may be partial (fixtures, a page read halfway). */
+export type FeatureV3 = Omit<Feature, "design"> & { design?: DesignInfo; decisions?: number };
+export type StoryV3 = Story & {
+  /** Jira status name and category ("new" | "indeterminate" | "done") */
+  status?: string;
+  statusCategory?: string;
+  labels?: string[];
+  /** Approved design version recorded on the story (project module: approvedDesignVersion) */
+  designVersion?: number;
+  approvedDesignVersion?: number;
+  /** C5 as computed by the project module */
+  designSync?: "ok" | "changed" | "missing" | "ahead" | "unknown";
+  /** G2: label ai-ready + Testability confirmed (derived from labels / testabilityConfirmed when absent) */
+  aiReady?: boolean;
+  testabilityConfirmed?: boolean;
+  /** tests/<KEY>.tc.json is on the story PR (derived from the PR's files when absent) */
+  testsOnPr?: boolean;
+  /** Jira keys that block this story ("is blocked by") */
+  blockedBy?: string[];
+  url?: string;
+};
+const v3 = (f: FeatureV3) => f;
+const isNumber = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+
+/** The feature's design page with the project module's approval folded in. */
+export function designOf(f: FeatureV3): DesignInfo {
+  const d: DesignInfo = { ...(v3(f).design ?? {}) };
+  const a = d.approval;
+  if (a) {
+    if (isNumber(a.approvedVersion) && (a.state === "approved" || a.state === "changed" || a.state === "unverified-approver")) d.approvedVersion = a.approvedVersion;
+    if (a.approvedBy) d.approvedBy = a.approvedBy;
+    if (a.approverIsArchitect !== undefined) d.approvedByArchitect = a.approverIsArchitect;
+    if (a.state === "changed") d.changedSinceApproval = true;
+    else if (a.changedSinceApproval !== undefined) d.changedSinceApproval = a.changedSinceApproval;
+  }
+  return d;
+}
+
+/** A story with the G2 / C5 / tests-on-PR facts the views need, whichever module filled them. */
+export function storyOf(s: Story, pr?: PrRef & { files?: string[] }): StoryV3 {
+  const r = s as StoryV3;
+  const designVersion = isNumber(r.designVersion) ? r.designVersion : isNumber(r.approvedDesignVersion) ? r.approvedDesignVersion : undefined;
+  const aiReady = r.aiReady ?? ((r.labels ?? []).includes("ai-ready") && r.testabilityConfirmed !== false);
+  const testsOnPr = r.testsOnPr ?? (!!r.jiraKey && Array.isArray(pr?.files) && pr!.files!.includes(`tests/${r.jiraKey}.tc.json`));
+  const prNumber = r.prNumber ?? (pr && pr.state !== "closed" ? pr.number : undefined);
+  return { ...r, designVersion, aiReady, testsOnPr, ...(prNumber !== undefined ? { prNumber } : {}) };
+}
+const sv3 = (s: Story) => storyOf(s);
+/** The id people use for a feature: the epic key in v3, the slug otherwise. */
+export const featureKey = (f: FeatureV3): string => v3(f).epicKey || f.slug || f.id;
 
 // ---------- labels ----------
 export const PERSONA_LABEL: Record<Persona, string> = { architect: "Architect", developer: "Developer", tester: "Tester" };
 
+/** v3 labels for the contract's stage ids: plan = the design page, signoff = design approved (G1), jira = ai-ready (G2). */
 export const STAGES: { id: StageId; label: string }[] = [
-  { id: "intake", label: "Intake" }, { id: "clarify", label: "Clarify" }, { id: "plan", label: "Plan" },
-  { id: "signoff", label: "Sign-off" }, { id: "stories", label: "Stories" }, { id: "tests", label: "Tests" },
-  { id: "jira", label: "Jira" }, { id: "build", label: "Build" }, { id: "qa", label: "QA" }, { id: "release", label: "Release" },
+  { id: "intake", label: "Intake" }, { id: "clarify", label: "Clarify" }, { id: "plan", label: "Design" },
+  { id: "signoff", label: "Approved" }, { id: "stories", label: "Stories" }, { id: "tests", label: "Tests" },
+  { id: "jira", label: "Ready" }, { id: "build", label: "Build" }, { id: "qa", label: "Review" }, { id: "release", label: "Release" },
 ];
 
 export const GATE_IDS = Object.keys(GATES) as GateId[];
@@ -27,7 +121,7 @@ export const SIGNAL_SOURCES: { source: ReviewSignal["source"]; label: string }[]
 ];
 
 /** Check names shown first, in this order; gate/* follow, then anything else. */
-export const CHECK_ORDER = ["guard", "static", "qa", "spec-gate"];
+export const CHECK_ORDER = ["guard", "static", "design-gate", "qa"];
 
 const gateNum = (g?: GateId) => (g ? Number(g.slice(1)) : 99);
 
@@ -65,7 +159,7 @@ export function viewOnlyNotice(id: Identity | null, view: Persona): string | und
 }
 
 // ---------- actions ----------
-export type ArgKind = "feature" | "pr" | "source" | "none";
+export type ArgKind = "feature" | "pr" | "source" | "story" | "none";
 export type ActionView = ActionRef & { allowed: boolean; reason?: string };
 
 /** Why an action is disabled, in words the person can act on. */
@@ -83,43 +177,53 @@ export function toActionView(id: Identity | null, a: ActionRef, allowed: (a: Act
   return { ...a, allowed: ok, reason: disabledReason(id, a, ok) };
 }
 
-interface AiSpec { command: string; label: string; argKind: ArgKind; intent?: string }
+/** id: a v3 named action (src/actions/grammar.ts NAMED_ACTIONS); without it the id is "ai:<command>". */
+interface AiSpec { command: string; label: string; argKind: ArgKind; intent?: string; id?: string }
+const RECORD_DECISION: AiSpec = { id: "decision:record", command: "/record-decision", label: "Record decision", argKind: "feature" };
 export const AI_ACTIONS: Record<Persona, AiSpec[]> = {
   architect: [
     { command: "/circuit-intake", label: "Intake from a source", argKind: "source" },
     { command: "/arch-design", label: "Design", argKind: "feature" },
     { command: "/arch-jira-push", label: "Push to Jira", argKind: "feature" },
     { command: "/arch-review-pr", label: "Review PR", argKind: "pr" },
+    RECORD_DECISION,
   ],
   developer: [
     { command: "/dev-review-stories", label: "Review stories", argKind: "feature" },
+    { id: "dev:start-story", command: "/dev-start-story", label: "Start story", argKind: "story" },
     { command: "/dev-review-plan", label: "Review plan", argKind: "pr" },
     { command: "/dev-review-pr", label: "Review PR", argKind: "pr" },
-    // Take over a PR the AI fix loop gave up on (label needs-human): a Developer session on that PR.
+    { id: "dev:fix", command: "/dev-fix", label: "Fix with AI", argKind: "pr" },
+    { id: "review:open-room", command: "/review-room", label: "Open review room", argKind: "pr" },
+    { id: "review:record-verdict", command: "/review-room", label: "Record verdict", argKind: "pr" },
+    // A person takes over a PR after the AI attempts ran out (label needs-human): a Developer session on that PR.
     { command: "/dev-review-pr", label: "Take over", argKind: "pr", intent: "takeover" },
+    RECORD_DECISION,
   ],
   tester: [
     { command: "/qa-design-tests", label: "Design tests", argKind: "feature" },
     { command: "/qa-push-tests", label: "Push tests", argKind: "feature" },
+    { id: "qa:add-tests", command: "/qa-add-tests", label: "Add tests", argKind: "story" },
     { command: "/qa-review-testplan", label: "Review test plan", argKind: "pr" },
     { command: "/qa-explore", label: "Explore on QA", argKind: "pr" },
+    RECORD_DECISION,
   ],
 };
 
-/** Persona AI actions as ActionRefs ("ai:/arch-design" with args {command, argKind, arg?}). */
-export function aiActions(persona: Persona, preset: { feature?: string; pr?: number } = {}): ActionRef[] {
+/** Persona AI actions as ActionRefs: "ai:/arch-design" or a named id such as "dev:start-story"; args {command, argKind, arg?}. */
+export function aiActions(persona: Persona, preset: { feature?: string; pr?: number; story?: string } = {}): ActionRef[] {
   return AI_ACTIONS[persona].map((x) => {
     const args: Record<string, string | number> = { command: x.command, argKind: x.argKind };
     if (x.intent) args.intent = x.intent;
-    const arg = x.argKind === "feature" ? preset.feature : x.argKind === "pr" ? preset.pr : undefined;
+    const arg = x.argKind === "feature" ? preset.feature : x.argKind === "pr" ? preset.pr : x.argKind === "story" ? preset.story : undefined;
     if (arg !== undefined) args.arg = arg;
-    return { id: `ai:${x.command}`, label: x.label, persona, kind: "ai" as const, args };
+    return { id: x.id ?? `ai:${x.command}`, label: x.label, persona, kind: "ai" as const, args };
   });
 }
 
 export function needsArg(a: ActionRef): boolean {
   const k = a.args?.argKind;
-  return (k === "feature" || k === "pr" || k === "source") && (a.args?.arg === undefined || a.args?.arg === "");
+  return (k === "feature" || k === "pr" || k === "source" || k === "story") && (a.args?.arg === undefined || a.args?.arg === "");
 }
 
 export function withArg(a: ActionRef, value: string | number): ActionRef {
@@ -129,19 +233,39 @@ export function withArg(a: ActionRef, value: string | number): ActionRef {
 export interface PickItem { label: string; description?: string; detail?: string; value: string | number }
 
 /** QuickPick items for an action's argument, best candidates first. */
-export function argPickItems(a: ActionRef, data: { features: Feature[]; prs: PrRef[]; sources: SourceRef[] }): PickItem[] {
+export function argPickItems(a: ActionRef, data: { features: FeatureV3[]; prs: PrRef[]; sources: SourceRef[] }): PickItem[] {
   const kind = a.args?.argKind;
   const cmd = String(a.args?.command ?? "");
   if (kind === "feature") {
     return [...data.features].sort((x, y) => x.id.localeCompare(y.id)).map((f) => ({
-      label: f.slug, description: f.title,
-      detail: `${f.stories.length} stories · ${f.openQuestions} open questions${f.signedOff ? " · signed off" : ""}`, value: f.slug,
+      label: featureKey(f), description: f.title,
+      detail: [`${f.stories.length} stories`, `${f.openQuestions} open questions`, designView(f).text].join(" · "), value: featureKey(f),
     }));
+  }
+  if (kind === "story") {
+    const rows = data.features.flatMap((f) => {
+      const d = designView(f);
+      return f.stories.filter((s) => !!s.jiraKey).map((s) => ({ f, s: sv3(s), blocked: storyBlocked(sv3(s), d) !== undefined }));
+    });
+    const score = ({ s, blocked }: { s: StoryV3; blocked: boolean }): number => {
+      if (cmd === "/dev-start-story") return s.aiReady && !s.prNumber && !blocked ? 0 : !s.prNumber ? 1 : 2;
+      if (cmd === "/qa-add-tests") return s.prNumber && !s.testsOnPr ? 0 : s.prNumber ? 1 : 2;
+      return 1;
+    };
+    return rows.sort((x, y) => score(x) - score(y) || String(x.s.jiraKey).localeCompare(String(y.s.jiraKey), undefined, { numeric: true }))
+      .map(({ f, s }) => ({
+        label: `${s.jiraKey} ${s.title}`, description: featureKey(f),
+        detail: [s.status, s.aiReady ? "ai-ready" : "not ai-ready yet", s.prNumber ? `PR #${s.prNumber}` : "no PR yet"].filter(Boolean).join(" · "),
+        value: s.jiraKey!,
+      }));
   }
   if (kind === "pr") {
     const score = (p: PrRef): number => {
       const build = p.branch.startsWith("feature/");
       if (a.args?.intent === "takeover") return p.labels.includes("needs-human") ? 0 : 2;
+      if (cmd === "/dev-fix") return build && failing(p).length && !p.labels.includes("needs-human") ? 0 : build ? 1 : 2;
+      if (a.id === "review:record-verdict") return build && p.labels.includes(REVIEW_ROOM) && !p.labels.includes(REVIEW_VERDICT) ? 0 : build ? 1 : 2;
+      if (cmd === "/review-room") return build && !p.draft && !p.labels.includes("needs-human") && !p.labels.includes(REVIEW_ROOM) && !failing(p).length ? 0 : build ? 1 : 2;
       if (cmd === "/dev-review-plan") return build && p.draft && !p.labels.includes("plan-approved") ? 0 : build ? 1 : 2;
       if (cmd === "/qa-review-testplan") return build && p.draft && !p.labels.includes("testplan-approved") ? 0 : build ? 1 : 2;
       if (cmd === "/qa-explore") return p.labels.includes("needs-qa") ? 0 : build && !p.draft ? 1 : 2;
@@ -149,7 +273,7 @@ export function argPickItems(a: ActionRef, data: { features: Feature[]; prs: PrR
       return 1;
     };
     return [...data.prs]
-      .sort((x, y) => score(x) - score(y) || y.updatedAt.localeCompare(x.updatedAt))
+      .sort((x, y) => (isDone(x) ? 3 : score(x)) - (isDone(y) ? 3 : score(y)) || y.updatedAt.localeCompare(x.updatedAt))
       .map((p) => ({
         label: `#${p.number} ${p.title}`,
         description: [p.storyKey, p.draft ? "draft" : ""].filter(Boolean).join(" · "),
@@ -208,7 +332,7 @@ export function queueView(items: QueueItem[], id: Identity | null, allowed: (a: 
 // ---------- strips ----------
 export interface StepView { id: string; label: string; state: string; title?: string; own?: boolean }
 
-export function stageStrip(f: Feature): StepView[] {
+export function stageStrip(f: FeatureV3): StepView[] {
   return STAGES.map((s) => {
     const state = f.stages?.[s.id] ?? "todo";
     return { id: s.id, label: s.label, state, title: `${s.label}: ${state}` };
@@ -216,7 +340,7 @@ export function stageStrip(f: Feature): StepView[] {
 }
 
 /** G1..G9 with the persona's own gates flagged (highlighted in the UI). */
-export function gateStrip(f: Feature, persona: Persona | null): StepView[] {
+export function gateStrip(f: FeatureV3, persona: Persona | null): StepView[] {
   return GATE_IDS.map((g) => {
     const state: GateState = f.gates?.[g] ?? "not-started";
     const owner = GATES[g].owner;
@@ -224,7 +348,7 @@ export function gateStrip(f: Feature, persona: Persona | null): StepView[] {
   });
 }
 
-export function nextGate(f: Feature): { id: GateId; label: string; owner: Persona; ownerLabel: string; state: GateState } | undefined {
+export function nextGate(f: FeatureV3): { id: GateId; label: string; owner: Persona; ownerLabel: string; state: GateState } | undefined {
   for (const g of GATE_IDS) {
     const st = f.gates?.[g] ?? "not-started";
     if (st !== "done") return { id: g, label: GATES[g].label, owner: GATES[g].owner, ownerLabel: PERSONA_LABEL[GATES[g].owner], state: st };
@@ -297,11 +421,17 @@ function checkGate(c: CheckState | undefined, draft: boolean): GateState {
 //   G7       on non-draft PRs from gate/architect, not while needs-human is set;
 //   G8       non-draft, all gate/* checks and every other check green.
 const has = (pr: PrRef, l: string) => pr.labels.includes(l);
-const isAiPr = (pr: PrRef) => has(pr, "ai-generated");
+/** Merged or closed: nothing waits on anyone there any more. */
+const isDone = (pr: PrRef) => pr.state === "merged" || pr.state === "closed";
+/** A story PR that carries a plan (G3) and a test plan (G4). In v3 the Developer's "Start story" opens it as a draft with
+ *  PLAN.md and TESTPLAN.md, so every draft story PR counts, and so does one already labelled for its plans. */
+const isAiPr = (pr: PrRef) => prKind(pr) === "build" && (pr.draft || ["ai-generated", "plan-review", "plan-approved", "testplan-approved"].some((l) => has(pr, l)));
+/** Checks that failed on a PR (names, sorted); gate/* statuses are people's gates, not checks to fix. */
+export const failing = (pr: PrRef): string[] => Object.entries(pr.checks ?? {}).filter(([k, v]) => v === "failure" && !k.startsWith("gate/")).map(([k]) => k).sort();
 const nonGateGreen = (pr: PrRef) => Object.entries(pr.checks).every(([k, v]) => k.startsWith("gate/") || (v !== "failure" && v !== "pending"));
 const allGatesGreen = (pr: PrRef) => ["gate/developer", "gate/tester", "gate/architect"].every((c) => pr.checks[c] === "success");
 
-/** AI plan / test plan approval (G3 / G4): asked only on draft ai-generated PRs. */
+/** Plan / test plan approval (G3 / G4): asked only on draft story PRs. */
 function planGate(pr: PrRef, label: string): GateState {
   if (has(pr, label)) return "done";
   return pr.draft && isAiPr(pr) ? "waiting" : "not-started";
@@ -325,12 +455,13 @@ export function prGates(pr: PrRef, persona: Persona): StepView[] {
     return [...(isAiPr(pr) ? [mk("G4", planGate(pr, "testplan-approved"))] : []), mk("G6", checkGate(pr.checks["gate/tester"], pr.draft))];
   }
   const ready = !pr.draft && allGatesGreen(pr) && nonGateGreen(pr);
-  return [mk("G7", checkGate(pr.checks["gate/architect"], pr.draft)), mk("G8", ready ? "waiting" : "not-started")];
+  return [mk("G7", checkGate(pr.checks["gate/architect"], pr.draft)), mk("G8", pr.state === "merged" ? "done" : ready ? "waiting" : "not-started")];
 }
 
 /** Whether the PR is waiting on this persona now (same predicates as the persona's queue). `login`: the viewer,
  *  whose own PRs are not theirs to review. */
 export function prNeedsPersona(pr: PrRef, persona: Persona, login?: string): boolean {
+  if (isDone(pr)) return false;
   const kind = prKind(pr);
   if (kind === "spec" || kind === "intake") return persona === "architect" && prGates(pr, persona).some((g) => g.state === "waiting" || g.state === "blocked");
   if (kind !== "build") return false;
@@ -340,6 +471,8 @@ export function prNeedsPersona(pr: PrRef, persona: Persona, login?: string): boo
     case "developer":
       if (has(pr, "needs-human")) return true;
       if (pr.draft && isAiPr(pr) && !has(pr, "plan-approved")) return true;
+      // failed checks on the Developer's own story PR: "Fix with AI" (step 14)
+      if (mine && failing(pr).length) return true;
       return !pr.draft && open("gate/developer") && !mine;
     case "tester":
       if (has(pr, "needs-qa")) return true;
@@ -371,20 +504,48 @@ export interface PrView {
   actions: ActionView[];
 }
 
+/** AI fix attempts per PR before needs-human (the same cap as MAX_AI_ATTEMPTS in src/actions/grammar.ts). */
+export const MAX_FIX_ATTEMPTS = 3;
+/** PR labels of the review room (the same as the project queue): opened, verdict recorded. */
+export const REVIEW_ROOM = "review-room";
+export const REVIEW_VERDICT = "review-verdict";
+/** The Tester's suite and tc index are on the PR (when the PR's file list is known; unknown counts as not yet). */
+const testsOn = (pr: PrRef & { files?: string[] }): boolean =>
+  !!pr.storyKey && Array.isArray(pr.files) && pr.files.includes(`tests/${pr.storyKey}.tc.json`) && pr.files.includes(`test-cases/${pr.storyKey}.sf-tests.yaml`);
+
 /** AI actions a persona would run on this PR now, most relevant first, with the PR number preset.
- *  Developer: take over (needs-human) > review the AI plan (draft ai-generated, plan not approved) > review the PR.
- *  Tester: review the AI test plan > explore on QA. Architect: review the PR (build, not draft) or the spec PR. */
+ *  Developer: take over (needs-human) > fix with AI (failed checks, attempts left) > review the plan (draft story PR,
+ *  plan not approved) > review the PR > open the review room > record its verdict.
+ *  Tester: add tests (draft story PR) > review the test plan > explore on QA. Architect: review the PR (not draft). */
 export function prActions(pr: PrRef, persona: Persona): ActionRef[] {
+  if (isDone(pr)) return [];
   const kind = prKind(pr);
   const all = aiActions(persona, { pr: pr.number });
   const pick = (command: string, intent?: string) =>
-    all.find((a) => a.args?.command === command && (intent ? a.args?.intent === intent : a.args?.intent === undefined));
+    all.find((a) => a.id.startsWith("ai:") && a.args?.command === command && (intent ? a.args?.intent === intent : a.args?.intent === undefined));
+  const named = (id: string, extra: Record<string, string | number> = {}) => {
+    const a = all.find((x) => x.id === id);
+    return a ? { ...a, args: { ...(a.args ?? {}), ...extra } } : undefined;
+  };
   const out: (ActionRef | undefined)[] = [];
+  const stuck = has(pr, "needs-human");
   if (persona === "developer") {
-    if (kind === "build" && has(pr, "needs-human")) out.push(pick("/dev-review-pr", "takeover"));
+    if (kind === "build" && stuck) out.push(pick("/dev-review-pr", "takeover"));
+    const failed = failing(pr);
+    const attempt = pr.aiAttempt ?? 0;
+    if (kind === "build" && failed.length && !stuck && attempt < MAX_FIX_ATTEMPTS) {
+      // attempt: the AI attempt this run would be; the action reads the failed check runs for the failure context.
+      out.push(named("dev:fix", { attempt: attempt + 1, checks: failed.join(",") }));
+    }
     if (pr.draft && isAiPr(pr) && !has(pr, "plan-approved")) out.push(pick("/dev-review-plan"));
     if (kind !== "intake" && !pr.draft) out.push(pick("/dev-review-pr"));
+    // Review room (steps 15-16): open it once checks are green; record the verdict once it is open.
+    const green = Object.entries(pr.checks ?? {}).every(([k, v]) => k.startsWith("gate/") || v === "success" || v === "missing");
+    if (kind === "build" && !pr.draft && !stuck && green && !has(pr, REVIEW_ROOM)) out.push(named("review:open-room"));
+    if (kind === "build" && !stuck && has(pr, REVIEW_ROOM) && !has(pr, REVIEW_VERDICT)) out.push(named("review:record-verdict"));
   } else if (persona === "tester") {
+    const filesKnown = Array.isArray((pr as PrRef & { files?: string[] }).files);
+    if (kind === "build" && pr.storyKey && !has(pr, "testplan-approved") && !testsOn(pr) && (pr.draft || filesKnown)) out.push(named("qa:add-tests", { arg: pr.storyKey, storyKey: pr.storyKey }));
     if (pr.draft && isAiPr(pr) && !has(pr, "testplan-approved")) out.push(pick("/qa-review-testplan"));
     if (kind === "build" && (has(pr, "needs-qa") || !pr.draft)) out.push(pick("/qa-explore"));
   } else if (!pr.draft) {
@@ -407,16 +568,75 @@ export function prView(pr: PrRef, persona: Persona, jiraUrl: (key: string) => st
   };
 }
 
+// ---------- design page (G1, C5) ----------
+export type DesignState = "approved" | "changed" | "unverified" | "draft" | "missing" | "unknown";
+export interface DesignView {
+  state: DesignState;
+  /** one status phrase: "Approved v7", "Changed since v7 (now v9)", "In progress · v3", "No design page yet" */
+  text: string;
+  tone: "ok" | "warn" | "info" | "muted";
+  url?: string;
+  status?: string;
+  version?: number;
+  approvedVersion?: number;
+  approvedBy?: string;
+  approvedAt?: string;
+}
+
+const isNum = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+const httpsOnly = (u: unknown): string | undefined => (typeof u === "string" && /^https:\/\/[^\s]+$/.test(u) ? u : undefined);
+
+/** Where the feature's design page stands: approved (and at which version), changed since, or still a draft. */
+export function designView(f: FeatureV3): DesignView {
+  const d = designOf(f);
+  const url = httpsOnly(d.url) ?? (f.links ?? []).find((l) => l.kind === "confluence" && httpsOnly(l.target) && !/snapshot/i.test(l.label))?.target;
+  const base = { url, status: d.status, version: isNum(d.version) ? d.version : undefined, approvedVersion: isNum(d.approvedVersion) ? d.approvedVersion : undefined,
+    approvedBy: d.approvedBy, approvedAt: d.approvedAt };
+  const ap = d.approval?.state;
+  if (ap === "missing" || (!url && !d.status && base.version === undefined && !d.pageId)) return { ...base, state: "missing", text: "No design page yet", tone: "muted" };
+  if (ap === "unknown" && !d.status) return { ...base, state: "unknown", text: d.approval?.detail || d.error || "Design page not read yet", tone: "muted" };
+  const approved = base.approvedVersion !== undefined;
+  if (approved && d.approvedByArchitect === false) {
+    return { ...base, state: "unverified", text: `Approved by ${d.approvedBy ?? "someone"} outside architects: not counted`, tone: "warn" };
+  }
+  const changed = approved && (d.changedSinceApproval === true || (d.changedSinceApproval === undefined && base.version !== undefined && base.version > base.approvedVersion!));
+  if (changed) return { ...base, state: "changed", text: `Changed since approved v${base.approvedVersion}${base.version !== undefined ? ` (now v${base.version})` : ""}`, tone: "warn" };
+  if (approved) return { ...base, state: "approved", text: `Approved v${base.approvedVersion}${d.approvedBy ? ` by ${d.approvedBy}` : ""}`, tone: "ok" };
+  const st = d.status && d.status.trim() ? d.status.trim() : "Draft";
+  return { ...base, state: "draft", text: base.version !== undefined ? `${st} · v${base.version}` : st, tone: "info" };
+}
+
+/** "arch:approve-design" for a feature: opens the Confluence page; the person approves there (G1). */
+export function approveDesignAction(f: FeatureV3): ActionRef {
+  const args: Record<string, string | number> = { featureId: f.id };
+  const key = v3(f).epicKey;
+  if (key) args.key = key;
+  const pageId = designOf(f).pageId;
+  if (pageId) args.pageId = pageId;
+  const url = designView(f).url;
+  if (url) args.url = url;
+  return { id: "arch:approve-design", label: "Approve design", persona: "architect", kind: "gate", args };
+}
+
 // ---------- features ----------
 export interface FeatureCardView {
-  id: string; slug: string; title: string; score?: number; openQuestions: number; stories: number; signedOff: boolean;
+  /** slug: the epic key in v3 (what the row shows as its title) */
+  id: string; slug: string; title: string; score?: number; openQuestions: number; stories: number;
+  /** design approved (G1) */
+  signedOff: boolean;
+  epicKey?: string; design: DesignView;
   stages: StepView[]; gates: StepView[]; next?: ReturnType<typeof nextGate>; links: DeepLink[];
 }
 
-export function featureCard(f: Feature, persona: Persona | null): FeatureCardView {
+/** Feature links without spec files: in v3 the spec lives in Confluence, not in the repo. */
+const featureLinks = (f: FeatureV3): DeepLink[] => (f.links ?? []).filter((l) => l.kind !== "file" && l.kind !== "report");
+
+export function featureCard(f: FeatureV3, persona: Persona | null): FeatureCardView {
+  const design = designView(f);
   return {
-    id: f.id, slug: f.slug, title: f.title, score: f.score, openQuestions: f.openQuestions, stories: f.stories.length,
-    signedOff: f.signedOff, stages: stageStrip(f), gates: gateStrip(f, persona), next: nextGate(f), links: f.links ?? [],
+    id: f.id, slug: featureKey(f), title: f.title, score: f.score, openQuestions: f.openQuestions, stories: f.stories.length,
+    signedOff: design.state === "approved" || (design.state === "missing" && f.signedOff), epicKey: v3(f).epicKey, design,
+    stages: stageStrip(f), gates: gateStrip(f, persona), next: nextGate(f), links: featureLinks(f),
   };
 }
 
@@ -436,6 +656,8 @@ export function navItems(id: Identity, attention: number): NavItem[] {
     target: `persona:${p}`, label: `${PERSONA_LABEL[p]} view`, detail: canAct(id, p) ? undefined : "view only",
   }));
   if (id.personas.includes("tester") || id.personas.includes("architect")) out.push({ target: "testing", label: "Testing" });
+  // Sources (transcripts, notes, Fireflies, Wispr Flow) are the Architect's: step 1 of the flow.
+  if (id.personas.includes("architect")) out.push({ target: "sources", label: "Sources", detail: "transcripts and notes for intake" });
   out.push({
     target: "connections", label: "Connections", count: attention || undefined, cls: attention ? "warn" : undefined,
     detail: attention ? `${attention} need${attention === 1 ? "s" : ""} attention` : "tools, review tools and MCP servers",
@@ -450,6 +672,7 @@ export function navAllowed(id: Identity | null, target: string): boolean {
   if (target.startsWith("persona:")) { const p = target.slice(8) as Persona; return PERSONAS.includes(p) && canView(id, p); }
   if (target === "testing") return id.personas.includes("tester") || id.personas.includes("architect");
   if (target === "setup") return id.isAdmin;
+  if (target === "sources") return id.personas.includes("architect");
   return target === "connections";
 }
 
@@ -538,7 +761,7 @@ export interface PersonaInput {
   identity: Identity | null;
   requested?: Persona | null;
   queue: QueueItem[];
-  features: Feature[];
+  features: FeatureV3[];
   prs: PrRef[];
   allowed: (a: ActionRef) => boolean;
   jiraUrl: (key: string) => string | undefined;
@@ -592,10 +815,20 @@ export function buildPersona(i: PersonaInput): PersonaState {
 // ---------- feature panel ----------
 export type StoryPrState = "open" | "draft" | "merged" | "closed";
 export interface StoryRow {
-  num: string; title: string; file: string; jiraKey?: string;
+  num: string; title: string; jiraKey?: string;
   counts: { ui: number; unit: number; manual: number }; total: number; prNumber?: number; links: DeepLink[];
   /** State of the story's PR when the PR list knows it (open PRs and recently merged ones). */
   prState?: StoryPrState;
+  /** Jira status */
+  jiraStatus?: string;
+  aiReady: boolean;
+  designVersion?: number;
+  /** C5: the story was planned on an older approved design than the page's current approved version */
+  designChanged: boolean;
+  /** one status phrase for the row */
+  status: { tone: "ok" | "warn" | "info" | "muted" | "err"; text: string };
+  /** Start story (Developer) / Add tests (Tester), for the personas the viewer can see; disabled with a reason */
+  actions: ActionView[];
 }
 export interface GateRow {
   id: GateId; label: string; owner: Persona; ownerLabel: string; state: GateState; own: boolean; cls: string;
@@ -605,8 +838,8 @@ export interface GateRow {
   actions: ActionView[];
 }
 
-/** Feature-level Spec Kit commands that work towards each gate. G3-G9 are moved on the story PRs
- *  (e.g. G3 = /dev-review-plan on the draft PR), so the feature page shows them on the PR/story rows instead. */
+/** Feature-level commands that work towards each gate. G3-G9 are moved on the story PRs (e.g. G3 = /dev-review-plan
+ *  on the draft PR), so the feature page shows them on the PR/story rows instead. G1 also has "Approve design". */
 export const GATE_COMMANDS: Partial<Record<GateId, string[]>> = {
   G1: ["/arch-design", "/arch-jira-push"],
   G2: ["/qa-design-tests", "/qa-push-tests"],
@@ -618,6 +851,8 @@ export function gateOfCommand(command: string): GateId | undefined {
   return undefined;
 }
 
+const gateOfAction = (a: ActionRef): GateId | undefined => (a.id === "arch:approve-design" ? "G1" : gateOfCommand(String(a.args?.command ?? "")));
+
 export function storyPrState(pr: PrRef | undefined): StoryPrState | undefined {
   if (!pr) return undefined;
   if (pr.state === "merged" || pr.state === "closed") return pr.state;
@@ -626,7 +861,7 @@ export function storyPrState(pr: PrRef | undefined): StoryPrState | undefined {
 export interface SourceRow { id: string; kind: SourceRef["kind"]; title: string; date: string; links: DeepLink[]; canOpen: boolean }
 
 export interface FeatureInput {
-  feature: Feature | undefined;
+  feature: FeatureV3 | undefined;
   featureId: string;
   identity: Identity | null;
   sources: SourceRef[];
@@ -634,7 +869,6 @@ export interface FeatureInput {
   owner: string;
   repo: string;
   jiraUrl: (key: string) => string | undefined;
-  existingFiles: string[];
   allowed: (a: ActionRef) => boolean;
   now: number;
   error?: string;
@@ -648,17 +882,76 @@ export interface FeatureState {
   login?: string;
   /** The personas the identity holds (header chip). */
   personas: Persona[];
-  feature?: { id: string; slug: string; title: string; score?: number; openQuestions: number; signedOff: boolean; dir: string; links: DeepLink[] };
+  /** slug: the epic key in v3 */
+  feature?: { id: string; slug: string; epicKey?: string; title: string; score?: number; openQuestions: number; signedOff: boolean; links: DeepLink[] };
+  /** The Confluence design page: status, version, approved version (G1) */
+  design?: DesignView;
+  /** Design row actions: Approve design (Architect), Design (AI), Record decision (the viewer's persona) */
+  designActions: ActionView[];
   stages: StepView[];
   gates: GateRow[];
   next?: ReturnType<typeof nextGate>;
   stories: StoryRow[];
   /** null when the viewer may not see sources (Architect only) */
   sources: SourceRow[] | null;
-  files: DeepLink[];
   actions: ActionView[];
   error?: string;
   updated: string;
+}
+
+/** Why a story may not start yet because of its design (C5), or undefined. */
+export function storyBlocked(s: StoryV3, design: DesignView): string | undefined {
+  const sv = isNum(s.designVersion) ? s.designVersion : undefined;
+  if (sv !== undefined && design.approvedVersion !== undefined && sv < design.approvedVersion) {
+    return `Design changed since this story was planned (v${sv}, now approved v${design.approvedVersion}): re-plan the story first`;
+  }
+  if (design.state === "changed") return `The design page changed after approval (now v${design.version ?? "?"}): an architect re-approves it first`;
+  if (design.state === "unverified") return "The design approval was not set by an architect: an architect approves it first";
+  if (design.state === "draft") return "The design is not approved yet (G1)";
+  if (design.state === "unknown") return "The design page could not be read: sign in to the Atlassian MCP in Claude Code (/mcp) and refresh";
+  if (s.designSync === "missing" && design.state === "approved") return "The story has no Approved design version: the Architect records it first (arch-jira-push)";
+  return undefined;
+}
+
+/** Why a story waits on other stories (Jira "is blocked by", e.g. Story 00 first), or undefined. */
+export function storyWaitsFor(s: StoryV3, doneKeys: Set<string>): string | undefined {
+  const open = (s.blockedBy ?? []).filter((k) => !doneKeys.has(k));
+  return open.length ? `Waits for ${open.join(", ")} (blocks this story)` : undefined;
+}
+
+/** The story row's Start story / Add tests actions (disabled with a reason when the story or its design is not ready). */
+function storyActions(s: StoryV3, prState: StoryPrState | undefined, design: DesignView, i: FeatureInput, doneKeys: Set<string>): ActionView[] {
+  if (!s.jiraKey || !i.identity) return [];
+  const id = i.identity;
+  const out: ActionView[] = [];
+  const hasPr = !!s.prNumber && prState !== "closed";
+  if (!hasPr && canView(id, "developer")) {
+    const a = findAi("developer", "dev:start-story", s.jiraKey);
+    const v = toActionView(id, a, i.allowed);
+    const why = storyBlocked(s, design) ?? (!s.aiReady ? "Waits for G2: the Tester confirms testability (ai-ready)" : undefined) ?? storyWaitsFor(s, doneKeys);
+    out.push(why && v.allowed ? { ...v, allowed: false, reason: why } : v);
+  }
+  if (hasPr && prState !== "merged" && !s.testsOnPr && canView(id, "tester")) {
+    out.push(toActionView(id, findAi("tester", "qa:add-tests", s.jiraKey, { pr: s.prNumber! }), i.allowed));
+  }
+  return out;
+}
+
+const findAi = (persona: Persona, id: string, story: string, extra: Record<string, string | number> = {}): ActionRef => {
+  const a = aiActions(persona, { story }).find((x) => x.id === id)!;
+  return { ...a, args: { ...(a.args ?? {}), ...extra } };
+};
+
+function storyStatus(s: StoryV3, prState: StoryPrState | undefined, designChanged: boolean): StoryRow["status"] {
+  if (designChanged) return { tone: "warn", text: s.designVersion !== undefined ? `design changed since v${s.designVersion}` : "design changed: re-plan" };
+  if (s.prNumber && prState) {
+    const word = { merged: "merged", open: "in review", draft: "draft", closed: "closed" }[prState];
+    return { tone: prState === "merged" ? "ok" : prState === "open" ? "info" : "muted", text: `PR #${s.prNumber} ${word}` };
+  }
+  if (s.prNumber) return { tone: "info", text: `PR #${s.prNumber}` };
+  if (s.aiReady) return { tone: "info", text: "ready to start" };
+  if (!s.jiraKey) return { tone: "muted", text: "not in Jira yet" };
+  return { tone: "muted", text: s.status ? `${s.status} · not ai-ready` : "not ai-ready yet" };
 }
 
 export function firefliesUrl(sourceId: string): string | undefined {
@@ -670,42 +963,68 @@ export function buildFeature(i: FeatureInput): FeatureState {
   const viewer = i.identity?.active ?? i.identity?.personas[0] ?? null;
   const st: FeatureState = {
     found: !!i.feature, featureId: i.featureId, viewer, viewerLabel: viewer ? PERSONA_LABEL[viewer] : "",
-    login: i.identity?.login, personas: i.identity?.personas ?? [],
-    stages: [], gates: [], stories: [], sources: null, files: [], actions: [], error: i.error, updated: new Date(i.now).toISOString(),
+    login: i.identity?.login, personas: i.identity?.personas ?? [], designActions: [],
+    stages: [], gates: [], stories: [], sources: null, actions: [], error: i.error, updated: new Date(i.now).toISOString(),
   };
   const f = i.feature;
   if (!f) return st;
-  st.feature = { id: f.id, slug: f.slug, title: f.title, score: f.score, openQuestions: f.openQuestions, signedOff: f.signedOff, dir: f.dir, links: f.links ?? [] };
+  const key = featureKey(f);
+  const design = designView(f);
+  st.design = design;
+  st.feature = { id: f.id, slug: key, epicKey: v3(f).epicKey, title: f.title, score: f.score, openQuestions: f.openQuestions,
+    signedOff: design.state === "approved" || (design.state === "missing" && f.signedOff), links: featureLinks(f) };
   st.stages = stageStrip(f);
   st.next = nextGate(f);
+  const approve = approveDesignAction(f);
+  const featureActs = (p: Persona) => aiActions(p, { feature: key }).filter((a) => a.args?.argKind === "feature" && (a.id !== "decision:record" || p === viewer));
+  // Approve design leads G1 while the design is not (or no longer) approved; it follows Design once it is.
+  const needsApproval = design.state !== "approved";
+  const archActs = featureActs("architect");
   const acts: ActionRef[] = [
-    ...aiActions("architect", { feature: f.slug }).filter((a) => a.args?.argKind === "feature"),
-    ...aiActions("developer", { feature: f.slug }).filter((a) => a.args?.argKind === "feature"),
-    ...aiActions("tester", { feature: f.slug }).filter((a) => a.args?.argKind === "feature"),
+    ...(needsApproval ? [approve, ...archActs] : [...archActs.slice(0, 1), approve, ...archActs.slice(1)]),
+    ...featureActs("developer"),
+    ...featureActs("tester"),
   ];
   const visible = acts.filter((a) => !!i.identity && canView(i.identity, a.persona));
   st.actions = visible.map((a) => toActionView(i.identity, a, i.allowed));
+  const approveView = st.actions.find((a) => a.id === "arch:approve-design");
+  if (approveView && design.state === "missing" && approveView.allowed) Object.assign(approveView, { allowed: false, reason: "Run Design first: there is no design page yet" });
+  st.designActions = st.actions.filter((a) => a.id === "arch:approve-design" || a.args?.command === "/arch-design" || a.id === "decision:record");
   st.gates = GATE_IDS.map((g) => {
     const state = f.gates?.[g] ?? "not-started";
     const owner = GATES[g].owner;
     const own = owner === viewer;
     const waitsOnViewer = own && state !== "done" && (state === "waiting" || st.next?.id === g);
-    const actions = st.actions.filter((a) => gateOfCommand(String(a.args?.command ?? "")) === g);
+    const actions = st.actions.filter((a) => gateOfAction(a) === g);
     return { id: g, label: GATES[g].label, owner, ownerLabel: PERSONA_LABEL[owner], state, own, cls: stateClass(state), waitsOnViewer, actions };
   });
   const prByNum = new Map(i.prs.map((p) => [p.number, p]));
-  st.stories = [...f.stories].sort((a, b) => a.num.localeCompare(b.num)).map((s) => {
+  /** the story's PR: by number when the project linked it, else the open (or merged) PR whose branch names the key */
+  const prOf = (raw: Story) => (raw.prNumber ? prByNum.get(raw.prNumber) : undefined)
+    ?? i.prs.find((p) => p.storyKey === raw.jiraKey && p.state !== "closed" && p.state !== "merged")
+    ?? i.prs.find((p) => p.storyKey === raw.jiraKey && p.state === "merged");
+  const all = f.stories.map((raw) => storyOf(raw, prOf(raw)));
+  const doneKeys = new Set(all.filter((s) => s.jiraKey && (s.statusCategory === "done" || /^(done|closed|resolved)$/i.test(s.status ?? "")
+    || (s.prNumber !== undefined && prByNum.get(s.prNumber)?.state === "merged"))).map((s) => s.jiraKey!));
+  st.stories = all.sort((a, b) => a.num.localeCompare(b.num)).map((s) => {
     const counts = { ui: 0, unit: 0, manual: 0 };
     for (const tc of s.testCases ?? []) counts[tc.level] = (counts[tc.level] ?? 0) + 1;
-    const links: DeepLink[] = [{ kind: "file", label: "Story", target: s.file }];
-    const ju = s.jiraKey ? i.jiraUrl(s.jiraKey) : undefined;
+    const links: DeepLink[] = [];
+    const ju = s.jiraKey ? i.jiraUrl(s.jiraKey) ?? httpsOnly(s.url) : undefined;
     if (ju && s.jiraKey) links.push({ kind: "jira", label: s.jiraKey, target: ju });
     if (s.prNumber) {
       const url = prByNum.get(s.prNumber)?.url ?? (i.owner && i.repo ? `https://github.com/${i.owner}/${i.repo}/pull/${s.prNumber}` : undefined);
       if (url) links.push({ kind: "github", label: `PR #${s.prNumber}`, target: url });
     }
     const prState = s.prNumber ? storyPrState(prByNum.get(s.prNumber)) : undefined;
-    return { num: s.num, title: s.title, file: s.file, jiraKey: s.jiraKey, counts, total: s.testCases?.length ?? 0, prNumber: s.prNumber, links, prState };
+    const designVersion = isNum(s.designVersion) ? s.designVersion : undefined;
+    const designChanged = prState !== "merged" && (s.designSync === "changed"
+      || (designVersion !== undefined && design.approvedVersion !== undefined && designVersion < design.approvedVersion));
+    return {
+      num: s.num, title: s.title, jiraKey: s.jiraKey, counts, total: s.testCases?.length ?? 0, prNumber: s.prNumber, links, prState,
+      jiraStatus: s.status, aiReady: !!s.aiReady, designVersion, designChanged,
+      status: storyStatus(s, prState, designChanged), actions: storyActions(s, prState, design, i, doneKeys),
+    };
   });
   if (i.identity?.personas.includes("architect")) {
     const byId = new Map(i.sources.map((s) => [s.id, s]));
@@ -719,10 +1038,5 @@ export function buildFeature(i: FeatureInput): FeatureState {
       };
     });
   }
-  const dir = f.dir.replace(/\\/g, "/").replace(/\/$/, "");
-  st.files = ["spec.md", "plan.md", "data-model.md", "jira-map.json"]
-    .map((n) => `${dir}/${n}`)
-    .filter((p) => i.existingFiles.includes(p))
-    .map((p) => ({ kind: "file" as const, label: p.split("/").pop()!, target: p }));
   return st;
 }

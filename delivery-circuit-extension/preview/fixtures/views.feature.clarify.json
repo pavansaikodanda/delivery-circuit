@@ -1,11 +1,50 @@
 {
   "found": true,
-  "featureId": "002",
+  "featureId": "ACME-20",
   "viewer": "architect",
   "viewerLabel": "Architect",
   "login": "maya-arch",
   "personas": [
     "architect"
+  ],
+  "designActions": [
+    {
+      "id": "arch:approve-design",
+      "label": "Approve design",
+      "persona": "architect",
+      "kind": "gate",
+      "args": {
+        "featureId": "ACME-20",
+        "key": "ACME-20",
+        "pageId": "2240011",
+        "url": "https://acme.atlassian.net/wiki/spaces/ACME/pages/2240011/Entitlement+SLA"
+      },
+      "allowed": true
+    },
+    {
+      "id": "ai:/arch-design",
+      "label": "Design",
+      "persona": "architect",
+      "kind": "ai",
+      "args": {
+        "command": "/arch-design",
+        "argKind": "feature",
+        "arg": "ACME-20"
+      },
+      "allowed": true
+    },
+    {
+      "id": "decision:record",
+      "label": "Record decision",
+      "persona": "architect",
+      "kind": "ai",
+      "args": {
+        "command": "/record-decision",
+        "argKind": "feature",
+        "arg": "ACME-20"
+      },
+      "allowed": true
+    }
   ],
   "stages": [
     {
@@ -22,15 +61,15 @@
     },
     {
       "id": "plan",
-      "label": "Plan",
-      "state": "todo",
-      "title": "Plan: todo"
+      "label": "Design",
+      "state": "active",
+      "title": "Design: active"
     },
     {
       "id": "signoff",
-      "label": "Sign-off",
+      "label": "Approved",
       "state": "todo",
-      "title": "Sign-off: todo"
+      "title": "Approved: todo"
     },
     {
       "id": "stories",
@@ -46,9 +85,9 @@
     },
     {
       "id": "jira",
-      "label": "Jira",
+      "label": "Ready",
       "state": "todo",
-      "title": "Jira: todo"
+      "title": "Ready: todo"
     },
     {
       "id": "build",
@@ -58,9 +97,9 @@
     },
     {
       "id": "qa",
-      "label": "QA",
+      "label": "Review",
       "state": "todo",
-      "title": "QA: todo"
+      "title": "Review: todo"
     },
     {
       "id": "release",
@@ -72,7 +111,7 @@
   "gates": [
     {
       "id": "G1",
-      "label": "Plan signed off",
+      "label": "Design approved",
       "owner": "architect",
       "ownerLabel": "Architect",
       "state": "waiting",
@@ -81,6 +120,19 @@
       "waitsOnViewer": true,
       "actions": [
         {
+          "id": "arch:approve-design",
+          "label": "Approve design",
+          "persona": "architect",
+          "kind": "gate",
+          "args": {
+            "featureId": "ACME-20",
+            "key": "ACME-20",
+            "pageId": "2240011",
+            "url": "https://acme.atlassian.net/wiki/spaces/ACME/pages/2240011/Entitlement+SLA"
+          },
+          "allowed": true
+        },
+        {
           "id": "ai:/arch-design",
           "label": "Design",
           "persona": "architect",
@@ -88,7 +140,7 @@
           "args": {
             "command": "/arch-design",
             "argKind": "feature",
-            "arg": "002-entitlement-sla"
+            "arg": "ACME-20"
           },
           "allowed": true
         },
@@ -100,7 +152,7 @@
           "args": {
             "command": "/arch-jira-push",
             "argKind": "feature",
-            "arg": "002-entitlement-sla"
+            "arg": "ACME-20"
           },
           "allowed": true
         }
@@ -124,7 +176,7 @@
           "args": {
             "command": "/qa-design-tests",
             "argKind": "feature",
-            "arg": "002-entitlement-sla"
+            "arg": "ACME-20"
           },
           "allowed": false,
           "reason": "Only a Tester can run this"
@@ -137,7 +189,7 @@
           "args": {
             "command": "/qa-push-tests",
             "argKind": "feature",
-            "arg": "002-entitlement-sla"
+            "arg": "ACME-20"
           },
           "allowed": false,
           "reason": "Only a Tester can run this"
@@ -227,7 +279,7 @@
     {
       "id": "fireflies:01JDC4M9ZP",
       "kind": "fireflies",
-      "title": "Acme support: premium SLA call",
+      "title": "Acme Shipping support: premium SLA call",
       "date": "2026-11-06",
       "links": [
         {
@@ -239,8 +291,20 @@
       "canOpen": true
     }
   ],
-  "files": [],
   "actions": [
+    {
+      "id": "arch:approve-design",
+      "label": "Approve design",
+      "persona": "architect",
+      "kind": "gate",
+      "args": {
+        "featureId": "ACME-20",
+        "key": "ACME-20",
+        "pageId": "2240011",
+        "url": "https://acme.atlassian.net/wiki/spaces/ACME/pages/2240011/Entitlement+SLA"
+      },
+      "allowed": true
+    },
     {
       "id": "ai:/arch-design",
       "label": "Design",
@@ -249,7 +313,7 @@
       "args": {
         "command": "/arch-design",
         "argKind": "feature",
-        "arg": "002-entitlement-sla"
+        "arg": "ACME-20"
       },
       "allowed": true
     },
@@ -261,7 +325,19 @@
       "args": {
         "command": "/arch-jira-push",
         "argKind": "feature",
-        "arg": "002-entitlement-sla"
+        "arg": "ACME-20"
+      },
+      "allowed": true
+    },
+    {
+      "id": "decision:record",
+      "label": "Record decision",
+      "persona": "architect",
+      "kind": "ai",
+      "args": {
+        "command": "/record-decision",
+        "argKind": "feature",
+        "arg": "ACME-20"
       },
       "allowed": true
     },
@@ -273,7 +349,7 @@
       "args": {
         "command": "/dev-review-stories",
         "argKind": "feature",
-        "arg": "002-entitlement-sla"
+        "arg": "ACME-20"
       },
       "allowed": false,
       "reason": "Only a Developer can run this"
@@ -286,7 +362,7 @@
       "args": {
         "command": "/qa-design-tests",
         "argKind": "feature",
-        "arg": "002-entitlement-sla"
+        "arg": "ACME-20"
       },
       "allowed": false,
       "reason": "Only a Tester can run this"
@@ -299,31 +375,44 @@
       "args": {
         "command": "/qa-push-tests",
         "argKind": "feature",
-        "arg": "002-entitlement-sla"
+        "arg": "ACME-20"
       },
       "allowed": false,
       "reason": "Only a Tester can run this"
     }
   ],
   "updated": "2026-11-11T15:00:00.000Z",
+  "design": {
+    "url": "https://acme.atlassian.net/wiki/spaces/ACME/pages/2240011/Entitlement+SLA",
+    "status": "In progress",
+    "version": 3,
+    "state": "draft",
+    "text": "In progress · v3",
+    "tone": "info"
+  },
   "feature": {
-    "id": "002",
-    "slug": "002-entitlement-sla",
+    "id": "ACME-20",
+    "slug": "ACME-20",
+    "epicKey": "ACME-20",
     "title": "Entitlement SLA timers on premium support Cases",
     "openQuestions": 3,
     "signedOff": false,
-    "dir": ".specify/specs/002-entitlement-sla",
     "links": [
       {
-        "kind": "file",
-        "label": "spec.md",
-        "target": ".specify/specs/002-entitlement-sla/spec.md"
+        "kind": "jira",
+        "label": "Epic ACME-20",
+        "target": "https://acme.atlassian.net/browse/ACME-20"
+      },
+      {
+        "kind": "confluence",
+        "label": "Design",
+        "target": "https://acme.atlassian.net/wiki/spaces/ACME/pages/2240011/Entitlement+SLA"
       }
     ]
   },
   "next": {
     "id": "G1",
-    "label": "Plan signed off",
+    "label": "Design approved",
     "owner": "architect",
     "ownerLabel": "Architect",
     "state": "waiting"

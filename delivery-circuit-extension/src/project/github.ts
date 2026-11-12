@@ -1,4 +1,5 @@
 // One GitHub GraphQL query for every PR the circuit cares about, mapped to PrInfo + ReviewSignal[].
+// Story PRs: branch feature/<KEY>-<slug>, title starting with <KEY> (v3); the feature is the story's Jira epic.
 // No vscode import: unit-tested with recorded-shape fixtures.
 import type { CheckState, ReviewSignal } from "../core/contracts";
 import type { DeployInfo, DeployRun, PrInfo } from "./model";
@@ -7,6 +8,7 @@ const PR_FIELDS = `
   number url title headRefName isDraft state mergedAt updatedAt
   author { login }
   labels(first: 30) { nodes { name } }
+  files(first: 100) { nodes { path } }
   reviews(last: 30) { nodes { author { login } state body submittedAt url } }
   comments(last: 20) { nodes { author { login } body createdAt url } }
   commits(last: 1) { nodes { commit { oid statusCheckRollup { state contexts(first: 100) { nodes {
@@ -30,11 +32,11 @@ const BOT_RE = /\[bot\]$|^(github-actions|dependabot|renovate)$/i;
 
 /** feature/ABC-12-some-slug -> ABC-12 */
 export function storyKeyFromBranch(branch: string): string | undefined {
-  return /^feature\/([A-Z][A-Z0-9]+-\d+)(?:[-_/]|$)/.exec(branch)?.[1];
+  return /^feature\/([A-Z][A-Z0-9_]+-\d+)(?:[-_/]|$)/.exec(branch)?.[1];
 }
-/** spec/001-case-escalation -> 001 (spec PRs carry the feature id in the branch) */
-export function featureIdFromBranch(branch: string, title = ""): string | undefined {
-  return /^spec\/(\d{3})-/.exec(branch)?.[1] ?? /^Spec (\d{3})-/.exec(title)?.[1];
+/** v3 PR titles start with the story key: "ABC-12 Escalation queue" (GitHub for Jira links on it too). */
+export function storyKeyFromTitle(title: string): string | undefined {
+  return /^\s*\[?([A-Z][A-Z0-9_]+-\d+)\]?(?=[\s:]|$)/.exec(title)?.[1];
 }
 /** highest ai-attempt-N label */
 export function aiAttemptFromLabels(labels: string[]): number | undefined {
@@ -146,7 +148,7 @@ export function buildSignals(pr: any, labels: string[], entries: CheckEntry[]): 
 export function mapPr(node: any): PrInfo {
   const labels: string[] = (node?.labels?.nodes ?? []).map((l: any) => l?.name).filter(Boolean);
   const branch: string = node.headRefName ?? "";
-  const storyKey = storyKeyFromBranch(branch);
+  const storyKey = storyKeyFromBranch(branch) ?? (/^feature\//.test(branch) ? storyKeyFromTitle(node.title ?? "") : undefined);
   const entries = checkEntries(node);
   const pr: PrInfo = {
     number: node.number,
@@ -164,8 +166,8 @@ export function mapPr(node: any): PrInfo {
   };
   if (node.mergedAt) pr.mergedAt = node.mergedAt;
   if (storyKey) pr.storyKey = storyKey;
-  const fid = featureIdFromBranch(branch, pr.title);
-  if (fid) pr.featureId = fid;
+  const files: string[] = (node?.files?.nodes ?? []).map((f: any) => f?.path).filter((p: unknown): p is string => typeof p === "string");
+  if (node?.files) pr.files = files;
   const attempt = aiAttemptFromLabels(labels);
   if (attempt !== undefined) pr.aiAttempt = attempt;
   return pr;
@@ -205,7 +207,7 @@ export function deployInfo(runs: DeployRun[], prodDeployedAt?: string, prodDeplo
 // PRS_QUERY only sees the 30 most recently updated merged PRs. A story whose PR merged before that window would read
 // as "no PR" and pull a shipped feature's gates back to waiting, so those keys are looked up by branch.
 
-const STORY_KEY_RE = /^[A-Z][A-Z0-9]+-\d+$/;
+const STORY_KEY_RE = /^[A-Z][A-Z0-9_]+-\d+$/;
 export const STORY_SEARCH_BATCH = 20;
 
 /** Story keys that the features reference but that have no open or merged PR in `prs`. */

@@ -1,0 +1,85 @@
+{
+  "identity": {
+    "login": "demo-architect",
+    "personas": [
+      "architect",
+      "developer"
+    ],
+    "active": "architect",
+    "isAdmin": true,
+    "owner": "acme-org",
+    "repo": "acme-shipping",
+    "orgOwned": true
+  },
+  "canAct": true,
+  "sources": [
+    {
+      "id": "upload:3f9a1c2b7d4e",
+      "kind": "upload",
+      "origin": "wispr-flow",
+      "originLabel": "Wispr Flow",
+      "title": "Acme Shipping tracking notes",
+      "date": "2026-11-11T09:12:00.000Z",
+      "usedBy": [],
+      "links": []
+    },
+    {
+      "id": "fireflies:01KACMEKICKOFF",
+      "kind": "fireflies",
+      "origin": "fireflies",
+      "originLabel": "Fireflies",
+      "title": "Acme Shipping kick-off",
+      "date": "2026-11-10T15:00:00.000Z",
+      "usedBy": [
+        "ACME-12"
+      ],
+      "links": [
+        {
+          "kind": "fireflies",
+          "label": "Open in Fireflies",
+          "target": "https://app.fireflies.ai/view/01KACMEKICKOFF"
+        }
+      ]
+    },
+    {
+      "id": "upload:a1b2c3d4e5f6",
+      "kind": "upload",
+      "origin": "file",
+      "originLabel": "File",
+      "title": "Returns workshop",
+      "date": "2026-11-08T13:30:00.000Z",
+      "usedBy": [],
+      "links": []
+    }
+  ],
+  "fireflies": {
+    "mcp": {
+      "state": "connected"
+    },
+    "status": "loading",
+    "meetings": []
+  },
+  "wispr": {
+    "supported": true,
+    "candidates": [
+      "/Users/demo/Library/Application Support/Wispr Flow/flow.sqlite"
+    ],
+    "found": "/Users/demo/Library/Application Support/Wispr Flow/flow.sqlite"
+  },
+  "watch": {
+    "active": false
+  },
+  "busy": [
+    "paste",
+    "fireflies",
+    "wispr"
+  ],
+  "extensions": [
+    "txt",
+    "md",
+    "docx",
+    "vtt",
+    "srt",
+    "pdf"
+  ]
+}

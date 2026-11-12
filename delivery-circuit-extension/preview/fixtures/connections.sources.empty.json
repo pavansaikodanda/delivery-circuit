@@ -1,0 +1,43 @@
+{
+  "identity": {
+    "login": "demo-architect",
+    "personas": [
+      "architect",
+      "developer"
+    ],
+    "active": "architect",
+    "isAdmin": true,
+    "owner": "acme-org",
+    "repo": "acme-shipping",
+    "orgOwned": true
+  },
+  "canAct": true,
+  "sources": [],
+  "fireflies": {
+    "mcp": {
+      "state": "disconnected",
+      "detail": "Configured as \"fireflies\"; sign in once in Claude with /mcp."
+    },
+    "status": "idle",
+    "meetings": []
+  },
+  "wispr": {
+    "supported": true,
+    "candidates": [
+      "C:\\Users\\demo\\AppData\\Roaming\\Wispr Flow\\flow.sqlite",
+      "C:\\Users\\demo\\AppData\\Local\\Wispr Flow\\flow.sqlite"
+    ]
+  },
+  "watch": {
+    "active": false
+  },
+  "busy": [],
+  "extensions": [
+    "txt",
+    "md",
+    "docx",
+    "vtt",
+    "srt",
+    "pdf"
+  ]
+}

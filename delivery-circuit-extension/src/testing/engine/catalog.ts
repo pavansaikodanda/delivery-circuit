@@ -1,5 +1,6 @@
 // Suite catalogue for the Testing page: test-cases/*.sf-tests.yaml with their last status (from status.json) and the
-// Jira keys the circuit's jira-sync wrote (.specify/specs/NNN-slug/jira-map.json). No VS Code here.
+// Jira keys of the story's test-case index (v3: test-cases/<KEY>.sf-tests.yaml + tests/<KEY>.tc.json, committed to the
+// story PR by the Tester; there is no jira-map.json). No VS Code here.
 import * as fs from "fs";
 import * as path from "path";
 import { loadSuite } from "./suite";
@@ -25,21 +26,33 @@ export function listSuiteFiles(workspaceDir: string): string[] {
   }
 }
 
-/** test-cases/001-case-escalation-story-02.sf-tests.yaml -> { feature: "001-case-escalation", featureId: "001", story: "02" } */
-export function storyRefOf(file: string): { feature: string; featureId: string; story: string } | undefined {
-  const m = /^((\d{3})-[a-z0-9-]+?)-story-(\d{2})\.sf-tests\.ya?ml$/i.exec(path.basename(file));
-  return m ? { feature: m[1], featureId: m[2], story: m[3] } : undefined;
+const JIRA_KEY_RE = /^[A-Z][A-Z0-9_]+-\d+$/;
+
+/** test-cases/ACME-12.sf-tests.yaml -> "ACME-12" (the story's Jira key), else undefined. */
+export function storyKeyOf(file: string): string | undefined {
+  const m = /^([A-Z][A-Z0-9_]+-\d+)\.sf-tests\.ya?ml$/.exec(path.basename(file));
+  return m ? m[1] : undefined;
 }
 
-/** refs of .specify/specs/<feature>/jira-map.json, or {} when the feature has not been synced to Jira. */
-export function jiraRefs(workspaceDir: string, feature: string): Record<string, string> {
-  if (!/^[\w-]+$/.test(feature)) return {};
+/** tests/<KEY>.tc.json: { story, feature?, designVersion?, cases: [{ id, jira? }] }. */
+export interface TcIndex { story?: string; feature?: string; designVersion?: number; jira: Record<string, string> }
+
+/** The story's test-case index (case id -> Jira test case key), or undefined when it is missing or unreadable. */
+export function tcIndex(workspaceDir: string, key: string): TcIndex | undefined {
+  if (!JIRA_KEY_RE.test(key)) return undefined;
   try {
-    const raw = JSON.parse(fs.readFileSync(path.join(workspaceDir, ".specify", "specs", feature, "jira-map.json"), "utf8"));
-    const refs = raw?.refs && typeof raw.refs === "object" ? raw.refs : {};
-    return Object.fromEntries(Object.entries(refs).filter(([, v]) => typeof v === "string")) as Record<string, string>;
+    const raw = JSON.parse(fs.readFileSync(path.join(workspaceDir, "tests", `${key}.tc.json`), "utf8"));
+    const jira: Record<string, string> = {};
+    for (const c of Array.isArray(raw?.cases) ? raw.cases : []) {
+      if (c && typeof c.id === "string" && typeof c.jira === "string" && JIRA_KEY_RE.test(c.jira)) jira[c.id] = c.jira;
+    }
+    const out: TcIndex = { jira };
+    if (typeof raw?.story === "string") out.story = raw.story;
+    if (typeof raw?.feature === "string") out.feature = raw.feature;
+    if (typeof raw?.designVersion === "number") out.designVersion = raw.designVersion;
+    return out;
   } catch {
-    return {};
+    return undefined;
   }
 }
 
@@ -137,9 +150,10 @@ export function suiteRecord(
   runStatus: Record<string, SuiteStatus> = statusFromRuns(workspaceDir),
 ): SuiteRecord {
   const key = suiteKey(workspaceDir, file);
-  const ref = storyRefOf(file);
-  const refs = ref ? jiraRefs(workspaceDir, ref.feature) : {};
-  const base = { file, key, storyKey: ref ? refs[ref.story] : undefined, feature: ref?.feature };
+  const storyKey = storyKeyOf(file);
+  const tc = storyKey ? tcIndex(workspaceDir, storyKey) : undefined;
+  const refs = tc?.jira ?? {};
+  const base = { file, key, storyKey, feature: tc?.feature };
   let suite: TestSuite;
   try {
     suite = loadSuite(file, { allowEmpty: true });

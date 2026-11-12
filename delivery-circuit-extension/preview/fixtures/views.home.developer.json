@@ -2,17 +2,49 @@
   "mode": "ready",
   "waiting": [
     {
+      "id": "d-start-ACME-15",
+      "kind": "start-story",
+      "title": "Start story: ACME-15 Escalation history on the Case page",
+      "detail": "ai-ready · design v8",
+      "age": "1 d",
+      "since": "2026-11-10T09:00:00.000Z",
+      "featureId": "ACME-10",
+      "storyKey": "ACME-15",
+      "links": [
+        {
+          "kind": "jira",
+          "label": "ACME-15",
+          "target": "https://acme.atlassian.net/browse/ACME-15"
+        }
+      ],
+      "actions": [
+        {
+          "id": "dev:start-story",
+          "label": "Start story",
+          "persona": "developer",
+          "kind": "ai",
+          "args": {
+            "command": "/dev-start-story",
+            "arg": "ACME-15",
+            "storyKey": "ACME-15",
+            "featureId": "ACME-10"
+          },
+          "allowed": true
+        }
+      ]
+    },
+    {
       "id": "d-g3-43",
       "kind": "approve-plan",
-      "title": "Approve AI plan: CE-13 Tier 2 routing",
-      "detail": "docs/plans/CE-13/PLAN.md on draft PR",
+      "title": "Approve plan: ACME-13 Tier 2 routing",
+      "detail": "docs/plans/ACME-13/PLAN.md on the draft PR",
       "gate": "G3",
       "gateLabel": "G3 AI plan approved",
       "age": "1 d",
       "since": "2026-11-10T13:00:00.000Z",
-      "featureId": "001",
+      "featureId": "ACME-10",
       "prNumber": 43,
-      "storyKey": "CE-13",
+      "storyKey": "ACME-13",
       "links": [
         {
           "kind": "github",
@@ -21,13 +53,8 @@
         },
         {
           "kind": "jira",
-          "label": "CE-13",
-          "target": "https://acme.atlassian.net/browse/CE-13"
-        },
-        {
-          "kind": "file",
-          "label": "PLAN.md",
-          "target": "docs/plans/CE-13/PLAN.md"
+          "label": "ACME-13",
+          "target": "https://acme.atlassian.net/browse/ACME-13"
         }
       ],
       "actions": [
@@ -58,15 +85,15 @@
     {
       "id": "d-g5-42",
       "kind": "review-pr",
-      "title": "Code review: CE-12 Agent escalates a Case",
+      "title": "Code review: ACME-12 Agent escalates a Case",
       "detail": "All checks green; CodeRabbit 1 nitpick",
       "gate": "G5",
       "gateLabel": "G5 Code review",
       "age": "5 h",
       "since": "2026-11-11T10:00:00.000Z",
-      "featureId": "001",
+      "featureId": "ACME-10",
       "prNumber": 42,
-      "storyKey": "CE-12",
+      "storyKey": "ACME-12",
       "links": [
         {
           "kind": "github",
@@ -75,8 +102,8 @@
         },
         {
           "kind": "jira",
-          "label": "CE-12",
-          "target": "https://acme.atlassian.net/browse/CE-12"
+          "label": "ACME-12",
+          "target": "https://acme.atlassian.net/browse/ACME-12"
         },
         {
           "kind": "coderabbit",
@@ -98,7 +125,7 @@
           "allowed": true
         },
         {
-          "id": "gate:approve",
+          "id": "gate:review",
           "label": "Approve (G5)",
           "persona": "developer",
           "kind": "gate",
@@ -112,13 +139,13 @@
     {
       "id": "d-human-44",
       "kind": "needs-human",
-      "title": "Take over CE-14: AI stopped after 3 attempts",
-      "detail": "static and qa failing; route dev",
+      "title": "Take over ACME-14: AI stopped after 3 attempts",
+      "detail": "static and qa failing",
       "age": "3 h",
       "since": "2026-11-11T12:00:00.000Z",
-      "featureId": "001",
+      "featureId": "ACME-10",
       "prNumber": 44,
-      "storyKey": "CE-14",
+      "storyKey": "ACME-14",
       "links": [
         {
           "kind": "github",
@@ -127,8 +154,8 @@
         },
         {
           "kind": "jira",
-          "label": "CE-14",
-          "target": "https://acme.atlassian.net/browse/CE-14"
+          "label": "ACME-14",
+          "target": "https://acme.atlassian.net/browse/ACME-14"
         }
       ],
       "actions": [
@@ -146,9 +173,48 @@
           "allowed": true
         }
       ]
+    },
+    {
+      "id": "d-fix-45",
+      "kind": "fix",
+      "title": "Fix with AI: ACME-17 static failed",
+      "detail": "Attempt 2 of 3 · Code Analyzer: ApexUnitTestClassShouldHaveAsserts",
+      "age": "2 h",
+      "since": "2026-11-11T13:00:00.000Z",
+      "featureId": "ACME-10",
+      "prNumber": 45,
+      "storyKey": "ACME-17",
+      "links": [
+        {
+          "kind": "github",
+          "label": "PR #45",
+          "target": "https://github.com/acme-org/salesDemoOrg/pull/45"
+        },
+        {
+          "kind": "jira",
+          "label": "ACME-17",
+          "target": "https://acme.atlassian.net/browse/ACME-17"
+        }
+      ],
+      "actions": [
+        {
+          "id": "dev:fix",
+          "label": "Fix with AI",
+          "persona": "developer",
+          "kind": "ai",
+          "args": {
+            "command": "/dev-fix",
+            "arg": "45",
+            "pr": 45,
+            "checks": "static",
+            "attempt": 2
+          },
+          "allowed": true
+        }
+      ]
     }
   ],
-  "waitingTotal": 3,
+  "waitingTotal": 5,
   "notices": [],
   "nav": [
     {

@@ -1,0 +1,328 @@
+[
+  {
+    "key": "ABC-11",
+    "fields": {
+      "summary": "Story 00: Foundation",
+      "issuetype": {
+        "name": "Story"
+      },
+      "status": {
+        "name": "In Progress",
+        "statusCategory": {
+          "key": "indeterminate"
+        }
+      },
+      "parent": {
+        "key": "ABC-10"
+      },
+      "labels": [
+        "ai-ready",
+        "testability-confirmed",
+        "design-v3",
+        "dev-reviewed"
+      ],
+      "customfield_10051": 3,
+      "description": {
+        "type": "doc",
+        "version": 1,
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Set up the escalation fields."
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Acceptance criteria"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "AC1: Escalation fields deploy cleanly"
+              }
+            ]
+          }
+        ]
+      },
+      "issuelinks": [
+        {
+          "type": {
+            "name": "Blocks",
+            "inward": "is blocked by",
+            "outward": "blocks"
+          },
+          "outwardIssue": {
+            "key": "ABC-12",
+            "fields": {
+              "summary": "Story 01: Agent escalates a Case",
+              "status": {
+                "name": "In Progress",
+                "statusCategory": {
+                  "key": "indeterminate"
+                }
+              },
+              "issuetype": {
+                "name": "Story"
+              }
+            }
+          }
+        },
+        {
+          "type": {
+            "name": "Blocks",
+            "inward": "is blocked by",
+            "outward": "blocks"
+          },
+          "outwardIssue": {
+            "key": "ABC-14",
+            "fields": {
+              "summary": "Story 03: Escalation report",
+              "status": {
+                "name": "In Progress",
+                "statusCategory": {
+                  "key": "indeterminate"
+                }
+              },
+              "issuetype": {
+                "name": "Story"
+              }
+            }
+          }
+        },
+        {
+          "type": {
+            "name": "Tests",
+            "inward": "is tested by",
+            "outward": "tests"
+          },
+          "inwardIssue": {
+            "key": "ABC-31",
+            "fields": {
+              "summary": "S00-TC-01 Foundation deploys",
+              "status": {
+                "name": "In Progress",
+                "statusCategory": {
+                  "key": "indeterminate"
+                }
+              },
+              "issuetype": {
+                "name": "Test"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "key": "ABC-12",
+    "fields": {
+      "summary": "Story 01: Agent escalates a Case",
+      "issuetype": {
+        "name": "Story"
+      },
+      "status": {
+        "name": "In Progress",
+        "statusCategory": {
+          "key": "indeterminate"
+        }
+      },
+      "parent": {
+        "key": "ABC-10"
+      },
+      "labels": [
+        "ai-ready",
+        "dev-reviewed"
+      ],
+      "customfield_10051": "3",
+      "customfield_10052": {
+        "value": "Yes"
+      },
+      "customfield_10053": {
+        "type": "doc",
+        "version": 1,
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "AC1: Agent escalates with a reason"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "AC2: Closed Cases cannot be escalated"
+              }
+            ]
+          }
+        ]
+      },
+      "issuelinks": [
+        {
+          "type": {
+            "name": "Blocks",
+            "inward": "is blocked by",
+            "outward": "blocks"
+          },
+          "inwardIssue": {
+            "key": "ABC-11",
+            "fields": {
+              "summary": "Story 00: Foundation",
+              "status": {
+                "name": "In Progress",
+                "statusCategory": {
+                  "key": "indeterminate"
+                }
+              },
+              "issuetype": {
+                "name": "Story"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "key": "ABC-13",
+    "summary": "Story 02: Escalation queue",
+    "issueType": "Story",
+    "status": "In Progress",
+    "statusCategory": "indeterminate",
+    "parentKey": "ABC-10",
+    "labels": [
+      "dev-reviewed",
+      "ai-ready"
+    ],
+    "customfield_10051": 2,
+    "customfield_10052": {
+      "value": "Yes"
+    },
+    "issuelinks": []
+  },
+  {
+    "key": "ABC-14",
+    "fields": {
+      "summary": "Story 03: Escalation report",
+      "issuetype": {
+        "name": "Story"
+      },
+      "status": {
+        "name": "To Do",
+        "statusCategory": {
+          "key": "new"
+        }
+      },
+      "parent": {
+        "key": "ABC-10"
+      },
+      "labels": [
+        "ai-ready"
+      ],
+      "customfield_10051": 3,
+      "customfield_10052": {
+        "value": "Yes"
+      },
+      "issuelinks": [
+        {
+          "type": {
+            "name": "Blocks",
+            "inward": "is blocked by",
+            "outward": "blocks"
+          },
+          "inwardIssue": {
+            "key": "ABC-11",
+            "fields": {
+              "summary": "Story 00: Foundation",
+              "status": {
+                "name": "In Progress",
+                "statusCategory": {
+                  "key": "indeterminate"
+                }
+              },
+              "issuetype": {
+                "name": "Story"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "key": "ABC-15",
+    "fields": {
+      "summary": "Escalation email",
+      "issuetype": {
+        "name": "Story"
+      },
+      "status": {
+        "name": "To Do",
+        "statusCategory": {
+          "key": "new"
+        }
+      },
+      "parent": {
+        "key": "ABC-10"
+      },
+      "labels": []
+    }
+  },
+  {
+    "key": "ABC-21",
+    "fields": {
+      "summary": "Story 00: Portal setup",
+      "issuetype": {
+        "name": "Story"
+      },
+      "status": {
+        "name": "To Do",
+        "statusCategory": {
+          "key": "new"
+        }
+      },
+      "parent": {
+        "key": "ABC-20"
+      },
+      "labels": []
+    }
+  },
+  {
+    "key": "ABC-22",
+    "fields": {
+      "summary": "Sub-task noise",
+      "issuetype": {
+        "name": "Sub-task"
+      },
+      "status": {
+        "name": "To Do",
+        "statusCategory": {
+          "key": "new"
+        }
+      },
+      "parent": {
+        "key": "ABC-20"
+      },
+      "labels": []
+    }
+  }
+]

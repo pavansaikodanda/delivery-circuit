@@ -4,8 +4,11 @@ import type { ConnectionId, ConnectionScope, ConnectionStatus, DeepLink, Persona
 
 export type ConnectionGroup = "personal" | "mcp" | "review" | "project";
 
+/** Every row id this module knows (the contract's ConnectionId, which now lists the v3 rows). */
+export type RowId = ConnectionId;
+
 export interface ConnectionDef {
-  id: ConnectionId;
+  id: RowId;
   label: string;
   scope: ConnectionScope;
   group: ConnectionGroup;
@@ -18,42 +21,48 @@ export interface ConnectionDef {
 
 const A: Persona = "architect", D: Persona = "developer", T: Persona = "tester";
 
+/** v3 catalogue (docs/CIRCUIT-V3.md section 6): every connection is a login; nothing here asks for a token. */
 export const CONNECTIONS: ConnectionDef[] = [
-  // personal
+  // personal logins
   { id: "github", label: "GitHub", scope: "personal", group: "personal", neededBy: [A, D, T], manageUrl: "https://github.com/settings/applications", linkKind: "github" },
   { id: "claude", label: "Claude (subscription)", scope: "personal", group: "personal", neededBy: [A, D, T], manageUrl: "https://claude.ai/settings/account", linkKind: "url" },
   { id: "sf-dev", label: "Salesforce dev org", scope: "personal", group: "personal", neededBy: [A, D, T], linkKind: "salesforce" },
   { id: "sf-qa", label: "Salesforce QA org", scope: "personal", group: "personal", neededBy: [T], linkKind: "salesforce" },
-  { id: "jira", label: "Jira", scope: "personal", group: "personal", neededBy: [A, D, T], manageUrl: "https://id.atlassian.com/manage-profile/security/api-tokens", linkKind: "jira" },
-  { id: "confluence", label: "Confluence", scope: "personal", group: "personal", neededBy: [A], manageUrl: "https://id.atlassian.com/manage-profile/security/api-tokens", linkKind: "confluence" },
+  { id: "acli", label: "Atlassian CLI (acli)", scope: "personal", group: "personal", neededBy: [A, D, T], manageUrl: "https://developer.atlassian.com/cloud/acli/guides/how-to-get-started/", linkKind: "jira" },
   { id: "slack", label: "Slack", scope: "personal", group: "personal", neededBy: [A, D, T], manageUrl: "https://slack.com/signin", linkKind: "slack" },
-  { id: "fireflies", label: "Fireflies", scope: "personal", group: "personal", neededBy: [A], manageUrl: "https://app.fireflies.ai/integrations/custom/fireflies", linkKind: "fireflies" },
   { id: "lucid", label: "Lucid", scope: "personal", group: "personal", neededBy: [A], manageUrl: "https://lucid.app/documents", linkKind: "lucid" },
   { id: "testing-browsers", label: "Test browsers (Chrome for Testing)", scope: "personal", group: "personal", neededBy: [T], manageUrl: "https://playwright.dev/docs/browsers", linkKind: "url" },
-  // Claude MCP servers (sign-in happens in Claude Code's /mcp)
+  // Claude MCP servers (OAuth sign-in happens in Claude Code's /mcp or as a claude.ai connector)
   { id: "mcp-atlassian", label: "Atlassian MCP", scope: "personal", group: "mcp", neededBy: [A, D, T], manageUrl: "https://support.atlassian.com/atlassian-rovo-mcp-server/docs/getting-started-with-the-atlassian-remote-mcp-server/", linkKind: "url" },
   { id: "mcp-github", label: "GitHub MCP", scope: "personal", group: "mcp", neededBy: [A, D], manageUrl: "https://github.com/github/github-mcp-server", linkKind: "github" },
   { id: "mcp-salesforce", label: "Salesforce DX MCP", scope: "personal", group: "mcp", neededBy: [A, D, T], manageUrl: "https://github.com/forcedotcom/sf-skills", linkKind: "url" },
-  { id: "mcp-slack", label: "Slack MCP", scope: "personal", group: "mcp", neededBy: [], manageUrl: "https://docs.slack.dev/ai/slack-mcp-server", linkKind: "slack" },
+  { id: "mcp-slack", label: "Slack MCP", scope: "personal", group: "mcp", neededBy: [A, D], manageUrl: "https://docs.slack.dev/ai/slack-mcp-server", linkKind: "slack" },
   { id: "mcp-lucid", label: "Lucid MCP", scope: "personal", group: "mcp", neededBy: [A], manageUrl: "https://help.lucid.co/hc/en-us/articles/42578801807508", linkKind: "lucid" },
   { id: "mcp-fireflies", label: "Fireflies MCP", scope: "personal", group: "mcp", neededBy: [A], manageUrl: "https://docs.fireflies.ai/getting-started/mcp-configuration", linkKind: "fireflies" },
   // review tools (project: visible to all, actionable by admins)
-  { id: "coderabbit", label: "CodeRabbit", scope: "project", group: "review", neededBy: [A, D, T], manageUrl: "https://app.coderabbit.ai/", linkKind: "coderabbit" },
   { id: "code-analyzer", label: "Salesforce Code Analyzer", scope: "project", group: "review", neededBy: [A, D, T], manageUrl: "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/code-analyzer.html", linkKind: "url" },
   { id: "ai-reviewer", label: "AI Reviewer (CI)", scope: "project", group: "review", neededBy: [A, D, T], linkKind: "github" },
+  // project: the self-hosted runner, the GitHub apps on the repo
+  { id: "runner", label: "Self-hosted runner", scope: "project", group: "project", neededBy: [A, D, T], manageUrl: "https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/adding-self-hosted-runners", linkKind: "github" },
+  { id: "github-jira", label: "GitHub for Jira app", scope: "project", group: "project", neededBy: [A, D, T], manageUrl: "https://support.atlassian.com/jira-cloud-administration/docs/integrate-with-github/", linkKind: "jira" },
+  { id: "coderabbit", label: "CodeRabbit", scope: "project", group: "project", neededBy: [A, D, T], manageUrl: "https://app.coderabbit.ai/", linkKind: "coderabbit" },
 ];
 
-export function def(id: ConnectionId): ConnectionDef {
+export function def(id: RowId): ConnectionDef {
   const d = CONNECTIONS.find((c) => c.id === id);
   if (!d) throw new Error(`Unknown connection: ${id}`);
   return d;
 }
 
-export function isConnectionId(x: unknown): x is ConnectionId {
+export function isConnectionId(x: unknown): x is RowId {
   return typeof x === "string" && CONNECTIONS.some((c) => c.id === x);
 }
 
-export function baseStatus(id: ConnectionId, extraNeededBy: Persona[] = []): ConnectionStatus {
+/** A row status (same shape as the contract's ConnectionStatus). */
+export type RowStatus = Omit<ConnectionStatus, "id"> & { id: RowId };
+export const asContract = (s: RowStatus): ConnectionStatus => s as ConnectionStatus;
+
+export function baseStatus(id: RowId, extraNeededBy: Persona[] = []): RowStatus {
   const d = def(id);
   const neededBy = [...new Set([...d.neededBy, ...extraNeededBy])];
   return { id, label: d.label, scope: d.scope, state: "unknown", neededBy, manageUrl: d.manageUrl };
@@ -74,11 +83,11 @@ export function actionable(row: Pick<ConnectionStatus, "scope">, isAdmin: boolea
   return row.scope === "personal" || isAdmin;
 }
 
-export function groupOf(id: ConnectionId): ConnectionGroup { return def(id).group; }
+export function groupOf(id: RowId): ConnectionGroup { return def(id).group; }
 
 export const GROUP_TITLES: Record<ConnectionGroup, string> = {
   personal: "Personal",
   mcp: "Claude MCP",
   review: "Review tools",
-  project: "Project (admin)",
+  project: "Project",
 };

@@ -130,7 +130,7 @@
         actions: s.running ? DC.status("running", "running") : DC.status("muted", "idle"),
       }),
       issues.length ? DC.notice("Not connected: " + issues.map((m) => m.name + (m.status ? " (" + m.status + ")" : "")).join(", ") +
-        ". Sign in once with /mcp in a terminal session, or run claude mcp login <name>.", "warn") : null,
+        ". Sign in once with /mcp in a terminal session (the panel cannot run the OAuth sign-in).", "warn") : null,
       h("div.ss-logwrap", { "data-key": "logwrap" }, log, jump),
       composer(s));
   }

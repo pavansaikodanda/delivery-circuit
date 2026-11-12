@@ -1,5 +1,7 @@
 // Connections page (DESIGN.md §6.4). State comes from src/connections/panelState.ts (PanelState).
-// Posts: connect, check, disconnect, manage, switchPersona, setSecret, refresh, openLink.
+// Posts: connect, check, disconnect, manage, switchPersona, refresh, openLink, openSources.
+// v3: every connection is a login (no token prompts, no CI-secrets section). The Project section holds the
+// self-hosted runner, the GitHub for Jira and CodeRabbit apps, and the repo settings the circuit relies on.
 // Each row shows logo · name · one status · one primary action; links, Check, Manage and Disconnect sit in the hover
 // strip / "…" menu, detail and needed-by personas in the expanded row.
 (function () {
@@ -25,6 +27,7 @@
       // one persona: a plain chip; several: the Act-as segmented control instead of the chip menu
       persona: personas.length === 1 ? personas[0] : null,
       actions: actAs,
+      menu: s.isArchitect ? [{ label: "Open Sources", icon: "inbox", onClick: () => post({ type: "openSources" }) }] : null,
       onRefresh: () => post({ type: "refresh" }),
     });
   }
@@ -38,39 +41,22 @@
   function groupSection(g, i, s) {
     const rows = (g.rows || []).filter(Boolean);
     return DC.section(g.title, { count: rows.length, key: "grp:" + g.id, first: i === 0, action: i === 0 ? checkAll(s) : null },
-      DC.list(rows.map((r) => DC.connectionRow(r)), { label: g.title, key: "list:" + g.id }));
+      DC.list(rows.map(connRow), { label: g.title, key: "list:" + g.id }));
   }
 
-  // ---------- project secrets ----------
-  const KIND = {
-    "slack-webhook": "Slack webhook for a workflow", claude: "Claude token for the AI Reviewer", jira: "Jira access for CI",
-    salesforce: "Salesforce JWT login for CI", "github-app": "GitHub App for CI",
-  };
-  function secretStatus(x) {
-    if (x.unknown) return { tone: "", text: "not visible to you" };
-    if (!x.present) return { tone: "err", text: "missing" };
-    if (x.expiring) return { tone: "warn", text: str(x.expiryText) || "expiring" };
-    return { tone: "ok", text: "set" };
-  }
-  function secretRow(x, admin, repoUrl) {
-    const where = repoUrl
-      ? { kind: "github", label: x.env ? "Environment secrets on GitHub" : "Actions secrets on GitHub",
-        target: x.env ? repoUrl + "/settings/environments" : repoUrl + "/settings/secrets/actions" }
-      : null;
-    const reason = admin ? null : "Only repo or org admins can set project secrets.";
-    const has = x.present || x.unknown;
+  // acli, runner and github-jira logos come from the shared kit (DC.brand maps them).
+  const connRow = (r) => DC.connectionRow(r);
+
+  // ---------- project ----------
+  const SETTING_ICON = { rulesets: "shield", environment: "rocket", workflows: "github-action" };
+  function settingRow(x) {
+    const st = DC.connStatus({ state: x.state });
     return DC.row({
-      key: "s-" + (x.env ? x.env + "/" : "") + x.name, icon: DC.icon("key"), title: x.name, mono: true,
-      status: secretStatus(x),
-      primary: DC.button(has ? "Replace" : "Set", () => post({ type: "setSecret", name: x.name, env: x.env }),
-        { kind: has || !admin ? "secondary" : "primary", size: "sm", disabled: !admin, reason }),
-      strip: where ? [{ brand: "github", label: where.label, link: where }] : [],
-      expanded: () => [
-        DC.kv([["Used for", KIND[x.kind] || str(x.kind)], ["Environment", str(x.env)],
-          ["Expires", x.present ? str(x.expiryText) : ""], ["Links", where ? DC.links([where]) : null]]),
-        reason ? DC.reasonLine((has ? "Replace" : "Set") + ": " + reason) : null,
-      ],
-      hash: [x, admin, repoUrl],
+      key: "set-" + x.key, icon: DC.icon(SETTING_ICON[x.key] || "settings-gear"), title: x.title,
+      status: { tone: st.tone, text: x.state === "connected" ? "OK" : x.state === "disconnected" ? "Missing" : x.state === "error" ? "Needs a fix" : st.text },
+      strip: DC.linkStrip(x.links, 2),
+      expanded: () => [DC.kv([["Detail", str(x.detail)], ["Links", DC.links(x.links)]])],
+      hash: x, state: x.state,
     });
   }
   function reminderRow(r) {
@@ -86,45 +72,19 @@
   function projectSection(s) {
     const p = s.project;
     const admin = !!(s.identity && s.identity.isAdmin);
-    if (!p) {
-      return DC.section("Project (admin)", { key: "grp:project" }, DC.skeleton({ n: 3, label: "Loading project secrets" }));
-    }
-    const webhooks = (p.webhooks || []).filter(Boolean);
-    const secrets = (p.secrets || []).filter(Boolean);
-    const reminders = (p.reminders || []).filter(Boolean);
-    const missing = admin ? [...webhooks, ...secrets].filter((x) => !x.unknown && !x.present).length : 0;
-    const block = (title, key, list, emptyText, mk) => [
-      h("h3", title, list.length ? h("span.muted", " · " + list.length) : null),
-      list.length ? DC.list(list.map(mk), { label: title, key: "list:" + key }) : h("p.muted.small", emptyText),
-    ];
-    const all = [...webhooks, ...secrets];
-    const hidden = all.length > 0 && all.every((x) => x.unknown);
+    const rows = (s.projectRows || []).filter(Boolean);
+    const settings = ((p && p.settings) || []).filter(Boolean);
+    const reminders = ((p && p.reminders) || []).filter(Boolean);
+    const attention = [...rows, ...settings].filter((x) => x.state === "error" || x.state === "disconnected").length;
+    const block = (title, key, list, mk) => list.length ? [h("h3", title, h("span.muted", " · " + list.length)), DC.list(list.map(mk), { label: title, key: "list:" + key })] : null;
     // one quiet line instead of the info notice and the read error both saying "admins only"
-    const note = p.error ? DC.notice(p.error, admin ? "warn" : "info", { icon: admin ? null : "lock" })
+    const note = p && p.error ? DC.notice(p.error, admin ? "warn" : "info", { icon: admin ? null : "lock" })
       : admin ? null : DC.notice("Read-only. A repo or org admin sets these up.", "info", { icon: "lock" });
-    return DC.section("Project (admin)", { key: "grp:project", count: missing ? plural(missing, "missing", "missing") : null, needs: missing > 0 },
+    return DC.section("Project", { key: "grp:project", count: attention ? plural(attention, "needs attention", "need attention") : null, needs: attention > 0 },
       note,
-      // presence unknown for every secret (not an admin): one summary row instead of a wall of identical rows
-      hidden ? DC.list([hiddenSecretsRow(webhooks, secrets, p.repoUrl)], { label: "Workflow secrets", key: "list:hidden" }) : [
-        block("Slack webhooks", "webhooks", webhooks, "No workflow posts to Slack.", (x) => secretRow(x, admin, p.repoUrl)),
-        block("CI secrets", "secrets", secrets, "No .github/workflows in this repo yet.", (x) => secretRow(x, admin, p.repoUrl)),
-      ],
-      reminders.length ? block("Reminders", "reminders", reminders, "", reminderRow) : null);
-  }
-  function hiddenSecretsRow(webhooks, secrets, repoUrl) {
-    const n = webhooks.length + secrets.length;
-    const where = repoUrl ? { kind: "github", label: "Actions secrets on GitHub", target: repoUrl + "/settings/secrets/actions" } : null;
-    const names = (list) => (list.length ? h("span.mono", list.map((x) => x.name + (x.env ? " (" + x.env + ")" : "")).join(", ")) : null);
-    return DC.row({
-      key: "s-hidden", icon: DC.icon("key"), title: plural(n, "secret the workflows need", "secrets the workflows need"),
-      status: { tone: "", text: "not visible to you" },
-      strip: where ? [{ brand: "github", label: where.label, link: where }] : [],
-      expanded: () => [
-        DC.kv([["Slack webhooks", names(webhooks)], ["CI secrets", names(secrets)], ["Links", where ? DC.links([where]) : null]]),
-        DC.reasonLine("Set / Replace: Only repo or org admins can see and set project secrets."),
-      ],
-      hash: [webhooks, secrets, repoUrl],
-    });
+      rows.length ? DC.list(rows.map(connRow), { label: "Project connections", key: "list:project" }) : null,
+      p ? block("Repo settings", "settings", settings, settingRow) : DC.skeleton({ n: 3, label: "Loading repo settings" }),
+      p ? block("Reminders", "reminders", reminders, reminderRow) : null);
   }
 
   // ---------- page ----------
@@ -138,15 +98,16 @@
   function render(s) {
     if (!s || typeof s !== "object") return [DC.header({ title: "Connections" }), DC.skeleton({ n: 6, label: "Loading connections" })];
     const groups = (s.groups || []).filter((g) => g && (g.rows || []).length);
+    const hasProject = (s.projectRows || []).length > 0 || !!s.project;
     return [
       header(s),
       // one line: the identity notice, with the sign-in link when signed out
-      s.notice || !s.signedIn ? DC.notice(str(s.notice) || "Sign in to GitHub to see your personas and the project's secrets.", s.signedIn ? "warn" : "info",
+      s.notice || !s.signedIn ? DC.notice(str(s.notice) || "Sign in to GitHub to see your personas and the project's connections.", s.signedIn ? "warn" : "info",
         s.signedIn ? {} : { icon: "github", action: { label: "Sign in to GitHub", onClick: () => post({ type: "connect", id: "github" }) } }) : null,
       groups.length
         ? groups.map((g, i) => groupSection(g, i, s))
         : DC.empty({ icon: "plug", title: "No connections to show", text: "Nothing this persona needs. Check again after switching persona.", action: { label: "Check all", icon: "sync", onClick: () => post({ type: "refresh" }) } }),
-      s.signedIn ? projectSection(s) : null,
+      s.signedIn && hasProject ? projectSection(s) : null,
       footer(s),
     ];
   }

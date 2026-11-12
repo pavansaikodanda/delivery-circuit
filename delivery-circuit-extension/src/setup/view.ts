@@ -14,8 +14,9 @@ export interface StepView {
   hc?: string;
   action?: string;
   checklist?: { text: string; done: boolean }[];
-  secrets?: { name: string; set: boolean | null }[];
-  env?: string;
+  /** commands the person copies (runner registration, logins); never a credential */
+  commands?: string[];
+  notes?: string[];
   verify: boolean;
   links: DeepLink[];
   result?: StepResultView;
@@ -29,8 +30,8 @@ export interface StepView {
 
 export type Tone = "ok" | "warn" | "err" | "info" | "muted";
 export interface StepStatus { tone: Tone; text: string; busy?: boolean }
-/** run = post {type:"run"}, verify = {type:"verify"}, secret = {type:"secret", name}, form = switch to the config tab */
-export interface StepAction { do: "run" | "verify" | "secret" | "form"; label: string; name?: string }
+/** run = post {type:"run"}, verify = {type:"verify"}, form = switch to the config tab. v3 has no secret steps. */
+export interface StepAction { do: "run" | "verify" | "form"; label: string }
 
 export interface PhaseView {
   id: string;
@@ -81,13 +82,6 @@ export function stepStatus(s: StepCore, busy: string | null): StepStatus {
   if (r?.state === "ok") return { tone: "ok", text: s.kind === "check" ? "passed" : "done" };
   if (r?.state === "warn") return { tone: "warn", text: "needs attention" };
   if (r?.state === "err") return { tone: "err", text: "failed" };
-  const secrets = s.secrets ?? [];
-  const known = secrets.filter((x) => x.set !== null);
-  if (s.kind === "secret" && secrets.length) {
-    if (known.length < secrets.length) return { tone: "muted", text: "not checked" };
-    const set = known.filter((x) => x.set).length;
-    return set === secrets.length ? { tone: "ok", text: "all set" } : { tone: "warn", text: `${set} of ${secrets.length} set` };
-  }
   if (s.kind === "human") {
     const list = s.checklist ?? [];
     const ticked = list.filter((c) => c.done).length;
@@ -102,27 +96,20 @@ export function stepStatus(s: StepCore, busy: string | null): StepStatus {
 export function stepActions(s: StepCore): StepAction[] {
   const out: StepAction[] = [];
   const verify: StepAction | null = s.verify ? { do: "verify", label: s.kind === "human" ? "Verify" : "Check" } : null;
-  const secrets = s.secrets ?? [];
-  const secretActs = secrets.map((x): StepAction => ({ do: "secret", label: `${x.set ? "Replace" : "Set"} ${x.name}`, name: x.name }));
-  const missing = secretActs.filter((_, i) => secrets[i].set === false);
-  const others = secretActs.filter((_, i) => secrets[i].set !== false);
   if (s.kind === "form") {
     out.push({ do: "form", label: "Open form" });
     if (verify) out.push(verify);
     return out;
   }
-  const run: StepAction | null = s.action && s.kind !== "secret" ? { do: "run", label: s.action } : null;
-  if (s.kind === "secret") {
-    // a known missing secret first; when nothing is known yet, Check reads the names
-    out.push(...missing);
+  const run: StepAction | null = s.action ? { do: "run", label: s.action } : null;
+  // a check reads first; its follow-up (record versions, delete leftovers) comes second
+  if (s.kind === "check") {
     if (verify) out.push(verify);
-    out.push(...others);
+    if (run) out.push(run);
     return out;
   }
   if (run) out.push(run);
-  out.push(...missing);
   if (verify) out.push(verify);
-  out.push(...others);
   if (!out.length && s.kind === "terminal") out.push({ do: "run", label: "Open terminal" });
   return out;
 }
@@ -131,18 +118,17 @@ export function buildView(p: {
   login: string; admin: boolean; owner: string; repo: string;
   defs: PhaseDef[]; state: BuildState | undefined; buildStateExists: boolean;
   results: Record<string, StepResultView>; ticks: Record<string, boolean[]>;
-  secretNames: Record<string, string[]> | undefined;
   selected: string; busy: string | null;
   config: { exists: boolean; values: Record<string, string>; errors: FormError[] };
 }): SetupView {
   const phases = p.defs.map((d): PhaseView => {
     const row = p.state?.rows.find((r) => r.id === d.id);
     const steps = d.steps.map((s): StepView => {
-      const names = p.secretNames?.[s.env ?? ""];
       const core: StepCore = {
-        id: s.id, kind: s.kind, title: s.title, detail: s.detail, hc: s.hc, action: s.action, env: s.env, verify: !!s.verify,
+        id: s.id, kind: s.kind, title: s.title, detail: s.detail, hc: s.hc, action: s.action, verify: !!s.verify,
         checklist: s.checklist?.map((text, i) => ({ text, done: !!p.ticks[s.id]?.[i] })),
-        secrets: s.secrets?.map((name) => ({ name, set: names ? names.includes(name) : null })),
+        ...(s.commands?.length ? { commands: s.commands } : {}),
+        ...(s.notes?.length ? { notes: s.notes } : {}),
         links: (s.urls ?? []).map((u) => ({ kind: linkKind(u.url), label: u.label, target: u.url })),
         result: p.results[s.id],
       };

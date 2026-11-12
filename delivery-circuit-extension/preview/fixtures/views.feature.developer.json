@@ -1,11 +1,25 @@
 {
   "found": true,
-  "featureId": "001",
+  "featureId": "ACME-10",
   "viewer": "developer",
   "viewerLabel": "Developer",
   "login": "ravi-dev",
   "personas": [
     "developer"
+  ],
+  "designActions": [
+    {
+      "id": "decision:record",
+      "label": "Record decision",
+      "persona": "developer",
+      "kind": "ai",
+      "args": {
+        "command": "/record-decision",
+        "argKind": "feature",
+        "arg": "ACME-10"
+      },
+      "allowed": true
+    }
   ],
   "stages": [
     {
@@ -22,15 +36,15 @@
     },
     {
       "id": "plan",
-      "label": "Plan",
+      "label": "Design",
       "state": "done",
-      "title": "Plan: done"
+      "title": "Design: done"
     },
     {
       "id": "signoff",
-      "label": "Sign-off",
+      "label": "Approved",
       "state": "done",
-      "title": "Sign-off: done"
+      "title": "Approved: done"
     },
     {
       "id": "stories",
@@ -46,9 +60,9 @@
     },
     {
       "id": "jira",
-      "label": "Jira",
+      "label": "Ready",
       "state": "done",
-      "title": "Jira: done"
+      "title": "Ready: done"
     },
     {
       "id": "build",
@@ -58,9 +72,9 @@
     },
     {
       "id": "qa",
-      "label": "QA",
+      "label": "Review",
       "state": "todo",
-      "title": "QA: todo"
+      "title": "Review: todo"
     },
     {
       "id": "release",
@@ -72,7 +86,7 @@
   "gates": [
     {
       "id": "G1",
-      "label": "Plan signed off",
+      "label": "Design approved",
       "owner": "architect",
       "ownerLabel": "Architect",
       "state": "done",
@@ -174,8 +188,7 @@
     {
       "num": "00",
       "title": "Escalation data model and permissions (Story 00)",
-      "file": ".specify/specs/001-case-escalation/task_story_00.md",
-      "jiraKey": "CE-11",
+      "jiraKey": "ACME-11",
       "counts": {
         "ui": 0,
         "unit": 2,
@@ -185,14 +198,9 @@
       "prNumber": 41,
       "links": [
         {
-          "kind": "file",
-          "label": "Story",
-          "target": ".specify/specs/001-case-escalation/task_story_00.md"
-        },
-        {
           "kind": "jira",
-          "label": "CE-11",
-          "target": "https://acme.atlassian.net/browse/CE-11"
+          "label": "ACME-11",
+          "target": "https://acme.atlassian.net/browse/ACME-11"
         },
         {
           "kind": "github",
@@ -200,13 +208,21 @@
           "target": "https://github.com/acme-org/salesDemoOrg/pull/41"
         }
       ],
-      "prState": "open"
+      "prState": "merged",
+      "jiraStatus": "Done",
+      "aiReady": true,
+      "designVersion": 8,
+      "designChanged": false,
+      "status": {
+        "tone": "ok",
+        "text": "PR #41 merged"
+      },
+      "actions": []
     },
     {
       "num": "01",
       "title": "Agent escalates a Case with a reason",
-      "file": ".specify/specs/001-case-escalation/task_story_01.md",
-      "jiraKey": "CE-12",
+      "jiraKey": "ACME-12",
       "counts": {
         "ui": 1,
         "unit": 1,
@@ -216,14 +232,9 @@
       "prNumber": 42,
       "links": [
         {
-          "kind": "file",
-          "label": "Story",
-          "target": ".specify/specs/001-case-escalation/task_story_01.md"
-        },
-        {
           "kind": "jira",
-          "label": "CE-12",
-          "target": "https://acme.atlassian.net/browse/CE-12"
+          "label": "ACME-12",
+          "target": "https://acme.atlassian.net/browse/ACME-12"
         },
         {
           "kind": "github",
@@ -231,13 +242,21 @@
           "target": "https://github.com/acme-org/salesDemoOrg/pull/42"
         }
       ],
-      "prState": "open"
+      "prState": "open",
+      "jiraStatus": "In Review",
+      "aiReady": true,
+      "designVersion": 8,
+      "designChanged": false,
+      "status": {
+        "tone": "info",
+        "text": "PR #42 in review"
+      },
+      "actions": []
     },
     {
       "num": "02",
       "title": "Escalated Cases route to the Tier 2 queue",
-      "file": ".specify/specs/001-case-escalation/task_story_02.md",
-      "jiraKey": "CE-13",
+      "jiraKey": "ACME-13",
       "counts": {
         "ui": 1,
         "unit": 1,
@@ -247,14 +266,9 @@
       "prNumber": 43,
       "links": [
         {
-          "kind": "file",
-          "label": "Story",
-          "target": ".specify/specs/001-case-escalation/task_story_02.md"
-        },
-        {
           "kind": "jira",
-          "label": "CE-13",
-          "target": "https://acme.atlassian.net/browse/CE-13"
+          "label": "ACME-13",
+          "target": "https://acme.atlassian.net/browse/ACME-13"
         },
         {
           "kind": "github",
@@ -262,13 +276,21 @@
           "target": "https://github.com/acme-org/salesDemoOrg/pull/43"
         }
       ],
-      "prState": "draft"
+      "prState": "draft",
+      "jiraStatus": "Plan Review",
+      "aiReady": true,
+      "designVersion": 8,
+      "designChanged": false,
+      "status": {
+        "tone": "muted",
+        "text": "PR #43 draft"
+      },
+      "actions": []
     },
     {
       "num": "03",
       "title": "Notify the account owner on escalation",
-      "file": ".specify/specs/001-case-escalation/task_story_03.md",
-      "jiraKey": "CE-14",
+      "jiraKey": "ACME-14",
       "counts": {
         "ui": 1,
         "unit": 2,
@@ -278,14 +300,9 @@
       "prNumber": 44,
       "links": [
         {
-          "kind": "file",
-          "label": "Story",
-          "target": ".specify/specs/001-case-escalation/task_story_03.md"
-        },
-        {
           "kind": "jira",
-          "label": "CE-14",
-          "target": "https://acme.atlassian.net/browse/CE-14"
+          "label": "ACME-14",
+          "target": "https://acme.atlassian.net/browse/ACME-14"
         },
         {
           "kind": "github",
@@ -293,32 +310,134 @@
           "target": "https://github.com/acme-org/salesDemoOrg/pull/44"
         }
       ],
-      "prState": "open"
+      "prState": "open",
+      "jiraStatus": "In Build",
+      "aiReady": true,
+      "designVersion": 8,
+      "designChanged": false,
+      "status": {
+        "tone": "info",
+        "text": "PR #44 in review"
+      },
+      "actions": []
+    },
+    {
+      "num": "04",
+      "title": "Escalation history on the Case page",
+      "jiraKey": "ACME-15",
+      "counts": {
+        "ui": 1,
+        "unit": 0,
+        "manual": 0
+      },
+      "total": 1,
+      "links": [
+        {
+          "kind": "jira",
+          "label": "ACME-15",
+          "target": "https://acme.atlassian.net/browse/ACME-15"
+        }
+      ],
+      "jiraStatus": "Ready for Dev",
+      "aiReady": true,
+      "designVersion": 8,
+      "designChanged": false,
+      "status": {
+        "tone": "info",
+        "text": "ready to start"
+      },
+      "actions": [
+        {
+          "id": "dev:start-story",
+          "label": "Start story",
+          "persona": "developer",
+          "kind": "ai",
+          "args": {
+            "command": "/dev-start-story",
+            "argKind": "story",
+            "arg": "ACME-15"
+          },
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "num": "05",
+      "title": "Escalation report for team leads",
+      "jiraKey": "ACME-16",
+      "counts": {
+        "ui": 0,
+        "unit": 0,
+        "manual": 0
+      },
+      "total": 0,
+      "links": [
+        {
+          "kind": "jira",
+          "label": "ACME-16",
+          "target": "https://acme.atlassian.net/browse/ACME-16"
+        }
+      ],
+      "jiraStatus": "Test Design",
+      "aiReady": false,
+      "designVersion": 8,
+      "designChanged": false,
+      "status": {
+        "tone": "muted",
+        "text": "Test Design · not ai-ready"
+      },
+      "actions": [
+        {
+          "id": "dev:start-story",
+          "label": "Start story",
+          "persona": "developer",
+          "kind": "ai",
+          "args": {
+            "command": "/dev-start-story",
+            "argKind": "story",
+            "arg": "ACME-16"
+          },
+          "allowed": false,
+          "reason": "Waits for G2: the Tester confirms testability (ai-ready)"
+        }
+      ]
+    },
+    {
+      "num": "06",
+      "title": "Auto-close stale escalations",
+      "jiraKey": "ACME-17",
+      "counts": {
+        "ui": 0,
+        "unit": 1,
+        "manual": 0
+      },
+      "total": 1,
+      "prNumber": 45,
+      "links": [
+        {
+          "kind": "jira",
+          "label": "ACME-17",
+          "target": "https://acme.atlassian.net/browse/ACME-17"
+        },
+        {
+          "kind": "github",
+          "label": "PR #45",
+          "target": "https://github.com/acme-org/salesDemoOrg/pull/45"
+        }
+      ],
+      "prState": "open",
+      "jiraStatus": "In Build",
+      "aiReady": true,
+      "designVersion": 8,
+      "designChanged": false,
+      "status": {
+        "tone": "info",
+        "text": "PR #45 in review"
+      },
+      "actions": []
     }
   ],
   "sources": null,
-  "files": [
-    {
-      "kind": "file",
-      "label": "spec.md",
-      "target": ".specify/specs/001-case-escalation/spec.md"
-    },
-    {
-      "kind": "file",
-      "label": "plan.md",
-      "target": ".specify/specs/001-case-escalation/plan.md"
-    },
-    {
-      "kind": "file",
-      "label": "data-model.md",
-      "target": ".specify/specs/001-case-escalation/data-model.md"
-    },
-    {
-      "kind": "file",
-      "label": "jira-map.json",
-      "target": ".specify/specs/001-case-escalation/jira-map.json"
-    }
-  ],
   "actions": [
     {
       "id": "ai:/dev-review-stories",
@@ -328,35 +447,56 @@
       "args": {
         "command": "/dev-review-stories",
         "argKind": "feature",
-        "arg": "001-case-escalation"
+        "arg": "ACME-10"
+      },
+      "allowed": true
+    },
+    {
+      "id": "decision:record",
+      "label": "Record decision",
+      "persona": "developer",
+      "kind": "ai",
+      "args": {
+        "command": "/record-decision",
+        "argKind": "feature",
+        "arg": "ACME-10"
       },
       "allowed": true
     }
   ],
   "updated": "2026-11-11T15:00:00.000Z",
+  "design": {
+    "url": "https://acme.atlassian.net/wiki/spaces/ACME/pages/2211843/Case+escalation",
+    "status": "Approved",
+    "version": 8,
+    "approvedVersion": 8,
+    "approvedBy": "maya.arch@example.com",
+    "state": "approved",
+    "text": "Approved v8 by maya.arch@example.com",
+    "tone": "ok"
+  },
   "feature": {
-    "id": "001",
-    "slug": "001-case-escalation",
+    "id": "ACME-10",
+    "slug": "ACME-10",
+    "epicKey": "ACME-10",
     "title": "Case escalation with reason and queue routing",
-    "score": 92,
     "openQuestions": 0,
     "signedOff": true,
-    "dir": ".specify/specs/001-case-escalation",
     "links": [
       {
-        "kind": "file",
-        "label": "spec.md",
-        "target": ".specify/specs/001-case-escalation/spec.md"
-      },
-      {
         "kind": "jira",
-        "label": "Epic CE-10",
-        "target": "https://acme.atlassian.net/browse/CE-10"
+        "label": "Epic ACME-10",
+        "target": "https://acme.atlassian.net/browse/ACME-10"
       },
       {
         "kind": "confluence",
-        "label": "Design",
-        "target": "https://acme.atlassian.net/wiki/spaces/CE/pages/2211843/Case+escalation"
+        "label": "Design: Case escalation",
+        "target": "https://acme.atlassian.net/wiki/spaces/ACME/pages/2211843/Case+escalation"
+      },
+      {
+        "kind": "confluence",
+        "label": "Org snapshot",
+        "target": "https://acme.atlassian.net/wiki/spaces/ACME/pages/2211901/Org+snapshot"
       },
       {
         "kind": "lucid",

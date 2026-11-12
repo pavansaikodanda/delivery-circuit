@@ -11,7 +11,7 @@ import { routeOf, verdictFor } from "../../src/testing/engine/verdict";
 import { ensureToolDir, listRuns, readRun, runStartedAt, countStatuses } from "../../src/testing/engine/runs";
 import { TestingEngine } from "../../src/testing/engine/core";
 import { readStatus, recordResult } from "../../src/testing/engine/status";
-import { catalog, mergeStatus, newSuitePath, statusFromRuns, storyRefOf, suiteRecord } from "../../src/testing/engine/catalog";
+import { catalog, mergeStatus, newSuitePath, statusFromRuns, storyKeyOf, suiteRecord, tcIndex } from "../../src/testing/engine/catalog";
 import { esc, writeReport } from "../../src/testing/engine/report";
 import { shellArg } from "../../src/testing/engine/exec";
 import { sanitize } from "../../src/testing/engine/generate";
@@ -195,23 +195,28 @@ describe("results and status reading", () => {
     const merged = mergeStatus({ "SMOKE-ACC-001": { manual: { ...fromRuns["SMOKE-ACC-001"].manual!, status: "blocked", at: Date.parse("2026-11-11T00:00:00Z") } } }, fromRuns);
     expect(merged["SMOKE-ACC-001"].manual?.status).toBe("blocked");
   });
-  it("builds the catalogue with last counts, stale marks and Jira keys from jira-map.json", () => {
-    write("test-cases/001-account-smoke-story-01.sf-tests.yaml", SUITE);
+  it("builds the catalogue with last counts, stale marks and Jira keys from tests/<KEY>.tc.json", () => {
+    write("test-cases/SDO-12.sf-tests.yaml", SUITE);
     write("test-cases/broken.sf-tests.yaml", "cases:\n  - id: X\n");
     write("test-cases/notes.yaml", SUITE); // not a suite file name
-    write(".specify/specs/001-account-smoke/jira-map.json", JSON.stringify({ refs: { epic: "SDO-1", "01": "SDO-12", "SMOKE-ACC-002": "SDO-32" } }));
+    write("tests/SDO-12.tc.json", JSON.stringify({ story: "SDO-12", feature: "SDO-1", designVersion: 3,
+      cases: [{ id: "SMOKE-ACC-002", jira: "SDO-32" }, { id: "SMOKE-ACC-001", jira: "not a key" }] }));
     writeRun("2026-11-10T10-00-00-000Z", "Smoke - Account", [result("SMOKE-ACC-001", "passed", { caseHash: "outdated" })]);
     const all = catalog(dir);
-    expect(all.map((s) => s.key)).toEqual(["test-cases/001-account-smoke-story-01.sf-tests.yaml", "test-cases/broken.sf-tests.yaml"]);
+    expect(all.map((s) => s.key)).toEqual(["test-cases/SDO-12.sf-tests.yaml", "test-cases/broken.sf-tests.yaml"]);
     const [smoke, broken] = all;
-    expect(smoke).toMatchObject({ name: "Smoke - Account", storyKey: "SDO-12", feature: "001-account-smoke", last: { passed: 1 }, notRun: 1 });
+    expect(smoke).toMatchObject({ name: "Smoke - Account", storyKey: "SDO-12", feature: "SDO-1", last: { passed: 1 }, notRun: 1 });
     expect(smoke.cases[0].manual?.stale).toBe(true);
+    expect(smoke.cases[0].jiraKey).toBeUndefined();
     expect(smoke.cases[1].jiraKey).toBe("SDO-32");
     expect(broken.error).toMatch(/test-cases\/broken\.sf-tests\.yaml case #1: missing "title"/);
     expect(broken.error).not.toContain(dir);
-    expect(storyRefOf("test-cases/012-lead-convert-story-03.sf-tests.yaml")).toEqual({ feature: "012-lead-convert", featureId: "012", story: "03" });
-    expect(storyRefOf("smoke-account.sf-tests.yaml")).toBeUndefined();
-    expect(suiteRecord(dir, path.join(dir, "test-cases/001-account-smoke-story-01.sf-tests.yaml")).cases).toHaveLength(2);
+    expect(storyKeyOf("test-cases/ACME-12.sf-tests.yaml")).toBe("ACME-12");
+    expect(storyKeyOf("test-cases/012-lead-convert-story-03.sf-tests.yaml")).toBeUndefined();
+    expect(storyKeyOf("smoke-account.sf-tests.yaml")).toBeUndefined();
+    expect(tcIndex(dir, "../SDO-12")).toBeUndefined();
+    expect(tcIndex(dir, "SDO-99")).toBeUndefined();
+    expect(suiteRecord(dir, path.join(dir, "test-cases/SDO-12.sf-tests.yaml")).cases).toHaveLength(2);
   });
   it("picks a new suite file name that does not exist yet", () => {
     write("test-cases/lead-conversion.sf-tests.yaml", SUITE);

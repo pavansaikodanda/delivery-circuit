@@ -1,0 +1,116 @@
+{
+  "identity": {
+    "login": "demo-architect",
+    "personas": [
+      "architect",
+      "developer"
+    ],
+    "active": "developer",
+    "isAdmin": true,
+    "owner": "acme-org",
+    "repo": "acme-shipping",
+    "orgOwned": true
+  },
+  "canAct": false,
+  "reason": "Switch to acting as Architect to add sources.",
+  "sources": [
+    {
+      "id": "upload:3f9a1c2b7d4e",
+      "kind": "upload",
+      "origin": "wispr-flow",
+      "originLabel": "Wispr Flow",
+      "title": "Acme Shipping tracking notes",
+      "date": "2026-11-11T09:12:00.000Z",
+      "usedBy": [],
+      "links": []
+    },
+    {
+      "id": "fireflies:01KACMEKICKOFF",
+      "kind": "fireflies",
+      "origin": "fireflies",
+      "originLabel": "Fireflies",
+      "title": "Acme Shipping kick-off",
+      "date": "2026-11-10T15:00:00.000Z",
+      "usedBy": [
+        "ACME-12"
+      ],
+      "links": [
+        {
+          "kind": "fireflies",
+          "label": "Open in Fireflies",
+          "target": "https://app.fireflies.ai/view/01KACMEKICKOFF"
+        }
+      ]
+    },
+    {
+      "id": "upload:a1b2c3d4e5f6",
+      "kind": "upload",
+      "origin": "file",
+      "originLabel": "File",
+      "title": "Returns workshop",
+      "date": "2026-11-08T13:30:00.000Z",
+      "usedBy": [],
+      "links": []
+    }
+  ],
+  "fireflies": {
+    "mcp": {
+      "state": "connected"
+    },
+    "status": "ready",
+    "loadedAt": "2026-11-11T09:58:00.000Z",
+    "meetings": [
+      {
+        "id": "02KACMEWEEKLY",
+        "title": "Acme Shipping weekly",
+        "date": "2026-11-11T08:00:00.000Z",
+        "durationMin": 31,
+        "organizer": "demo.user@example.com",
+        "participants": 4,
+        "indexed": false,
+        "link": {
+          "kind": "fireflies",
+          "label": "Open in Fireflies",
+          "target": "https://app.fireflies.ai/view/02KACMEWEEKLY"
+        }
+      },
+      {
+        "id": "01KACMEKICKOFF",
+        "title": "Acme Shipping kick-off",
+        "date": "2026-11-10T15:00:00.000Z",
+        "durationMin": 58,
+        "participants": 6,
+        "indexed": true,
+        "link": {
+          "kind": "fireflies",
+          "label": "Open in Fireflies",
+          "target": "https://app.fireflies.ai/view/01KACMEKICKOFF"
+        }
+      }
+    ]
+  },
+  "wispr": {
+    "supported": true,
+    "candidates": [
+      "/Users/demo/Library/Application Support/Wispr Flow/flow.sqlite"
+    ],
+    "found": "/Users/demo/Library/Application Support/Wispr Flow/flow.sqlite"
+  },
+  "watch": {
+    "folder": "/Users/demo/Transcripts",
+    "active": true,
+    "last": {
+      "title": "Returns workshop",
+      "at": "2026-11-11T09:40:00.000Z"
+    }
+  },
+  "busy": [],
+  "extensions": [
+    "txt",
+    "md",
+    "docx",
+    "vtt",
+    "srt",
+    "pdf"
+  ]
+}

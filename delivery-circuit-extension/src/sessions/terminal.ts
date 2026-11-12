@@ -38,7 +38,7 @@ export function buildTerminalSpec(persona: Persona, prompt: string, root: string
     cwd: root,
     shellPath: exe.shellPath,
     shellArgs: args,
-    // null removes the variable: subscription auth only, never an API key.
-    env: { CIRCUIT_PERSONA: persona, ANTHROPIC_API_KEY: null, ANTHROPIC_AUTH_TOKEN: null },
+    // null removes the variable: the person's logged-in claude only, never an API key or a stored OAuth token.
+    env: { CIRCUIT_PERSONA: persona, ANTHROPIC_API_KEY: null, ANTHROPIC_AUTH_TOKEN: null, CLAUDE_CODE_OAUTH_TOKEN: null },
   };
 }

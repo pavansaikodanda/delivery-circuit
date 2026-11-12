@@ -1,7 +1,8 @@
-// Project Setup wizard (DESIGN.md §6.6): phases B0-B12 as a narrow list, the selected phase's steps as rows with one
-// status and one action each; detail, checklist, secrets, links and the last result live in the expanded row.
+// Project Setup wizard (DESIGN.md §6.6), v3: phases B0-B13 as a narrow list, the selected phase's steps as rows with
+// one status and one action each; detail, commands to copy (runner registration, logins), checklist, links and the last
+// result live in the expanded row. v3 stores no credentials, so there are no secret fields.
 // State: SetupView from src/setup/view.ts (each step carries status + actions, each phase progress).
-// Posts: ready, select {phase}, check {phase}, verify {step}, run {step}, secret {step, name}, tick {step, index, value},
+// Posts: ready, select {phase}, check {phase}, verify {step}, run {step}, tick {step, index, value},
 //        setStatus {phase, status, notes?}, saveConfig {values}, openLink {link}.
 (function () {
   const { h, post } = DC;
@@ -13,12 +14,12 @@
   let form = null; // draft of build.config.yml values (null = no edits)
 
   const KIND = {
-    check: { icon: "checklist", label: "Automatic check" }, run: { icon: "play", label: "Run" }, secret: { icon: "key", label: "Secrets" },
+    check: { icon: "checklist", label: "Automatic check" }, run: { icon: "play", label: "Run" },
     terminal: { icon: "terminal", label: "Terminal" }, human: { icon: "person", label: "You do this" }, form: { icon: "edit", label: "Form" },
   };
   const PHASE_TONE = { done: "ok", partial: "info", blocked: "err", todo: "" };
   const STATUSES = ["TODO", "PARTIAL", "DONE", "BLOCKED"];
-  const GROUPS = { github: "GitHub", people: "People", jira: "Jira", confluence: "Confluence", salesforce: "Salesforce", slack: "Slack", transcripts: "Transcripts", ai: "AI" };
+  const GROUPS = { github: "GitHub", people: "People", runners: "Self-hosted runners", jira: "Jira", confluence: "Confluence", salesforce: "Salesforce", slack: "Slack", ai: "AI" };
 
   const rerender = () => { if (DC.state) DC.mount(render(DC.state)); };
   function setTab(t) {
@@ -33,8 +34,7 @@
   // ---------------------------------------------------------------- step rows
   function runAction(s, a) {
     if (a.do === "form") { setTab("config"); return; }
-    if (a.do === "secret") post({ type: "secret", step: s.id, name: a.name });
-    else post({ type: a.do, step: s.id });
+    post({ type: a.do, step: s.id });
   }
   function resultBlock(r) {
     if (!r) return null;
@@ -48,17 +48,17 @@
       h("input", { type: "checkbox", checked: !!c.done, disabled, onchange: (e) => post({ type: "tick", step: s.id, index: i, value: e.currentTarget.checked }) }),
       h("span", c.text))));
   }
-  function secretLines(s, st) {
-    if (!s.secrets || !s.secrets.length) return null;
-    const why = busyReason(st);
-    return h("div.su-secrets", s.secrets.map((x) => {
-      const word = x.set === true ? "set" : x.set === false ? "missing" : "not checked";
-      return h("div.su-secret",
-        DC.dot(x.set === true ? "ok" : x.set === false ? "warn" : "", { hollow: x.set == null }),
-        h("span.mono", x.name), h("span.meta", word),
-        DC.button(x.set ? "Replace" : "Set", () => post({ type: "secret", step: s.id, name: x.name }),
-          { kind: "ghost", size: "sm", disabled: !!why, reason: why, tip: (x.set ? "Replace " : "Set ") + x.name }));
-    }), s.env ? h("div.meta", "GitHub environment " + s.env) : null);
+  // Commands the person runs elsewhere (runner machine, a terminal); copied as one block. They never hold a credential.
+  function commandBlock(s) {
+    if (!s.commands || !s.commands.length) return null;
+    const text = s.commands.join("\n");
+    const copy = () => {
+      try { navigator.clipboard.writeText(text).then(() => DC.toast && DC.toast("Commands copied"), () => {}); } catch { /* preview */ }
+    };
+    return h("div.su-cmds",
+      h("pre.su-lines.su-cmd", text),
+      h("div.dc-acts", DC.button("Copy", copy, { kind: "ghost", size: "sm", icon: "copy", tip: "Copy the commands" })),
+      (s.notes || []).map((n) => h("div.meta", n)));
   }
   // isNext: the first open step with an action; only it gets the primary (filled) button, the rest stay secondary
   function stepRow(s, st, isNext) {
@@ -70,10 +70,9 @@
     const status = s.status || { tone: "muted", text: "" };
     const busy = !!status.busy;
     const primary = first ? DC.button(first.label, () => runAction(s, first), Object.assign(actOpts(first, !s.done && isNext ? "primary" : "secondary"), { loading: busy })) : null;
-    const menu = rest.map((a) => ({ label: a.label, icon: a.do === "verify" ? "sync" : a.do === "secret" ? "key" : a.do === "form" ? "edit" : "play",
+    const menu = rest.map((a) => ({ label: a.label, icon: a.do === "verify" ? "sync" : a.do === "form" ? "edit" : "play",
       disabled: !!why && a.do !== "form", reason: a.do === "form" ? null : why, onClick: () => runAction(s, a) }));
-    // secrets have their own Set/Replace buttons in the panel
-    const panelActs = rest.filter((a) => a.do !== "secret");
+    const panelActs = rest;
     const more = DC.linkMenu(s.links, 3);
     if (more.length) { if (menu.length) menu.push("-"); menu.push(...more); }
     return DC.row({
@@ -86,8 +85,8 @@
         s.detail ? h("p.su-detail", s.detail) : null,
         DC.kv([
           ["Result", resultBlock(s.result)],
+          ["Commands", commandBlock(s)],
           ["Checklist", checklist(s, busy)],
-          ["Secrets", secretLines(s, st)],
           ["Links", DC.links(s.links)],
           ["Actions", panelActs.length ? h("div.dc-acts", panelActs.map((a) => DC.button(a.label, () => runAction(s, a), actOpts(a, "ghost")))) : null],
         ]),
@@ -121,10 +120,11 @@
     const why = busyReason(st);
     const checking = st.busy === p.id;
     const code = statusCode(p);
-    const doneCode = p.id === "B12" ? "COMPLETE" : "DONE";
+    const last = (st.phases || []).length ? st.phases[st.phases.length - 1].id : "B13";
+    const doneCode = p.id === last ? "COMPLETE" : "DONE";
     const isDone = p.kind === "done";
     const prog = p.progress || { done: 0, total: p.steps.length };
-    const statusItems = ["Set status in build-state.md", ...STATUSES.concat(p.id === "B12" ? ["COMPLETE"] : []).map((x) => ({
+    const statusItems = ["Set status in build-state.md", ...STATUSES.concat(p.id === last ? ["COMPLETE"] : []).map((x) => ({
       label: x.charAt(0) + x.slice(1).toLowerCase(), checked: code === x, disabled: !!why, reason: why,
       hint: (x === "DONE" || x === "COMPLETE") && !p.ready ? "asks first" : null,
       onClick: () => { if (code !== x) post({ type: "setStatus", phase: p.id, status: x }); },
@@ -202,7 +202,7 @@
       grp.fields.push(f);
     });
     return h("div.su-config", { "data-key": "config" },
-      h("p.su-summary", "Read by every phase. No secrets here: they go to GitHub Actions secrets from the phase steps."),
+      h("p.su-summary", "Read by every phase. No secrets anywhere: every connection is a login (gh, sf, acli, claude, MCP sign-in), and the runners hold their own."),
       c.exists ? null : DC.notice("build.config.yml does not exist yet. Saving creates it from the plugin template.", "info"),
       general.map((e) => DC.notice(e.message, "err")),
       groups.length ? groups.map((g, i) => DC.section(g.title, { key: "cfg-" + g.id, first: i === 0 }, h("div.su-fields", g.fields.map((f) => field(f, c)))))
