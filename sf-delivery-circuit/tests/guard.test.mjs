@@ -24,10 +24,11 @@ const cases = [
   // production and deploys
   ['', B('sf project deploy start --source-dir force-app --target-org prod'), 'deny'],
   ['', B('sf data query -q "select id from account" --target-org client-live'), 'deny'],
-  ['', B('sf org login jwt --client-id x --username u --jwt-key-file k --instance-url https://login.salesforce.com --alias ci'), 'deny'],
+  ['', B('sf org login jwt --client-id x --username u --jwt-key-file k --instance-url https://login.salesforce.com --alias ci'), 'allow'],
+  ['', B('sf org login web --alias prod --instance-url https://acme.my.salesforce.com'), 'deny'],
   ['', B('sf org login jwt --client-id x --username u --jwt-key-file k --instance-url https://test.salesforce.com --alias ci-dev-test'), 'allow'],
   ['', B('sf org login web --alias qa --instance-url https://acme--qa.sandbox.my.salesforce.com'), 'allow'],
-  ['', B('sf org login web --alias x --instance-url https://acme.my.salesforce.com'), 'deny'],
+  ['', B('sf org login web --alias x --instance-url https://acme.my.salesforce.com'), 'allow'],
   ['developer', B('sf project deploy start --source-dir force-app --target-org dev'), 'deny'],
   ['developer', B('sf project deploy validate --source-dir force-app --target-org dev --test-level RunSpecifiedTests --tests FooTest'), 'allow'],
   ['developer', B('sf project deploy start --dry-run --source-dir force-app --target-org dev'), 'allow'],

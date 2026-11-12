@@ -28,37 +28,26 @@ export interface LoginUrlDecision {
 }
 
 /**
- * Decide whether "sf org login web --instance-url <url>" may run. Production-looking URLs (login.salesforce.com or a
- * non-sandbox my.salesforce.com) are refused unless build.config.yml declares the org a trial / dev org; then the
- * login is allowed with a warning.
+ * Decide whether "sf org login web --instance-url <url>" may run. Any Salesforce https URL is allowed: the org type
+ * (sandbox, scratch, Developer Edition, SDO or other production-edition demo org) is not checked, because demo and
+ * SDO orgs are production orgs. Only non-https or non-Salesforce URLs are refused.
+ * (`declaredTrial` is accepted for compatibility and ignored.)
  */
-export function checkLoginUrl(url: string | undefined, declaredTrial: boolean): LoginUrlDecision {
-  const target = url && url.trim() ? url.trim().replace(/\/+$/, "") : "https://test.salesforce.com";
-  const kind = classifySfUrl(target);
-  switch (kind) {
-    case "sandbox": case "test-login": case "scratch": return { allowed: true, url: target };
-    case "dev-edition": return { allowed: true, url: target, warning: "This is a Developer Edition / trial org, not a sandbox." };
-    case "invalid": return { allowed: false, url: target, warning: `Not a Salesforce https URL: ${target}` };
-    case "production-like":
-      return declaredTrial
-        ? { allowed: true, url: target, warning: `${target} looks like a production org. build.config.yml says it is a trial/dev org, so the login is allowed. Never deploy to production from here.` }
-        : { allowed: false, url: target, warning: `${target} looks like a production org. The circuit only logs in to sandboxes. If this really is a trial or Developer Edition org, say so in build.config.yml (comment "trial org" on the URL line or salesforce.dev_org_type: trial).` };
-  }
+export function checkLoginUrl(url: string | undefined, _declaredTrial?: boolean): LoginUrlDecision {
+  const target = url && url.trim() ? url.trim().replace(/\/+$/, "") : "https://login.salesforce.com";
+  return classifySfUrl(target) === "invalid"
+    ? { allowed: false, url: target, warning: `Not a Salesforce https URL: ${target}` }
+    : { allowed: true, url: target };
 }
 
 /**
- * Whether AI (the SF AI Tester browser agent, org exploration) may work in the org an alias resolves to. Same rule
- * as the Connections row: sandboxes, scratch orgs and Developer Edition orgs yes; a production-looking instance only
- * when build.config.yml declares the org a trial org; an org the CLI can't resolve, no.
+ * Whether AI (the SF AI Tester browser agent, org exploration) may work in the org an alias resolves to: yes when the
+ * alias resolves to a connected Salesforce org, whatever its type. (`declaredTrial` is accepted and ignored.)
  */
-export function sfOrgDecision(alias: string, instanceUrl: string | undefined, declaredTrial: boolean): { allowed: boolean; reason?: string } {
-  const kind = classifySfUrl(instanceUrl);
-  if (kind === "invalid") return { allowed: false, reason: `The sf CLI alias "${alias}" does not resolve to a connected Salesforce org. Connect it on the Connections page.` };
-  if (kind !== "production-like") return { allowed: true };
-  const host = new URL(instanceUrl!).hostname;
-  return declaredTrial
-    ? { allowed: true, reason: `${host} is a trial org per build.config.yml.` }
-    : { allowed: false, reason: `The sf CLI alias "${alias}" points at a production-looking org (${host}). AI testing only runs in sandboxes. Log out of it and connect a sandbox, or declare a trial org in build.config.yml.` };
+export function sfOrgDecision(alias: string, instanceUrl: string | undefined, _declaredTrial?: boolean): { allowed: boolean; reason?: string } {
+  return classifySfUrl(instanceUrl) === "invalid"
+    ? { allowed: false, reason: `The sf CLI alias "${alias}" does not resolve to a connected Salesforce org. Connect it on the Connections page.` }
+    : { allowed: true };
 }
 
 const SAFE_ARG =/^[A-Za-z0-9_@%+=:,./\\-]+$/;

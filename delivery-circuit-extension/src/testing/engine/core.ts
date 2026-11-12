@@ -34,7 +34,7 @@ export interface EngineConfig {
   sfAlias: (role: "dev" | "qa") => string;
   /**
    * Resolves the role's alias and says whether AI may work in that org. Called before every org login (runs and
-   * generate with explore); a production-looking org is refused unless it is a declared trial org.
+   * generate with explore); refused only when the alias does not resolve to a connected org.
    */
   guardOrg: (role: "dev" | "qa") => Promise<{ allowed: boolean; reason?: string }>;
   log?: (m: string) => void;

@@ -105,9 +105,9 @@ function checkBash(cmd) {
         const def = defaultTargetOrg();
         if (isProdLike(def)) deny(`this command has no --target-org, so it would run against the project default "${def}", which is production. Name a sandbox with --target-org, or set the default to the DEV sandbox (\`sf config set target-org dev\`).`);
       }
-      if (/\borg\s+login\b/.test(seg) && url && (/\/\/login\.salesforce\.com/i.test(url) || (/\.my\.salesforce\.com/i.test(url) && !/sandbox/i.test(url)))) {
-        deny('logging in to a production instance is not allowed. Use a sandbox URL (test.salesforce.com or <domain>--<sbx>.sandbox.my.salesforce.com).');
-      }
+      // Logins are not checked by org type: SDO and demo orgs are production-edition orgs and are used as DEV/QA.
+      // What stays protected is the release org the project names as production (sf-config prod alias, prod/live).
+      void url;
       const isRealDeploy = /\bproject\s+deploy\s+(start|quick|resume)\b|\bdeploy\s+metadata\b|force:source:deploy|force:mdapi:deploy|\bproject\s+delete\s+source\b/.test(seg) && !/--dry-run\b/.test(seg);
       if (isRealDeploy) {
         if (!target) deny('deploys must name an explicit --target-org.');

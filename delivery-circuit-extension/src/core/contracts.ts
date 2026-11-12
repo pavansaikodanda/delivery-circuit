@@ -93,7 +93,7 @@ export interface ConnectionsService {
   /** sf CLI alias for an org role, e.g. "dev" / "qa". */
   sfAlias(role: "dev" | "qa"): string;
   /** Resolves the role's alias with the sf CLI and decides whether AI may work in that org (browser agent, org
-   *  exploration). Production-looking orgs are refused unless build.config.yml declares the org a trial org. */
+   *  exploration). Allowed when the alias resolves to a connected org of any type (SDO and demo orgs are production orgs). */
   sfOrgGuard(role: "dev" | "qa"): Promise<SfOrgGuard>;
   /** GitHub REST call as the signed-in person (path like "/repos/o/r/pulls"). Throws on non-2xx with the API message. */
   githubRequest<T = any>(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<T>;

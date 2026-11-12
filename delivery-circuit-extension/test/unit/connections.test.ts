@@ -77,26 +77,26 @@ describe("Salesforce URL safety", () => {
     expect(classifySfUrl("https://salesforce.com.evil.io")).toBe("invalid");
     expect(classifySfUrl(undefined)).toBe("invalid");
   });
-  it("refuses production-looking URLs unless declared trial", () => {
-    expect(checkLoginUrl("https://acme.my.salesforce.com", false).allowed).toBe(false);
-    expect(checkLoginUrl("https://login.salesforce.com", false).allowed).toBe(false);
-    const t = checkLoginUrl("https://acme.my.salesforce.com/", true);
-    expect(t.allowed).toBe(true);
-    expect(t.warning).toMatch(/production/);
-    expect(t.url).toBe("https://acme.my.salesforce.com");
+  it("allows any Salesforce login URL, production-edition (SDO / demo) orgs included, without warnings", () => {
+    for (const u of ["https://acme.my.salesforce.com", "https://login.salesforce.com", "https://a--b.sandbox.my.salesforce.com",
+      "https://acme-dev-ed.develop.my.salesforce.com", "https://test.salesforce.com"]) {
+      expect(checkLoginUrl(u)).toEqual({ allowed: true, url: u });
+    }
+    expect(checkLoginUrl("https://acme.my.salesforce.com/").url).toBe("https://acme.my.salesforce.com");
   });
-  it("lets AI work only in sandbox-like orgs or declared trial orgs", () => {
-    expect(sfOrgDecision("qa", "https://acme--uat.sandbox.my.salesforce.com", false)).toEqual({ allowed: true });
-    expect(sfOrgDecision("dev", "https://acme-dev-ed.develop.my.salesforce.com", false).allowed).toBe(true);
-    const prod = sfOrgDecision("qa", "https://acme.my.salesforce.com", false);
-    expect(prod.allowed).toBe(false);
-    expect(prod.reason).toMatch(/production-looking org \(acme\.my\.salesforce\.com\)/);
-    expect(sfOrgDecision("qa", "https://acme.my.salesforce.com", true)).toMatchObject({ allowed: true, reason: expect.stringMatching(/trial/) });
-    expect(sfOrgDecision("qa", undefined, true).allowed).toBe(false);
+  it("still refuses non-Salesforce or non-https login URLs", () => {
+    expect(checkLoginUrl("http://acme.my.salesforce.com").allowed).toBe(false);
+    expect(checkLoginUrl("https://evil.example.com").allowed).toBe(false);
   });
-  it("defaults to test.salesforce.com and allows sandboxes silently", () => {
-    expect(checkLoginUrl(undefined, false)).toEqual({ allowed: true, url: "https://test.salesforce.com" });
-    expect(checkLoginUrl("https://a--b.sandbox.my.salesforce.com", false).warning).toBeUndefined();
+  it("lets AI work in any connected org, whatever its type; refuses only an alias that does not resolve", () => {
+    expect(sfOrgDecision("qa", "https://acme--uat.sandbox.my.salesforce.com")).toEqual({ allowed: true });
+    expect(sfOrgDecision("dev", "https://acme.my.salesforce.com")).toEqual({ allowed: true });
+    const none = sfOrgDecision("qa", undefined);
+    expect(none.allowed).toBe(false);
+    expect(none.reason).toMatch(/does not resolve/);
+  });
+  it("defaults to login.salesforce.com", () => {
+    expect(checkLoginUrl(undefined)).toEqual({ allowed: true, url: "https://login.salesforce.com" });
   });
   it("terminal commands only accept safe arguments", () => {
     expect(terminalCommand("sf", ["org", "login", "web", "--alias", "dev", "--instance-url", "https://a.my.salesforce.com"]))

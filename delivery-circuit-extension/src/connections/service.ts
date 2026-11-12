@@ -16,7 +16,7 @@ import {
   browserDir, findCodeAnalyzer, findServerFor, isSubscriptionAuth, MCP_KNOWN, mcpListStateFor, parseClaudeAuth, parseMcpConfigs,
   parseMcpList, parseSfOrgDisplay, parseSfPlugins, requiredBrowsers, type McpListEntry, type McpRowId, type McpServerEntry,
 } from "./parse";
-import { checkLoginUrl, classifySfUrl, safeRelPath, sfOrgDecision, terminalCommand } from "./safety";
+import { checkLoginUrl, safeRelPath, sfOrgDecision, terminalCommand } from "./safety";
 import { isFileSecret, scanWorkflows } from "./secrets";
 import { buildProjectInfo, type ProjectInfo } from "./panelState";
 
@@ -159,7 +159,6 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
     const role = id === "sf-dev" ? "dev" : "qa";
     const alias = sfAlias(role);
     const c = config();
-    const trial = role === "dev" ? c.sf.devIsTrial : c.sf.qaIsTrial;
     const url = role === "dev" ? c.sf.devUrl : c.sf.qaUrl;
     const r = await run("sf", ["org", "display", "--target-org", alias, "--json"], { cwd: root, timeoutMs: 90_000 });
     const p = parseSfOrgDisplay(r.stdout);
@@ -168,23 +167,18 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
       const noOrg = /NoOrgFound|No authorization|not found|NamedOrgNotFound/i.test(p.error ?? "");
       return put(st(id, { state: noCli ? "disconnected" : noOrg ? "disconnected" : "error",
         detail: noCli ? "Salesforce CLI (sf) not found. Install it from developer.salesforce.com/tools/salesforcecli."
-          : noOrg ? `No org with alias "${alias}". Connect logs in to ${url ?? "https://test.salesforce.com"}.` : `${alias}: ${p.error}` }),
+          : noOrg ? `No org with alias "${alias}". Connect logs in to ${url ?? "https://login.salesforce.com"}.` : `${alias}: ${p.error}` }),
         url ? [{ kind: "salesforce", label: "Login page", target: url }] : undefined);
     }
+    // Any connected org is fine: SDO / demo orgs are production-edition orgs, so the org type is not checked.
     const inst = p.org.instanceUrl;
-    const kind = classifySfUrl(inst);
     const host = inst ? new URL(inst).hostname : "";
-    if (kind === "production-like" && !trial) {
-      return put(st(id, { state: "error", account: p.org.username,
-        detail: `Alias "${alias}" points at a production-looking org (${host}). Log out of it and connect a sandbox.` }),
-        inst ? [{ kind: "salesforce", label: "Org", target: inst }] : undefined);
-    }
     return put(st(id, { state: "connected", account: p.org.username, expiresAt: p.org.expirationDate,
-      detail: `alias ${alias} · ${host}${kind === "production-like" ? " · trial org (per build.config.yml)" : ""}` }),
+      detail: `alias ${alias} · ${host}` }),
       inst ? [{ kind: "salesforce", label: "Org", target: inst }, { kind: "salesforce", label: "Setup", target: `${inst.replace(/\/+$/, "")}/lightning/setup/SetupOneHome/home` }] : undefined);
   }
 
-  /** Fresh sf org display for the role's alias, then the same production rule as checkSf. Never cached. */
+  /** Fresh sf org display for the role's alias: allowed when it resolves to a connected org (any org type). Never cached. */
   async function sfOrgGuard(role: "dev" | "qa"): Promise<SfOrgGuard> {
     const alias = sfAlias(role);
     if (!alias || !/^[\w.@+-]+$/.test(alias)) return { alias, allowed: false, reason: `No usable sf CLI alias for the ${role} org (got "${alias}").` };

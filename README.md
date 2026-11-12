@@ -56,7 +56,7 @@ and nine human gates (G1–G9) control it.
 `circuit-guard` is a Claude Code hook that runs before every tool call, on laptops (through the plugin or the repo
 settings) and in CI. It denies:
 
-- any Salesforce command aimed at production, and any login to a production URL;
+- any Salesforce command aimed at the org the project names as production (SDO and demo orgs can be used as DEV/QA);
 - `gh pr merge`, approving reviews, pushes to `main`, and force pushes;
 - persona boundary violations: the Developer editing tests, the Tester editing code, the Architect editing either;
 - AI ticking the Architect Sign-Off or adding the gate labels;

@@ -38,7 +38,7 @@ when a repo has its own copy (installed by the bootstrap), the plugin's copy ste
 
 | Rule | Applies to |
 |---|---|
-| No `sf` command against a production-like alias (`prod`, `production`, `live`, `sf-config.yml` prod alias, `CIRCUIT_PROD_ALIASES`), including commands with no `--target-org` when the project default org is production; no login to a production URL | everyone |
+| No `sf` command against a production-like alias (`prod`, `production`, `live`, `sf-config.yml` prod alias, `CIRCUIT_PROD_ALIASES`), including commands with no `--target-org` when the project default org is production (logins are not checked by org type: SDO and demo orgs are production-edition orgs) | everyone |
 | No `gh pr merge`, approving reviews, merges through the API, pushes to `main`/`master`, `deploy-prod` dispatch | everyone |
 | No force push; no changes to rulesets, branch protection or environments; no `plan-approved` / `testplan-approved` labels | personas |
 | Real deploys: Developer and Architect none (check-only `deploy validate` only); Tester only to `CIRCUIT_DEPLOY_ORGS` (default `qa`) | personas |
