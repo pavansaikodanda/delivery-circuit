@@ -1,47 +1,49 @@
-// One GitHub GraphQL query for every PR the circuit cares about, mapped to PrInfo + ReviewSignal[].
-// Story PRs: branch feature/<KEY>-<slug>, title starting with <KEY> (v3); the feature is the story's Jira epic.
+// GitHub side of the work model (docs/CIRCUIT-V4.md sections 3-4): one GraphQL query for the sprint branches, the
+// environment branches, auto-merge and the PRs (scan check, CodeRabbit and human reviews), plus REST mappers for
+// deploy.yml runs, environments, environment secret names and rulesets. Secret values are never requested.
 // No vscode import: unit-tested with recorded-shape fixtures.
-import type { CheckState, ReviewSignal } from "../core/contracts";
-import type { DeployInfo, DeployRun, PrInfo } from "./model";
-
-const PR_FIELDS = `
-  number url title headRefName isDraft state mergedAt updatedAt
-  author { login }
-  labels(first: 30) { nodes { name } }
-  files(first: 100) { nodes { path } }
-  reviews(last: 30) { nodes { author { login } state body submittedAt url } }
-  comments(last: 20) { nodes { author { login } body createdAt url } }
-  commits(last: 1) { nodes { commit { oid statusCheckRollup { state contexts(first: 100) { nodes {
-    __typename
-    ... on CheckRun { name status conclusion detailsUrl completedAt startedAt title }
-    ... on StatusContext { context state targetUrl description createdAt }
-  } } } } } }`;
-
-export const PRS_QUERY = `query CircuitPrs($owner: String!, $name: String!) {
-  repository(owner: $owner, name: $name) {
-    prodTag: ref(qualifiedName: "refs/tags/prod-deployed") {
-      target { oid ... on Commit { committedDate } ... on Tag { target { oid ... on Commit { committedDate } } } }
-    }
-    open: pullRequests(states: OPEN, first: 50, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { ${PR_FIELDS} } }
-    merged: pullRequests(states: MERGED, first: 30, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { ${PR_FIELDS} } }
-  }
-}`;
+import type { CheckState, DeployRun, PrInfo } from "./model";
 
 export const CODERABBIT_LOGIN = "coderabbitai";
-const BOT_RE = /\[bot\]$|^(github-actions|dependabot|renovate)$/i;
+export const SCAN_CHECK = "scan";
+export const AUTH_SECRET = "SFDX_AUTH_URL";
+
+const PR_FIELDS = `
+  number url title headRefName baseRefName isDraft state createdAt updatedAt mergedAt
+  mergeCommit { oid }
+  author { login }
+  autoMergeRequest { enabledAt }
+  reviews(last: 50) { nodes { author { login } state submittedAt } }
+  commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 50) { nodes {
+    __typename
+    ... on CheckRun { name status conclusion detailsUrl }
+    ... on StatusContext { context state targetUrl }
+  } } } } } }`;
+
+const BRANCH_NAME_RE = /^[A-Za-z0-9._/-]{1,100}$/;
+
+/** The one GraphQL query of a refresh. Environment branches are looked up by name (null = missing). */
+export function workQuery(branches: string[]): string {
+  const fixed = branches.filter((b) => BRANCH_NAME_RE.test(b) && !b.includes("*"));
+  const refs = fixed.map((b, i) => `b${i}: ref(qualifiedName: ${JSON.stringify(`refs/heads/${b}`)}) { name }`).join("\n    ");
+  return `query CircuitWork($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    autoMergeAllowed
+    ${refs}
+    sprints: refs(refPrefix: "refs/heads/sprint/", first: 20, orderBy: { field: TAG_COMMIT_DATE, direction: DESC }) { nodes { name } }
+    open: pullRequests(states: OPEN, first: 50, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { ${PR_FIELDS} } }
+    merged: pullRequests(states: MERGED, first: 40, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { ${PR_FIELDS} } }
+  }
+}`;
+}
 
 /** feature/ABC-12-some-slug -> ABC-12 */
 export function storyKeyFromBranch(branch: string): string | undefined {
   return /^feature\/([A-Z][A-Z0-9_]+-\d+)(?:[-_/]|$)/.exec(branch)?.[1];
 }
-/** v3 PR titles start with the story key: "ABC-12 Escalation queue" (GitHub for Jira links on it too). */
+/** PR titles start with the story key: "ABC-12 Escalation queue". */
 export function storyKeyFromTitle(title: string): string | undefined {
   return /^\s*\[?([A-Z][A-Z0-9_]+-\d+)\]?(?=[\s:]|$)/.exec(title)?.[1];
-}
-/** highest ai-attempt-N label */
-export function aiAttemptFromLabels(labels: string[]): number | undefined {
-  const n = labels.map((l) => /^ai-attempt-(\d+)$/.exec(l)?.[1]).filter(Boolean).map(Number);
-  return n.length ? Math.max(...n) : undefined;
 }
 
 export function checkRunState(status: string | undefined, conclusion: string | null | undefined): CheckState {
@@ -60,185 +62,135 @@ export function statusContextState(state: string | undefined): CheckState {
   }
 }
 
-const firstLine = (s: string, max = 160) => {
-  const l = s.split(/\r?\n/).map((x) => x.replace(/<[^>]+>/g, "").replace(/[*_`]+/g, "").replace(/^[#>\s-]+/, "").trim()).find((x) => x.length > 0) ?? "";
-  return l.length > max ? l.slice(0, max - 1) + "…" : l;
-};
+const isScan = (name: string) => name === SCAN_CHECK || name.endsWith(` / ${SCAN_CHECK}`);
+const isBot = (login: string) => /\[bot\]$/i.test(login) || /^(github-actions|dependabot|renovate|coderabbitai)$/i.test(login);
 
-/** "VERDICT: PASS" / "VERDICT: BLOCK" in the last lines of an AI Reviewer comment. */
-export function reviewerVerdict(body: string): "pass" | "block" | undefined {
-  const tail = body.trim().split(/\r?\n/).slice(-5).join("\n");
-  const m = /^\s*\**VERDICT:\s*(PASS|BLOCK)\b/im.exec(tail);
-  return m ? (m[1].toUpperCase() === "PASS" ? "pass" : "block") : undefined;
-}
-
-interface CheckEntry { name: string; state: CheckState; url?: string; at?: string; title?: string }
-
-function checkEntries(pr: any): CheckEntry[] {
-  const nodes = pr?.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts?.nodes ?? [];
-  const out: CheckEntry[] = [];
-  for (const n of nodes) {
-    if (!n) continue;
-    if (n.__typename === "CheckRun" || (n.name && !n.context)) {
-      out.push({ name: n.name, state: checkRunState(n.status, n.conclusion), url: n.detailsUrl ?? undefined, at: n.completedAt ?? n.startedAt ?? undefined, title: n.title ?? undefined });
-    } else if (n.context) {
-      out.push({ name: n.context, state: statusContextState(n.state), url: n.targetUrl ?? undefined, at: n.createdAt ?? undefined, title: n.description ?? undefined });
-    }
-  }
-  return out;
-}
-
-/** Merge entries by name: a failure anywhere wins, then pending, then success. */
-function checksRecord(entries: CheckEntry[], isStoryPr: boolean): Record<string, CheckState> {
+/** The scan check of the head commit: failure anywhere wins, then pending, then success. */
+function scanOf(node: any): { state: CheckState; url?: string } {
   const rank: Record<CheckState, number> = { failure: 3, pending: 2, success: 1, missing: 0 };
-  const out: Record<string, CheckState> = {};
-  for (const e of entries) if (!out[e.name] || rank[e.state] > rank[out[e.name]]) out[e.name] = e.state;
-  if (isStoryPr) for (const g of ["gate/developer", "gate/tester", "gate/architect"]) out[g] ??= "missing";
-  return out;
+  let best: { state: CheckState; url?: string } = { state: "missing" };
+  for (const n of node?.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts?.nodes ?? []) {
+    if (!n) continue;
+    const name = String(n.name ?? n.context ?? "");
+    if (!isScan(name)) continue;
+    const state = n.context && !n.name ? statusContextState(n.state) : checkRunState(n.status, n.conclusion);
+    if (rank[state] > rank[best.state]) best = { state, url: n.detailsUrl ?? n.targetUrl ?? undefined };
+  }
+  return best;
 }
 
-export function buildSignals(pr: any, labels: string[], entries: CheckEntry[]): ReviewSignal[] {
-  const signals: ReviewSignal[] = [];
-  const updated = pr.updatedAt ?? new Date(0).toISOString();
-  // People and CodeRabbit: their latest review each (COMMENTED reviews only when they say something)
-  const latest = new Map<string, any>();
-  for (const r of pr?.reviews?.nodes ?? []) {
-    const login: string = r?.author?.login ?? "ghost";
-    if (r.state === "PENDING" || r.state === "DISMISSED") continue;
-    if (r.state === "COMMENTED" && !String(r.body ?? "").trim()) continue;
-    const prev = latest.get(login);
-    // an APPROVED / CHANGES_REQUESTED review is not replaced by a later plain comment
-    if (prev && prev.state !== "COMMENTED" && r.state === "COMMENTED") continue;
-    latest.set(login, r);
+/** Latest APPROVED / CHANGES_REQUESTED review per author (a later plain comment does not undo it; DISMISSED does). */
+function latestReviews(node: any): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const r of node?.reviews?.nodes ?? []) {
+    const login = String(r?.author?.login ?? "").replace(/\[bot\]$/i, "");
+    if (!login) continue;
+    if (r.state === "APPROVED" || r.state === "CHANGES_REQUESTED" || r.state === "DISMISSED") out.set(login, r.state);
+    else if (r.state === "COMMENTED" && !out.has(login)) out.set(login, "COMMENTED");
   }
-  for (const [login, r] of latest) {
-    const isRabbit = login.replace(/\[bot\]$/, "") === CODERABBIT_LOGIN;
-    if (!isRabbit && BOT_RE.test(login)) continue;
-    const state: ReviewSignal["state"] = r.state === "APPROVED" ? "approved" : r.state === "CHANGES_REQUESTED" ? "changes-requested" : "commented";
-    const summary = firstLine(String(r.body ?? "")) || (state === "approved" ? "Approved" : state === "changes-requested" ? "Changes requested" : "Commented");
-    signals.push({ source: isRabbit ? "coderabbit" : "human", author: login, state, summary, url: r.url ?? undefined, at: r.submittedAt ?? updated });
-  }
-  // AI Reviewer: the latest comment that ends with a verdict
-  const verdicts = (pr?.comments?.nodes ?? []).filter((c: any) => reviewerVerdict(String(c?.body ?? "")));
-  const v = verdicts[verdicts.length - 1];
-  if (v) {
-    const verdict = reviewerVerdict(String(v.body))!;
-    signals.push({ source: "ai-reviewer", author: v.author?.login ?? "reviewer", state: verdict,
-      summary: firstLine(String(v.body)) || `VERDICT: ${verdict.toUpperCase()}`, url: v.url ?? undefined, at: v.createdAt ?? updated });
-  }
-  // Salesforce Code Analyzer: its own check run when present, else the "static" job that runs the quality gate
-  const ca = entries.find((e) => /code[\s_-]?analyzer/i.test(e.name)) ?? entries.find((e) => e.name === "static");
-  if (ca && ca.state !== "missing") {
-    signals.push({ source: "code-analyzer", author: ca.name, state: ca.state === "success" ? "pass" : ca.state === "failure" ? "block" : "commented",
-      summary: ca.state === "pending" ? "Running" : ca.title || (ca.state === "success" ? "No severity 1-2 violations" : "Quality gate failed (severity 1-2 violations or lint)"),
-      url: ca.url, at: ca.at ?? updated });
-  }
-  // SF AI Tester: the "qa" job's acceptance step; needs-qa means blocked cases
-  const qa = entries.find((e) => e.name === "qa");
-  if (labels.includes("needs-qa")) {
-    signals.push({ source: "sf-ai-tester", author: "qa", state: "block", summary: "Blocked test cases: Tester action needed (needs-qa)", url: qa?.url, at: qa?.at ?? updated });
-  } else if (qa && qa.state !== "missing") {
-    signals.push({ source: "sf-ai-tester", author: "qa", state: qa.state === "success" ? "pass" : qa.state === "failure" ? "block" : "commented",
-      summary: qa.state === "pending" ? "QA deploy and acceptance tests running" : qa.state === "success" ? "QA deploy, Apex and acceptance tests passed" : "QA deploy or acceptance tests failed",
-      url: qa.url, at: qa.at ?? updated });
-  }
-  return signals.sort((a, b) => a.at.localeCompare(b.at));
+  return out;
 }
 
 export function mapPr(node: any): PrInfo {
-  const labels: string[] = (node?.labels?.nodes ?? []).map((l: any) => l?.name).filter(Boolean);
-  const branch: string = node.headRefName ?? "";
-  const storyKey = storyKeyFromBranch(branch) ?? (/^feature\//.test(branch) ? storyKeyFromTitle(node.title ?? "") : undefined);
-  const entries = checkEntries(node);
+  const head: string = node?.headRefName ?? "";
+  const reviews = latestReviews(node);
+  const rabbit = reviews.get(CODERABBIT_LOGIN);
+  const scan = scanOf(node);
+  const people = [...reviews].filter(([login]) => !isBot(login));
   const pr: PrInfo = {
     number: node.number,
     url: node.url,
     title: node.title ?? "",
-    branch,
-    draft: !!node.isDraft,
     author: node.author?.login ?? "ghost",
-    labels,
-    checks: checksRecord(entries, !!storyKey),
-    reviews: buildSignals(node, labels, entries),
-    updatedAt: node.updatedAt ?? "",
+    head,
+    base: node.baseRefName ?? "",
+    draft: !!node.isDraft,
     state: node.state === "MERGED" ? "merged" : node.state === "CLOSED" ? "closed" : "open",
-    headSha: node.commits?.nodes?.[0]?.commit?.oid ?? "",
+    createdAt: node.createdAt ?? "",
+    updatedAt: node.updatedAt ?? "",
+    scan: scan.state,
+    coderabbit: rabbit === "APPROVED" ? "approved" : rabbit === "CHANGES_REQUESTED" ? "changes" : "pending",
+    approvedBy: people.filter(([, s]) => s === "APPROVED").map(([l]) => l).sort(),
+    changesBy: people.filter(([, s]) => s === "CHANGES_REQUESTED").map(([l]) => l).sort(),
+    autoMerge: !!node.autoMergeRequest,
   };
+  if (scan.url) pr.scanUrl = scan.url;
   if (node.mergedAt) pr.mergedAt = node.mergedAt;
-  if (storyKey) pr.storyKey = storyKey;
-  const files: string[] = (node?.files?.nodes ?? []).map((f: any) => f?.path).filter((p: unknown): p is string => typeof p === "string");
-  if (node?.files) pr.files = files;
-  const attempt = aiAttemptFromLabels(labels);
-  if (attempt !== undefined) pr.aiAttempt = attempt;
+  if (node.mergeCommit?.oid) pr.mergeSha = node.mergeCommit.oid;
+  const key = storyKeyFromBranch(head) ?? (/^feature\//.test(head) ? storyKeyFromTitle(pr.title) : undefined);
+  if (key) pr.storyKey = key;
   return pr;
 }
 
+export interface WorkGithub {
+  prs: PrInfo[];
+  /** sprint/* branches, newest commit first */
+  sprints: string[];
+  /** environment branch -> exists (fixed names only) */
+  branches: Record<string, boolean>;
+  autoMerge?: boolean;
+}
+
 /** Map the GraphQL response. Accepts the raw `data` object or a wrapper with `data`. */
-export function mapPrsResponse(resp: any): { prs: PrInfo[]; prodDeployedAt?: string; prodDeployedSha?: string } {
+export function mapWorkResponse(resp: any, branches: string[]): WorkGithub {
   const repo = (resp?.data ?? resp)?.repository;
-  if (!repo) return { prs: [] };
+  if (!repo) return { prs: [], sprints: [], branches: {} };
   const seen = new Set<number>();
   const prs: PrInfo[] = [];
   for (const n of [...(repo.open?.nodes ?? []), ...(repo.merged?.nodes ?? [])]) {
-    if (!n || seen.has(n.number)) continue;
+    if (!n?.number || seen.has(n.number)) continue;
     seen.add(n.number);
     prs.push(mapPr(n));
   }
-  const t = repo.prodTag?.target;
-  const commit = t?.committedDate ? t : t?.target;
-  return { prs, prodDeployedAt: commit?.committedDate ?? undefined, prodDeployedSha: commit?.oid ?? undefined };
+  const fixed = branches.filter((b) => BRANCH_NAME_RE.test(b) && !b.includes("*"));
+  const out: WorkGithub = {
+    prs,
+    sprints: (repo.sprints?.nodes ?? []).map((n: any) => (n?.name ? `sprint/${n.name}` : "")).filter(Boolean),
+    branches: Object.fromEntries(fixed.map((b, i) => [b, !!repo[`b${i}`]])),
+  };
+  if (typeof repo.autoMergeAllowed === "boolean") out.autoMerge = repo.autoMergeAllowed;
+  return out;
 }
 
-/** REST /actions/workflows/deploy-prod.yml/runs -> DeployRun[] */
+/** REST /actions/workflows/deploy.yml/runs -> DeployRun[] */
 export function mapDeployRuns(resp: any): DeployRun[] {
-  return (resp?.workflow_runs ?? []).map((r: any) => ({
-    id: r.id, status: r.status, conclusion: r.conclusion ?? null, url: r.html_url, createdAt: r.created_at, headSha: r.head_sha,
+  return (resp?.workflow_runs ?? []).filter((r: any) => r && typeof r.id === "number").map((r: any) => ({
+    id: r.id, branch: String(r.head_branch ?? ""), status: String(r.status ?? ""), conclusion: r.conclusion ?? null,
+    url: String(r.html_url ?? ""), createdAt: String(r.created_at ?? ""),
   }));
 }
 
-export function deployInfo(runs: DeployRun[], prodDeployedAt?: string, prodDeployedSha?: string): DeployInfo {
-  const d: DeployInfo = { runs };
-  if (prodDeployedAt) d.prodDeployedAt = prodDeployedAt;
-  if (prodDeployedSha) d.prodDeployedSha = prodDeployedSha;
-  return d;
+/** REST /environments -> names */
+export function environmentNames(resp: any): string[] {
+  return (resp?.environments ?? []).map((e: any) => (typeof e?.name === "string" ? e.name : "")).filter(Boolean);
 }
 
-// ---- story PRs older than the merged window ----
-// PRS_QUERY only sees the 30 most recently updated merged PRs. A story whose PR merged before that window would read
-// as "no PR" and pull a shipped feature's gates back to waiting, so those keys are looked up by branch.
-
-const STORY_KEY_RE = /^[A-Z][A-Z0-9_]+-\d+$/;
-export const STORY_SEARCH_BATCH = 20;
-
-/** Story keys that the features reference but that have no open or merged PR in `prs`. */
-export function missingStoryKeys(keys: Iterable<string>, prs: PrInfo[]): string[] {
-  const covered = new Set(prs.filter((p) => p.storyKey && p.state !== "closed").map((p) => p.storyKey!));
-  return [...new Set(keys)].filter((k) => STORY_KEY_RE.test(k) && !covered.has(k)).sort();
+/** REST /environments/{env}/secrets -> whether a secret named SFDX_AUTH_URL exists (names only). */
+export function hasAuthSecret(resp: any): boolean {
+  return (resp?.secrets ?? []).some((s: any) => s?.name === AUTH_SECRET);
 }
 
-/** One GraphQL query with an aliased search per key: merged PRs whose head branch starts with feature/<KEY>. */
-export function storyPrsQuery(owner: string, repo: string, keys: string[]): { query: string; variables: Record<string, string> } {
-  const safe = keys.filter((k) => STORY_KEY_RE.test(k)).slice(0, STORY_SEARCH_BATCH);
-  if (!/^[\w.-]+$/.test(owner) || !/^[\w.-]+$/.test(repo)) throw new Error(`Unexpected repository name ${owner}/${repo}`);
-  const variables: Record<string, string> = {};
-  const fields = safe.map((k, i) => {
-    variables[`q${i}`] = `repo:${owner}/${repo} is:pr is:merged head:feature/${k}`;
-    return `s${i}: search(query: $q${i}, type: ISSUE, first: 10) { nodes { ... on PullRequest { ${PR_FIELDS} } } }`;
-  });
-  const params = safe.map((_k, i) => `$q${i}: String!`).join(", ");
-  return { query: `query CircuitStoryPrs(${params}) {\n${fields.join("\n")}\n}`, variables };
+/** Ruleset ref pattern (refs/heads/sprint/*, ~DEFAULT_BRANCH, ~ALL) against a branch. `*` does not match "/", `**` does. */
+export function refMatches(pattern: string, branch: string, defaultBranch?: string): boolean {
+  if (pattern === "~ALL") return true;
+  if (pattern === "~DEFAULT_BRANCH") return !!defaultBranch && branch === defaultBranch;
+  const p = pattern.replace(/^refs\/heads\//, "");
+  const re = new RegExp("^" + p.split(/(\*\*|\*)/).map((x) => (x === "**" ? ".*" : x === "*" ? "[^/]*" : x.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))).join("") + "$");
+  return re.test(branch);
 }
 
-/** Maps a storyPrsQuery response: merged PRs whose branch is exactly that story (head: is a prefix match). */
-export function mapStoryPrsResponse(resp: any, keys: string[]): PrInfo[] {
-  const data = resp?.data ?? resp;
-  const out: PrInfo[] = [];
-  keys.slice(0, STORY_SEARCH_BATCH).forEach((k, i) => {
-    for (const n of data?.[`s${i}`]?.nodes ?? []) {
-      if (!n?.number) continue;
-      const pr = mapPr(n);
-      if (pr.state === "merged" && pr.storyKey === k && !out.some((o) => o.number === pr.number)) out.push(pr);
-    }
-  });
-  return out;
+/** REST /rulesets/{id} details -> branch -> covered by an active branch ruleset. */
+export function rulesetCoverage(rulesets: any[], branches: string[], defaultBranch?: string): Record<string, boolean> {
+  const active = rulesets.filter((r) => r && r.enforcement === "active" && (r.target ?? "branch") === "branch");
+  return Object.fromEntries(branches.map((b) => [b, active.some((r) => {
+    const inc: string[] = r.conditions?.ref_name?.include ?? [];
+    const exc: string[] = r.conditions?.ref_name?.exclude ?? [];
+    return inc.some((p) => refMatches(p, b, defaultBranch)) && !exc.some((p) => refMatches(p, b, defaultBranch));
+  })]));
 }
+
+/** A concrete branch name for a pattern ("sprint/*" -> the current sprint branch, or a sample). */
+export function sampleBranch(pattern: string, sprint?: string): string {
+  return pattern.includes("*") ? (sprint ?? pattern.replace(/\*+/g, "sample")) : pattern;
+}
+

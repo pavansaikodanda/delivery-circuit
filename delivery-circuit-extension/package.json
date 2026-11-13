@@ -1,7 +1,7 @@
 {
   "name": "delivery-circuit",
   "displayName": "Delivery Circuit",
-  "description": "AI + Human Salesforce delivery: persona views for Architect, Developer and Tester, sources, Jira and Confluence status, AI testing and human gates in one place. Every connection is a login; no stored tokens.",
+  "description": "Delivery Circuit v4 for Salesforce teams: what to do next for your role (Architect, Developer, QA, Lead), your connections and what is missing, in one sidebar. Logins only; no stored tokens.",
   "version": "0.1.0",
   "publisher": "conscendo",
   "license": "UNLICENSED",
@@ -10,7 +10,6 @@
     "vscode": "^1.90.0"
   },
   "categories": [
-    "Testing",
     "Other"
   ],
   "main": "./dist/extension.js",
@@ -20,11 +19,12 @@
   "scripts": {
     "build": "node build.mjs",
     "watch": "node build.mjs --watch",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p .",
     "test": "vitest run",
     "test:integration": "node build.mjs && node test/integration/run.mjs",
     "preview": "node preview/serve.mjs",
-    "package": "node build.mjs && npx @vscode/vsce package --skip-license --out delivery-circuit.vsix",
+    "screens": "node preview/screens.mjs",
+    "package": "node build.mjs && npx @vscode/vsce package --no-dependencies --skip-license --out delivery-circuit.vsix",
     "test:vsix": "node test/integration/vsix.mjs"
   },
   "contributes": {
@@ -54,43 +54,18 @@
         "icon": "$(refresh)"
       },
       {
-        "command": "deliveryCircuit.openPersona",
-        "title": "Open Persona View",
+        "command": "deliveryCircuit.switchRole",
+        "title": "Switch Role",
         "category": "Delivery Circuit"
       },
       {
-        "command": "deliveryCircuit.openConnections",
-        "title": "Connections",
+        "command": "deliveryCircuit.newDesign",
+        "title": "New Design from Transcript",
         "category": "Delivery Circuit"
       },
       {
-        "command": "deliveryCircuit.openSources",
-        "title": "Sources",
-        "category": "Delivery Circuit"
-      },
-      {
-        "command": "deliveryCircuit.openTesting",
-        "title": "Testing",
-        "category": "Delivery Circuit"
-      },
-      {
-        "command": "deliveryCircuit.openSetup",
-        "title": "Project Setup",
-        "category": "Delivery Circuit"
-      },
-      {
-        "command": "deliveryCircuit.startSession",
-        "title": "Start AI Session",
-        "category": "Delivery Circuit"
-      },
-      {
-        "command": "deliveryCircuit.switchPersona",
-        "title": "Switch Persona",
-        "category": "Delivery Circuit"
-      },
-      {
-        "command": "deliveryCircuit.views.openFeature",
-        "title": "Open Feature",
+        "command": "deliveryCircuit.openStory",
+        "title": "Open Story",
         "category": "Delivery Circuit"
       }
     ],
@@ -102,25 +77,19 @@
           "group": "navigation"
         },
         {
-          "command": "deliveryCircuit.switchPersona",
+          "command": "deliveryCircuit.switchRole",
           "when": "view == deliveryCircuit.home",
           "group": "2_circuit@1"
         },
         {
-          "command": "deliveryCircuit.openConnections",
+          "command": "deliveryCircuit.newDesign",
           "when": "view == deliveryCircuit.home",
           "group": "2_circuit@2"
         },
         {
-          "command": "deliveryCircuit.openSources",
+          "command": "deliveryCircuit.openStory",
           "when": "view == deliveryCircuit.home",
           "group": "2_circuit@3"
-        }
-      ],
-      "commandPalette": [
-        {
-          "command": "deliveryCircuit.views.openFeature",
-          "when": "false"
         }
       ]
     },
@@ -138,9 +107,10 @@
           "default": {
             "architect": "architects",
             "developer": "developers",
-            "tester": "testers"
+            "tester": "testers",
+            "lead": "leads"
           },
-          "description": "GitHub team slug for each persona. Your persona comes from your team membership.",
+          "description": "GitHub team slug for each role (tester = QA). Your roles come from your team membership.",
           "properties": {
             "architect": {
               "type": "string",
@@ -153,26 +123,19 @@
             "tester": {
               "type": "string",
               "pattern": "^[A-Za-z0-9._-]+$"
+            },
+            "lead": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._-]+$"
             }
           },
           "additionalProperties": false
-        },
-        "deliveryCircuit.personaOverride": {
-          "type": "string",
-          "enum": [
-            "",
-            "architect",
-            "developer",
-            "tester"
-          ],
-          "default": "",
-          "description": "Only for repos owned by a personal account (no GitHub teams). Ignored when the repo belongs to an organisation."
         },
         "deliveryCircuit.acliPath": {
           "type": "string",
           "default": "acli",
           "scope": "machine",
-          "description": "Path of the Atlassian CLI (acli) the extension uses to read Jira with your own `acli jira auth login --web`. Read from your user settings only; a repository's workspace settings cannot change it."
+          "description": "Path of the Atlassian CLI (acli), if you use it. Without acli, Jira is read through your Atlassian MCP login. Read from your user settings only."
         },
         "deliveryCircuit.designReader": {
           "type": "string",
@@ -182,62 +145,21 @@
           ],
           "default": "claude",
           "enumDescriptions": [
-            "Read Confluence design pages and Fireflies meetings with a read-only `claude -p` call through your Atlassian and Fireflies MCP logins.",
-            "Do not read Confluence or Fireflies; G1 shows as unknown."
+            "Read Confluence design pages, Fireflies meetings and (without acli) Jira with a read-only `claude -p` call through your own MCP logins.",
+            "Do not start read-only Claude calls."
           ],
-          "description": "How design pages (G1, decisions, org snapshot) and Fireflies meetings are read."
+          "description": "How design pages, Fireflies meetings and (without acli) Jira are read."
         },
         "deliveryCircuit.designReaderModel": {
           "type": "string",
           "default": "haiku",
-          "description": "Claude model for the read-only design-page and Fireflies reader."
-        },
-        "deliveryCircuit.sessionMode": {
-          "type": "string",
-          "enum": [
-            "terminal",
-            "panel"
-          ],
-          "default": "terminal",
-          "description": "Where AI sessions run: an integrated terminal running claude, or a panel inside the extension (Agent SDK)."
-        },
-        "deliveryCircuit.testing.headless": {
-          "type": "boolean",
-          "default": true,
-          "description": "Run the test browser headless."
-        },
-        "deliveryCircuit.testing.models": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": [
-            "claude-haiku-4-5",
-            "claude-sonnet-5-5"
-          ],
-          "description": "Models tried in order for each test case: the first runs every case; later ones re-run a case that did not pass."
-        },
-        "deliveryCircuit.testing.workers": {
-          "type": "number",
-          "default": 2,
-          "minimum": 1,
-          "maximum": 4,
-          "description": "Parallel test workers."
-        },
-        "deliveryCircuit.testing.maxTurns": {
-          "type": "number",
-          "default": 80,
-          "description": "Maximum agent turns per test case."
+          "description": "Claude model for the read-only reader."
         }
       }
     }
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.322",
     "@modelcontextprotocol/sdk": "^1.32.2",
-    "@playwright/mcp": "^0.0.82",
-    "exceljs": "^4.4.0",
-    "playwright": "^1.63.0",
     "yaml": "^2.9.1",
     "zod": "^4.6.5"
   },
@@ -247,6 +169,7 @@
     "@vscode/codicons": "^0.0.46-24",
     "@vscode/test-electron": "^3.1.0",
     "esbuild": "^0.28.2",
+    "playwright": "^1.63.0",
     "simple-icons": "16.37.0",
     "typescript": "^5.9.3",
     "vitest": "^5.1.0"

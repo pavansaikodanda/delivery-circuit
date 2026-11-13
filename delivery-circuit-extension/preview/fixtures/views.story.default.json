@@ -1,0 +1,70 @@
+{
+  "story": {
+    "key": "ABC-12",
+    "title": "Agent escalates a Case",
+    "status": "in-pr",
+    "steps": [
+      {
+        "id": "design",
+        "label": "Design",
+        "state": "done"
+      },
+      {
+        "id": "stories",
+        "label": "Stories",
+        "state": "done"
+      },
+      {
+        "id": "build",
+        "label": "Build",
+        "state": "active"
+      },
+      {
+        "id": "qa",
+        "label": "QA",
+        "state": "todo"
+      },
+      {
+        "id": "release",
+        "label": "Release",
+        "state": "todo"
+      }
+    ],
+    "links": [
+      {
+        "kind": "jira",
+        "label": "Jira",
+        "target": "https://acme.atlassian.net/browse/ABC-12"
+      },
+      {
+        "kind": "confluence",
+        "label": "Design page",
+        "target": "https://acme.atlassian.net/wiki/spaces/SD/pages/123456/Case+escalation"
+      },
+      {
+        "kind": "lucid",
+        "label": "Diagram",
+        "target": "https://lucid.app/lucidchart/0000-demo/view"
+      },
+      {
+        "kind": "github",
+        "label": "PR #41",
+        "target": "https://github.com/acme-org/acme-salesforce/pull/41"
+      }
+    ],
+    "statusLabel": "In PR",
+    "pr": {
+      "number": 41,
+      "url": "https://github.com/acme-org/acme-salesforce/pull/41",
+      "state": "open",
+      "scan": "failure",
+      "coderabbit": "changes",
+      "approvedBy": [],
+      "scanUrl": "https://github.com/acme-org/acme-salesforce/actions/runs/4100",
+      "waitingSince": "2026-11-10T09:00:00Z",
+      "scanText": "failed",
+      "coderabbitText": "changes requested",
+      "approvalText": "waiting 3 d"
+    }
+  }
+}

@@ -2,5 +2,5 @@
   "type": "result",
   "subtype": "success",
   "is_error": false,
-  "result": "```json\n{\"pages\":[{\"id\":\"123456\",\"title\":\"Case escalation design\",\"url\":\"https://acme.atlassian.net/wiki/spaces/SD/pages/123456/Case+escalation\",\"status\":\"Approved\",\"version\":3},{\"id\":\"333333\",\"title\":\"Design: Returns portal\",\"url\":\"https://acme.atlassian.net/wiki/spaces/SD/pages/333333/Returns+portal\",\"status\":\"Rough draft\",\"version\":1},{\"id\":\"../etc\",\"title\":\"bad id\"}]}\n```"
+  "result": "```json\n{\"pages\": [{\"id\": \"123456\", \"title\": \"Design: Case escalation\", \"url\": \"https://acme.atlassian.net/wiki/spaces/SD/pages/123456/Case+escalation\", \"status\": \"Approved\", \"openQuestions\": 0, \"slug\": \"feature-case-escalation\", \"diagramUrl\": \"https://lucid.app/lucidchart/0000-demo/view\"}, {\"id\": \"222222\", \"title\": \"Design: Order sync\", \"url\": \"https://acme.atlassian.net/wiki/spaces/SD/pages/222222/Order+sync\", \"status\": \"In progress\", \"openQuestions\": 2, \"slug\": \"order-sync\"}, {\"id\": \"333333\", \"title\": \"Design: Returns portal\", \"url\": \"https://acme.atlassian.net/wiki/spaces/SD/pages/333333/Returns+portal\", \"status\": \"Approved\", \"openQuestions\": 0, \"slug\": \"returns-portal\", \"diagramUrl\": \"https://evil.example/x\"}, {\"id\": \"../etc\", \"title\": \"bad id\"}]}\n```"
 }

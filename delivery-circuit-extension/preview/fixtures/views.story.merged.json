@@ -1,0 +1,71 @@
+{
+  "story": {
+    "key": "ABC-11",
+    "title": "Foundation",
+    "status": "qa",
+    "steps": [
+      {
+        "id": "design",
+        "label": "Design",
+        "state": "done"
+      },
+      {
+        "id": "stories",
+        "label": "Stories",
+        "state": "done"
+      },
+      {
+        "id": "build",
+        "label": "Build",
+        "state": "done"
+      },
+      {
+        "id": "qa",
+        "label": "QA",
+        "state": "active"
+      },
+      {
+        "id": "release",
+        "label": "Release",
+        "state": "todo"
+      }
+    ],
+    "links": [
+      {
+        "kind": "jira",
+        "label": "Jira",
+        "target": "https://acme.atlassian.net/browse/ABC-11"
+      },
+      {
+        "kind": "confluence",
+        "label": "Design page",
+        "target": "https://acme.atlassian.net/wiki/spaces/SD/pages/123456/Case+escalation"
+      },
+      {
+        "kind": "lucid",
+        "label": "Diagram",
+        "target": "https://lucid.app/lucidchart/0000-demo/view"
+      },
+      {
+        "kind": "github",
+        "label": "PR #42",
+        "target": "https://github.com/acme-org/acme-salesforce/pull/42"
+      }
+    ],
+    "statusLabel": "QA",
+    "pr": {
+      "number": 42,
+      "url": "https://github.com/acme-org/acme-salesforce/pull/42",
+      "state": "merged",
+      "scan": "success",
+      "coderabbit": "approved",
+      "approvedBy": [
+        "dev2"
+      ],
+      "scanUrl": "https://github.com/acme-org/acme-salesforce/actions/runs/4200",
+      "scanText": "passed",
+      "coderabbitText": "approved",
+      "approvalText": "approved by dev2"
+    }
+  }
+}

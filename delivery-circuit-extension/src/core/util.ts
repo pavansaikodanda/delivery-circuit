@@ -1,14 +1,10 @@
 // Small shared helpers. No module-specific logic here.
 import { execFile } from "child_process";
-import * as path from "path";
-import * as vscode from "vscode";
-import type { DeepLink } from "./contracts";
+import type * as vscode from "vscode";
 
 export interface ModuleBase {
   ctx: vscode.ExtensionContext;
   root: string;
-  /** bundled sf-delivery-circuit plugin */
-  pluginRoot: string;
   log: (msg: string) => void;
 }
 
@@ -16,7 +12,7 @@ export interface ExecResult { code: number; stdout: string; stderr: string }
 
 /** Run a program. Never pass secrets in args; use env.
  *  On Windows the default is shell:true so .cmd shims (sf, gh, claude, npx) resolve; cmd.exe then joins the arguments
- *  with spaces, so callers must quote arguments themselves (testing's shellArg, setup's shellArg) or send user text
+ *  with spaces, so callers must quote arguments themselves or send user text
  *  through `input`. Pass `shell: false` to run a real executable (git, node, an .exe) with arguments passed verbatim. */
 export function run(cmd: string, args: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number; input?: string; shell?: boolean } = {}): Promise<ExecResult> {
   return new Promise((resolve) => {
@@ -48,32 +44,9 @@ export async function gitRemote(root: string): Promise<{ owner: string; repo: st
   return m ? { owner: m[1], repo: m[2] } : undefined;
 }
 
-export async function gitBranch(root: string): Promise<string> {
-  const r = await run("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: root, timeoutMs: 10_000, shell: false });
-  return r.stdout.trim();
-}
-
-/** Open any deep link: external URL in the browser, file in the editor, report in the browser. */
-export async function openLink(root: string, link: DeepLink): Promise<void> {
-  if (link.kind === "file") {
-    const doc = await vscode.workspace.openTextDocument(path.join(root, link.target));
-    await vscode.window.showTextDocument(doc, { preview: false });
-    return;
-  }
-  if (link.kind === "report") {
-    await vscode.env.openExternal(vscode.Uri.file(path.join(root, link.target)));
-    return;
-  }
-  if (!/^https:\/\//.test(link.target)) throw new Error(`Refusing to open non-https link: ${link.target}`);
-  await vscode.env.openExternal(vscode.Uri.parse(link.target));
-}
-
 export function nonce(): string {
   let s = "";
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   for (let i = 0; i < 32; i++) s += chars.charAt(Math.floor(Math.random() * chars.length));
   return s;
 }
-
-export const esc = (s: unknown) =>
-  String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);

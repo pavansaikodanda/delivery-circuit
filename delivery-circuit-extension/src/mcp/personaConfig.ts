@@ -1,9 +1,9 @@
-// Builds .claude/personas/<persona>.local.mcp.json: the tracked vendor servers of .claude/personas/<persona>.mcp.json
-// plus the "circuit" HTTP server with this VS Code session's bearer token. The file holds a token, so it is
-// gitignored and written with owner-only permissions. No vscode import.
+// Builds .claude/personas/<agent>.local.mcp.json for a Claude session: the tracked vendor servers of
+// .claude/personas/<agent>.mcp.json plus, for the Architect, the "circuit" HTTP server (transcript_get) with this VS Code
+// session's bearer token. The file can hold a token, so it is gitignored and written owner-only. No vscode import.
 import { promises as fs } from "fs";
 import * as path from "path";
-import type { McpEndpoint, Persona } from "../core/contracts";
+import type { McpEndpoint } from "../core/contracts";
 
 export const LOCAL_CONFIG_GLOB = ".claude/personas/*.local.mcp.json";
 
@@ -16,15 +16,15 @@ export const KNOWN_REMOTE_URLS: Record<string, string> = {
   slack: "https://mcp.slack.com/mcp",
 };
 
-export const personaFile = (root: string, p: Persona) => path.join(root, ".claude", "personas", `${p}.mcp.json`);
-export const localPersonaFile = (root: string, p: Persona) => path.join(root, ".claude", "personas", `${p}.local.mcp.json`);
+export const personaFile = (root: string, agent: string) => path.join(root, ".claude", "personas", `${agent}.mcp.json`);
+export const localPersonaFile = (root: string, agent: string) => path.join(root, ".claude", "personas", `${agent}.local.mcp.json`);
 
 const isHttps = (u: unknown) => { try { return typeof u === "string" && new URL(u).protocol === "https:"; } catch { return false; } };
 
 export interface BuildResult { config: { mcpServers: Record<string, any> }; fixed: string[]; dropped: string[] }
 
-/** Merge vendor servers with the circuit entry. Remote entries with placeholder URLs are fixed from KNOWN_REMOTE_URLS or dropped. */
-export function buildPersonaConfig(vendor: unknown, ep: McpEndpoint): BuildResult {
+/** Merge vendor servers with the circuit entry (when an endpoint is given). Remote entries with placeholder URLs are fixed from KNOWN_REMOTE_URLS or dropped. */
+export function buildPersonaConfig(vendor: unknown, ep?: McpEndpoint): BuildResult {
   const src = (vendor as any)?.mcpServers && typeof (vendor as any).mcpServers === "object" ? (vendor as any).mcpServers : {};
   const out: Record<string, any> = {};
   const fixed: string[] = [], dropped: string[] = [];
@@ -47,7 +47,7 @@ export function buildPersonaConfig(vendor: unknown, ep: McpEndpoint): BuildResul
     }
     out[name] = entry;
   }
-  out.circuit = { type: "http", url: ep.url, headers: { Authorization: `Bearer ${ep.token}` } };
+  if (ep) out.circuit = { type: "http", url: ep.url, headers: { Authorization: `Bearer ${ep.token}` } };
   return { config: { mcpServers: out }, fixed, dropped };
 }
 
@@ -64,12 +64,12 @@ export async function ensureGitignored(root: string, pattern = LOCAL_CONFIG_GLOB
   return true;
 }
 
-export async function writePersonaConfigFile(root: string, persona: Persona, ep: McpEndpoint): Promise<{ file: string; fixed: string[]; dropped: string[] }> {
+export async function writePersonaConfigFile(root: string, agent: string, ep?: McpEndpoint): Promise<{ file: string; fixed: string[]; dropped: string[] }> {
   let vendor: unknown = {};
-  try { vendor = JSON.parse(await fs.readFile(personaFile(root, persona), "utf8")); } catch { vendor = {}; }
+  try { vendor = JSON.parse(await fs.readFile(personaFile(root, agent), "utf8")); } catch { vendor = {}; }
   const { config, fixed, dropped } = buildPersonaConfig(vendor, ep);
   await ensureGitignored(root);
-  const file = localPersonaFile(root, persona);
+  const file = localPersonaFile(root, agent);
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, JSON.stringify(config, null, 2) + "\n", { encoding: "utf8", mode: 0o600 });
   await fs.chmod(file, 0o600).catch(() => {});

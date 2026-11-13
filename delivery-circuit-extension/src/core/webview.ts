@@ -12,7 +12,7 @@ import { nonce } from "./util";
 export interface PageSpec {
   /** module folder under media/, e.g. "views" */
   module: string;
-  /** script name without .js, e.g. "persona" */
+  /** script name without .js, e.g. "home" */
   page: string;
   title: string;
 }

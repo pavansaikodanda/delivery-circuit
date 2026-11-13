@@ -1,66 +1,38 @@
-// Validation of messages coming from the webviews. A webview is untrusted input: only well-formed links and
-// actions pass, and file links must stay inside the workspace. No "vscode" import (unit-tested).
-import { PERSONAS, type ActionRef, type DeepLink, type Persona } from "../core/contracts";
+// Validation of webview messages. A webview is untrusted input: everything is checked before anything runs, and a
+// row's action is looked up by id on the extension side (the webview never sends a command or a URL to run).
+import { isRole, type Role } from "../core/contracts";
+import { isConnectionId } from "../connections/catalog";
+import type { ConnectionId } from "../core/contracts";
 
-const LINK_KINDS: DeepLink["kind"][] = ["github", "jira", "salesforce", "slack", "confluence", "lucid", "fireflies", "coderabbit", "file", "report", "url"];
-const ACTION_KINDS: ActionRef["kind"][] = ["ai", "gate", "nav"];
+const ROW_ID = /^[a-z]+(?::[A-Za-z0-9_./-]{1,120})?$/;
+const KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
 
-const isObj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
+export type HomeMessage =
+  | { type: "ready" | "refresh" | "connectGithub" }
+  | { type: "switchRole"; role: Role }
+  | { type: "run"; id: string }
+  | { type: "connect" | "check"; id: ConnectionId }
+  | { type: "openStory"; key: string };
 
-/** A workspace-relative path with no traversal, drive letter or leading slash. */
-export function safeRelativePath(p: string): boolean {
-  if (!p || p.length > 500) return false;
-  if (/^[a-zA-Z]:/.test(p) || p.startsWith("/") || p.startsWith("\\")) return false;
-  if (/[\0<>|"?*]/.test(p)) return false;
-  return !p.split(/[\\/]+/).some((seg) => seg === "..");
-}
+export type StoryMessage = { type: "ready" | "refresh" } | { type: "openLink"; target: string };
 
-export function sanitizeLink(x: unknown): DeepLink | undefined {
-  if (!isObj(x)) return undefined;
-  const { kind, label, target } = x;
-  if (typeof kind !== "string" || !LINK_KINDS.includes(kind as DeepLink["kind"])) return undefined;
-  if (typeof target !== "string") return undefined;
-  if (kind === "file" || kind === "report") {
-    if (!safeRelativePath(target)) return undefined;
-  } else if (!/^https:\/\/[^\s]+$/.test(target)) {
-    return undefined;
+export function parseHomeMessage(m: unknown): HomeMessage | undefined {
+  const x = m as any;
+  switch (x?.type) {
+    case "ready": case "refresh": case "connectGithub": return { type: x.type };
+    case "switchRole": return isRole(x.role) ? { type: "switchRole", role: x.role } : undefined;
+    case "run": return typeof x.id === "string" && ROW_ID.test(x.id) ? { type: "run", id: x.id } : undefined;
+    case "connect": case "check": return isConnectionId(x.id) ? { type: x.type, id: x.id } : undefined;
+    case "openStory": return typeof x.key === "string" && KEY.test(x.key) ? { type: "openStory", key: x.key } : undefined;
+    default: return undefined;
   }
-  return { kind: kind as DeepLink["kind"], label: typeof label === "string" ? label.slice(0, 200) : "", target };
 }
 
-export function sanitizeAction(x: unknown): ActionRef | undefined {
-  if (!isObj(x)) return undefined;
-  const { id, label, persona, kind, args } = x;
-  if (typeof id !== "string" || !id || id.length > 200) return undefined;
-  if (typeof persona !== "string" || !PERSONAS.includes(persona as Persona)) return undefined;
-  if (typeof kind !== "string" || !ACTION_KINDS.includes(kind as ActionRef["kind"])) return undefined;
-  const out: ActionRef = { id, label: typeof label === "string" ? label.slice(0, 200) : id, persona: persona as Persona, kind: kind as ActionRef["kind"] };
-  if (args !== undefined) {
-    if (!isObj(args)) return undefined;
-    const clean: Record<string, string | number> = {};
-    for (const [k, v] of Object.entries(args)) {
-      if (!/^[\w-]{1,40}$/.test(k)) return undefined;
-      if (typeof v === "number" && Number.isFinite(v)) clean[k] = v;
-      else if (typeof v === "string" && v.length <= 500) clean[k] = v;
-      else return undefined;
-    }
-    out.args = clean;
-  }
-  return out;
+export function parseStoryMessage(m: unknown): StoryMessage | undefined {
+  const x = m as any;
+  if (x?.type === "ready" || x?.type === "refresh") return { type: x.type };
+  if (x?.type === "openLink" && typeof x.target === "string" && /^https:\/\/\S{1,2000}$/.test(x.target)) return { type: "openLink", target: x.target };
+  return undefined;
 }
 
-export function sanitizePersona(x: unknown): Persona | undefined {
-  return typeof x === "string" && PERSONAS.includes(x as Persona) ? (x as Persona) : undefined;
-}
-
-/** Feature ids: a Jira epic key "ACME-12" or its slug "ACME-12-case-escalation" (v3), a design page that has no epic
- *  yet "page-2240011", or a Spec Kit id "001" / slug "001-case-escalation". */
-export function sanitizeFeatureId(x: unknown): string | undefined {
-  if (typeof x !== "string") return undefined;
-  return /^[A-Z][A-Z0-9_]{0,19}-\d{1,9}(-[\w-]{1,80})?$/.test(x) || /^page-\d{1,20}$/.test(x) || /^\d{3}(-[\w-]{1,80})?$/.test(x) ? x : undefined;
-}
-
-/** Source ids: "fireflies:<id>", "upload:<sha>", and the v3 local kinds "paste:", "file:", "wispr:". */
-export function sanitizeSourceId(x: unknown): string | undefined {
-  return typeof x === "string" && /^(fireflies|upload|paste|file|wispr):[\w-]{1,100}$/.test(x) ? x : undefined;
-}
+export const isStoryKey = (k: unknown): k is string => typeof k === "string" && KEY.test(k);

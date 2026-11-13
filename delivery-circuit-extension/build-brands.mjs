@@ -7,7 +7,7 @@ import path from "node:path";
  *  back to codicons for them, so they are not listed here. */
 export const BRAND_EXPORTS = {
   github: "siGithub", jira: "siJira", confluence: "siConfluence", atlassian: "siAtlassian", lucid: "siLucid",
-  coderabbit: "siCoderabbit", claude: "siClaude", anthropic: "siAnthropic",
+  coderabbit: "siCoderabbit", claude: "siClaude",
 };
 
 export async function brandsJs(root) {

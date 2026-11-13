@@ -1,0 +1,327 @@
+{
+  "data": {
+    "repository": {
+      "autoMergeAllowed": false,
+      "b0": {
+        "name": "dev"
+      },
+      "b1": {
+        "name": "sit"
+      },
+      "b2": null,
+      "b3": {
+        "name": "main"
+      },
+      "sprints": {
+        "nodes": [
+          {
+            "name": "2026-11"
+          },
+          {
+            "name": "2026-10"
+          }
+        ]
+      },
+      "open": {
+        "nodes": [
+          {
+            "number": 41,
+            "url": "https://github.com/acme-org/acme-salesforce/pull/41",
+            "title": "ABC-12 Agent escalates a Case",
+            "headRefName": "feature/ABC-12-escalate",
+            "baseRefName": "sprint/2026-11",
+            "isDraft": false,
+            "state": "OPEN",
+            "createdAt": "2026-11-10T09:00:00Z",
+            "updatedAt": "2026-11-10T09:00:00Z",
+            "mergedAt": null,
+            "mergeCommit": null,
+            "author": {
+              "login": "dev1"
+            },
+            "autoMergeRequest": {
+              "enabledAt": "2026-11-10T09:00:00Z"
+            },
+            "reviews": {
+              "nodes": [
+                {
+                  "author": {
+                    "login": "coderabbitai"
+                  },
+                  "state": "CHANGES_REQUESTED",
+                  "submittedAt": "2026-11-10T09:00:00Z"
+                }
+              ]
+            },
+            "commits": {
+              "nodes": [
+                {
+                  "commit": {
+                    "statusCheckRollup": {
+                      "contexts": {
+                        "nodes": [
+                          {
+                            "__typename": "CheckRun",
+                            "name": "scan",
+                            "status": "COMPLETED",
+                            "conclusion": "FAILURE",
+                            "detailsUrl": "https://github.com/acme-org/acme-salesforce/actions/runs/4100"
+                          },
+                          {
+                            "__typename": "CheckRun",
+                            "name": "coderabbit",
+                            "status": "COMPLETED",
+                            "conclusion": "SUCCESS",
+                            "detailsUrl": null
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "number": 43,
+            "url": "https://github.com/acme-org/acme-salesforce/pull/43",
+            "title": "Cleanup",
+            "headRefName": "feature/cleanup",
+            "baseRefName": "sprint/2026-11",
+            "isDraft": false,
+            "state": "OPEN",
+            "createdAt": "2026-11-13T08:00:00Z",
+            "updatedAt": "2026-11-13T08:00:00Z",
+            "mergedAt": null,
+            "mergeCommit": null,
+            "author": {
+              "login": "dev2"
+            },
+            "autoMergeRequest": null,
+            "reviews": {
+              "nodes": [
+                {
+                  "author": {
+                    "login": "coderabbitai"
+                  },
+                  "state": "COMMENTED",
+                  "submittedAt": "2026-11-13T08:00:00Z"
+                }
+              ]
+            },
+            "commits": {
+              "nodes": [
+                {
+                  "commit": {
+                    "statusCheckRollup": {
+                      "contexts": {
+                        "nodes": [
+                          {
+                            "__typename": "CheckRun",
+                            "name": "scan",
+                            "status": "COMPLETED",
+                            "conclusion": "SUCCESS",
+                            "detailsUrl": "https://github.com/acme-org/acme-salesforce/actions/runs/4300"
+                          },
+                          {
+                            "__typename": "CheckRun",
+                            "name": "coderabbit",
+                            "status": "COMPLETED",
+                            "conclusion": "SUCCESS",
+                            "detailsUrl": null
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "number": 44,
+            "url": "https://github.com/acme-org/acme-salesforce/pull/44",
+            "title": "ABC-13 Escalation queue",
+            "headRefName": "feature/ABC-13-queue",
+            "baseRefName": "sprint/2026-11",
+            "isDraft": false,
+            "state": "OPEN",
+            "createdAt": "2026-11-13T09:00:00Z",
+            "updatedAt": "2026-11-13T09:00:00Z",
+            "mergedAt": null,
+            "mergeCommit": null,
+            "author": {
+              "login": "dev2"
+            },
+            "autoMergeRequest": {
+              "enabledAt": "2026-11-13T09:00:00Z"
+            },
+            "reviews": {
+              "nodes": [
+                {
+                  "author": {
+                    "login": "coderabbitai"
+                  },
+                  "state": "APPROVED",
+                  "submittedAt": "2026-11-13T09:00:00Z"
+                }
+              ]
+            },
+            "commits": {
+              "nodes": [
+                {
+                  "commit": {
+                    "statusCheckRollup": {
+                      "contexts": {
+                        "nodes": [
+                          {
+                            "__typename": "CheckRun",
+                            "name": "scan",
+                            "status": "COMPLETED",
+                            "conclusion": "SUCCESS",
+                            "detailsUrl": "https://github.com/acme-org/acme-salesforce/actions/runs/4400"
+                          },
+                          {
+                            "__typename": "CheckRun",
+                            "name": "coderabbit",
+                            "status": "COMPLETED",
+                            "conclusion": "SUCCESS",
+                            "detailsUrl": null
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "number": 45,
+            "url": "https://github.com/acme-org/acme-salesforce/pull/45",
+            "title": "Promote dev to sit",
+            "headRefName": "dev",
+            "baseRefName": "sit",
+            "isDraft": false,
+            "state": "OPEN",
+            "createdAt": "2026-11-12T09:00:00Z",
+            "updatedAt": "2026-11-12T09:00:00Z",
+            "mergedAt": null,
+            "mergeCommit": null,
+            "author": {
+              "login": "lead1"
+            },
+            "autoMergeRequest": null,
+            "reviews": {
+              "nodes": []
+            },
+            "commits": {
+              "nodes": [
+                {
+                  "commit": {
+                    "statusCheckRollup": {
+                      "contexts": {
+                        "nodes": [
+                          {
+                            "__typename": "CheckRun",
+                            "name": "scan",
+                            "status": "COMPLETED",
+                            "conclusion": "SUCCESS",
+                            "detailsUrl": "https://github.com/acme-org/acme-salesforce/actions/runs/4500"
+                          },
+                          {
+                            "__typename": "CheckRun",
+                            "name": "coderabbit",
+                            "status": "COMPLETED",
+                            "conclusion": "SUCCESS",
+                            "detailsUrl": null
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "merged": {
+        "nodes": [
+          {
+            "number": 42,
+            "url": "https://github.com/acme-org/acme-salesforce/pull/42",
+            "title": "ABC-11 Foundation",
+            "headRefName": "feature/ABC-11-foundation",
+            "baseRefName": "sprint/2026-11",
+            "isDraft": false,
+            "state": "MERGED",
+            "createdAt": "2026-11-08T09:00:00Z",
+            "updatedAt": "2026-11-08T09:00:00Z",
+            "mergedAt": "2026-11-10T10:00:00Z",
+            "mergeCommit": {
+              "oid": "b0b0b0b0"
+            },
+            "author": {
+              "login": "dev1"
+            },
+            "autoMergeRequest": null,
+            "reviews": {
+              "nodes": [
+                {
+                  "author": {
+                    "login": "coderabbitai"
+                  },
+                  "state": "APPROVED",
+                  "submittedAt": "2026-11-08T09:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "dev2"
+                  },
+                  "state": "APPROVED",
+                  "submittedAt": "2026-11-08T09:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "dependabot[bot]"
+                  },
+                  "state": "APPROVED",
+                  "submittedAt": "2026-11-08T09:00:00Z"
+                }
+              ]
+            },
+            "commits": {
+              "nodes": [
+                {
+                  "commit": {
+                    "statusCheckRollup": {
+                      "contexts": {
+                        "nodes": [
+                          {
+                            "__typename": "CheckRun",
+                            "name": "scan",
+                            "status": "COMPLETED",
+                            "conclusion": "SUCCESS",
+                            "detailsUrl": "https://github.com/acme-org/acme-salesforce/actions/runs/4200"
+                          },
+                          {
+                            "__typename": "CheckRun",
+                            "name": "coderabbit",
+                            "status": "COMPLETED",
+                            "conclusion": "SUCCESS",
+                            "detailsUrl": null
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

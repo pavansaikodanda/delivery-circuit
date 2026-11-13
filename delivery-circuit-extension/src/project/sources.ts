@@ -1,74 +1,13 @@
-// Transcript sources: the repo index .circuit/sources.json (metadata only, never content), encrypted local
-// storage of uploads (AES-256-GCM), and text extraction for uploads (txt, md, vtt, srt, docx best effort).
-// No vscode import: the caller passes the key and the storage folder.
+// Transcripts for "New design from transcript": encrypted local storage of pasted text and files (AES-256-GCM) in the
+// extension's global storage, and text extraction (txt, md, vtt, srt, docx, pdf best effort). Nothing is written into
+// the repository. No vscode import: the caller passes the key and the storage folder.
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
 import { promises as fs } from "fs";
 import * as path from "path";
 import { inflateRawSync } from "zlib";
-import type { SourceOrigin, SourceRef } from "../core/contracts";
+import { PdfTextError, pdfToText } from "./pdf";
 
-export const SOURCES_INDEX = ".circuit/sources.json";
 export const SOURCE_REF_RE = /^(fireflies|upload):([A-Za-z0-9][A-Za-z0-9_-]{2,})$/;
-const ORIGINS: readonly SourceOrigin[] = ["paste", "file", "fireflies", "fireflies-export", "wispr-flow", "watch-folder"];
-export const isSourceOrigin = (x: unknown): x is SourceOrigin => typeof x === "string" && (ORIGINS as readonly string[]).includes(x);
-
-interface IndexFile { version: 1; sources: SourceRef[] }
-
-export function parseIndex(json: string | undefined): SourceRef[] {
-  if (!json) return [];
-  try {
-    const raw = JSON.parse(json);
-    const list = Array.isArray(raw) ? raw : raw?.sources;
-    if (!Array.isArray(list)) return [];
-    return list.filter((s: any) => s && typeof s.id === "string" && SOURCE_REF_RE.test(s.id)).map((s: any): SourceRef => ({
-      id: s.id, kind: s.id.startsWith("fireflies:") ? "fireflies" : "upload",
-      title: String(s.title ?? s.id), date: String(s.date ?? ""), ...(isSourceOrigin(s.origin) ? { origin: s.origin } : {}),
-      ...(Array.isArray(s.usedBy) ? { usedBy: s.usedBy.map(String) } : {}),
-    }));
-  } catch { return []; }
-}
-
-/** Only ids, kinds, titles, dates, origin and usedBy are written. Anything else on the objects is dropped. */
-export function serializeIndex(sources: SourceRef[]): string {
-  const clean = [...sources].sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id)).map((s) => {
-    const o: SourceRef = { id: s.id, kind: s.kind, title: s.title, date: s.date };
-    if (isSourceOrigin(s.origin)) o.origin = s.origin;
-    if (s.usedBy?.length) o.usedBy = [...new Set(s.usedBy)].sort();
-    return o;
-  });
-  const file: IndexFile = { version: 1, sources: clean };
-  return JSON.stringify(file, null, 2) + "\n";
-}
-
-export async function readIndex(root: string): Promise<SourceRef[]> {
-  try { return parseIndex(await fs.readFile(path.join(root, SOURCES_INDEX), "utf8")); } catch { return []; }
-}
-
-export async function writeIndex(root: string, sources: SourceRef[]): Promise<void> {
-  const file = path.join(root, SOURCES_INDEX);
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, serializeIndex(sources), "utf8");
-}
-
-/** Add or update one source (title/date refreshed, usedBy kept). */
-export function upsertSource(list: SourceRef[], s: SourceRef): SourceRef[] {
-  const i = list.findIndex((x) => x.id === s.id);
-  if (i === -1) return [...list, s];
-  const merged: SourceRef = { ...list[i], title: s.title, date: s.date, ...(s.origin ? { origin: s.origin } : {}) };
-  const usedBy = [...new Set([...(list[i].usedBy ?? []), ...(s.usedBy ?? [])])];
-  if (usedBy.length) merged.usedBy = usedBy.sort();
-  return list.map((x, j) => (j === i ? merged : x));
-}
-
-/** usedBy from the specs that cite each source (feature id -> cited ids). */
-export function withUsage(list: SourceRef[], citations: Record<string, string[]>): SourceRef[] {
-  return list.map((s) => {
-    const by = Object.entries(citations).filter(([, ids]) => ids.includes(s.id)).map(([f]) => f).sort();
-    const o: SourceRef = { ...s };
-    if (by.length) o.usedBy = by; else delete o.usedBy;
-    return o;
-  });
-}
 
 // ---------- encryption ----------
 const MAGIC = Buffer.from("DCS1");
@@ -173,7 +112,7 @@ export function docxToText(buf: Buffer): string {
     .split("\n").map((l) => l.trim()).filter((l, i, a) => l || (i > 0 && a[i - 1])).join("\n").trim();
 }
 
-export const UPLOAD_EXTENSIONS = ["txt", "md", "vtt", "srt", "docx"];
+export const UPLOAD_EXTENSIONS = ["txt", "md", "vtt", "srt", "docx", "pdf"];
 
 export function extractText(fileName: string, buf: Buffer): string {
   const ext = path.extname(fileName).slice(1).toLowerCase();
@@ -181,6 +120,8 @@ export function extractText(fileName: string, buf: Buffer): string {
     case "txt": case "md": case "": return buf.toString("utf8").replace(/^﻿/, "");
     case "vtt": case "srt": return subtitlesToText(buf.toString("utf8"));
     case "docx": return docxToText(buf);
+    case "pdf":
+      try { return pdfToText(buf); } catch (e) { throw new Error(e instanceof PdfTextError ? e.message : String((e as any)?.message ?? e)); }
     default: throw new Error(`Unsupported transcript type .${ext}. Use ${UPLOAD_EXTENSIONS.map((e) => "." + e).join(", ")}.`);
   }
 }

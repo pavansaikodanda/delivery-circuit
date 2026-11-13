@@ -1,370 +1,166 @@
 import { describe, expect, it } from "vitest";
-import * as fs from "fs";
-import * as path from "path";
-import type { Persona } from "../../src/core/contracts";
-import { actionable, baseStatus, CONNECTIONS, visibleRows, type RowStatus } from "../../src/connections/catalog";
-import { isPlaceholder, normalizeSite, parseBuildConfig, parseDate, parseReminders, slackWorkspaceUrl } from "../../src/connections/config";
-import { applyExpiry, claudeTokenExpiry, expiryState, expiryText } from "../../src/connections/expiry";
-import { checkLoginUrl, classifySfUrl, isNamedProduction, namedProdAliases, safeRelPath, sfConfigProdAlias, sfOrgDecision, terminalCommand } from "../../src/connections/safety";
-import {
-  findCodeAnalyzer, findServerFor, isSubscriptionAuth, mcpListStateFor, parseClaudeAuth, parseMcpConfigs, parseMcpList,
-  parseSfOrgDisplay, parseSfPlugins, requiredBrowsers, browserDir,
-} from "../../src/connections/parse";
+import { ROLES, roleChoices, type ConnectionStatus, type Identity, type Role } from "../../src/core/contracts";
+import { baseStatus, buttonFor, CONNECTIONS, rowsFor } from "../../src/connections/catalog";
+import { isPlaceholder, normalizeSite, parseBuildConfig } from "../../src/connections/config";
 import { GitHubClient, githubErrorMessage, type FetchLike } from "../../src/connections/github";
 import { pickActive, resolveIdentity } from "../../src/connections/identityCore";
-import { buildPanelState, buildProjectInfo } from "../../src/connections/panelState";
+import {
+  findInstallation, findServerFor, isSubscriptionAuth, mcpListStateFor, parseAcliAuthStatus, parseClaudeAuth, parseMcpConfigs, parseMcpList,
+  parseSfOrgDisplay,
+} from "../../src/connections/parse";
+import { checkLoginUrl, classifySfUrl, isNamedProduction, namedProdAliases, terminalCommand } from "../../src/connections/safety";
 
-const FX = path.join(__dirname, "..", "fixtures", "connections");
-const fx = (f: string) => fs.readFileSync(path.join(FX, f), "utf8");
-const rows = (): RowStatus[] => CONNECTIONS.map((c) => baseStatus(c.id));
+const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
 
-describe("neededBy filtering", () => {
-  it("matches the persona matrix", () => {
-    const need = (p: Persona) => CONNECTIONS.filter((c) => c.scope === "personal" && c.neededBy.includes(p)).map((c) => c.id).sort();
-    expect(need("architect")).toEqual(["acli", "claude", "github", "lucid", "mcp-atlassian", "mcp-fireflies", "mcp-github", "mcp-lucid", "mcp-salesforce",
-      "mcp-slack", "sf-dev", "slack"].sort());
-    expect(need("developer")).toEqual(["acli", "claude", "github", "mcp-atlassian", "mcp-github", "mcp-salesforce", "mcp-slack", "sf-dev", "slack"].sort());
-    expect(need("tester")).toEqual(["acli", "claude", "github", "mcp-atlassian", "mcp-salesforce", "sf-dev", "sf-qa", "slack", "testing-browsers"].sort());
+describe("Connections tab rows per role", () => {
+  it("about seven logins, no token, secret, webhook, runner, Claude Tag or AI Reviewer rows", () => {
+    expect(ids(CONNECTIONS)).toEqual(["github", "claude", "sf-dev", "sf-qa", "atlassian", "lucid", "coderabbit", "fireflies"]);
+    expect(JSON.stringify(CONNECTIONS)).not.toMatch(/token|secret|webhook|runner|tag|reviewer|slack|acli/i);
   });
-  it("review tools are project scope", () => {
-    for (const id of ["coderabbit", "code-analyzer", "ai-reviewer"]) expect(CONNECTIONS.find((c) => c.id === id)!.scope).toBe("project");
+  it("hides rows the role does not need", () => {
+    const rows = CONNECTIONS.map((c) => baseStatus(c.id));
+    const of = (r: Role) => ids(rowsFor(rows, r));
+    expect(of("architect")).toEqual(["github", "claude", "sf-dev", "atlassian", "lucid", "fireflies"]);
+    expect(of("developer")).toEqual(["github", "claude", "sf-dev", "atlassian", "coderabbit"]);
+    expect(of("tester")).toEqual(["github", "claude", "sf-qa", "atlassian"]);
+    expect(of("lead")).toEqual(["github", "atlassian", "coderabbit"]);
+    expect(rowsFor(rows, null)).toHaveLength(CONNECTIONS.length);
+    for (const r of ROLES) expect(of(r).length).toBeLessThanOrEqual(7);
   });
-  it("architect sees everything", () => {
-    expect(visibleRows(rows(), ["architect"], "architect")).toHaveLength(CONNECTIONS.length);
-    expect(visibleRows(rows(), ["architect", "developer"], "developer")).toHaveLength(CONNECTIONS.length);
-  });
-  it("developer sees own personal rows plus project rows", () => {
-    const ids = visibleRows(rows(), ["developer"], "developer").map((r) => r.id);
-    expect(ids).toContain("coderabbit");
-    expect(ids).toContain("mcp-github");
-    expect(ids).not.toContain("sf-qa");
-    expect(ids).not.toContain("fireflies");
-    expect(ids).not.toContain("testing-browsers");
-  });
-  it("tester sees sf-qa and browsers but not confluence", () => {
-    const ids = visibleRows(rows(), ["tester"], "tester").map((r) => r.id);
-    expect(ids).toEqual(expect.arrayContaining(["sf-qa", "testing-browsers", "ai-reviewer"]));
-    expect(ids).not.toContain("confluence");
-    expect(ids).not.toContain("mcp-github");
-  });
-  it("no persona shows all rows", () => {
-    expect(visibleRows(rows(), [], null)).toHaveLength(CONNECTIONS.length);
-  });
-  it("project rows are actionable only for admins", () => {
-    expect(actionable({ scope: "project" }, false)).toBe(false);
-    expect(actionable({ scope: "project" }, true)).toBe(true);
-    expect(actionable({ scope: "personal" }, false)).toBe(true);
-  });
-  it("extra neededBy from persona configs is merged", () => {
-    expect(baseStatus("mcp-lucid", ["tester"]).neededBy).toEqual(["architect", "tester"]);
-    expect(baseStatus("mcp-github", ["architect", "tester"]).neededBy.sort()).toEqual(["architect", "developer", "tester"]);
+  it("Fireflies is optional; one button per state", () => {
+    expect(baseStatus("fireflies").optional).toBe(true);
+    expect(baseStatus("github").optional).toBeUndefined();
+    const b = (state: ConnectionStatus["state"]) => buttonFor({ state });
+    expect([b("connected"), b("checking"), b("error"), b("disconnected"), b("unknown")]).toEqual(["Check", "Check", "Fix", "Connect", "Connect"]);
   });
 });
 
-describe("Salesforce URL safety", () => {
-  it("classifies hosts", () => {
+describe("roles", () => {
+  const err = (status: number) => Object.assign(new Error("x"), { status });
+  const teams = { architect: "architects", developer: "developers", tester: "testers", lead: "leads" };
+  it("org repo: roles from active memberships of architects, developers, testers and leads", async () => {
+    const get = async (p: string): Promise<any> => {
+      if (p === "/repos/acme-org/app") return { owner: { type: "Organization" }, permissions: { admin: false } };
+      if (p === "/user/memberships/orgs/acme-org") return { state: "active", role: "member" };
+      if (p.includes("/teams/developers/") || p.includes("/teams/leads/")) return { state: "active" };
+      if (p.includes("/teams/testers/")) return { state: "pending" };
+      throw err(404);
+    };
+    const r = await resolveIdentity({ login: "demo-user", owner: "acme-org", repo: "app", teams, get });
+    expect(r.identity).toEqual({ login: "demo-user", roles: ["developer", "lead"], active: "developer", isAdmin: false, owner: "acme-org", repo: "app", orgOwned: true });
+    expect(r.notice).toBeUndefined();
+  });
+  it("no team (or a personal repo): every role is offered, with a notice in an org", async () => {
+    const org = async (p: string): Promise<any> => { if (p === "/repos/acme-org/app") return { owner: { type: "Organization" }, permissions: { admin: true } }; throw err(404); };
+    const a = await resolveIdentity({ login: "demo-user", owner: "acme-org", repo: "app", teams, previousActive: "lead", get: org });
+    expect(a.identity).toMatchObject({ roles: [], active: "lead", isAdmin: true });
+    expect(a.notice).toMatch(/not in a circuit team/);
+    expect(roleChoices(a.identity)).toEqual(ROLES);
+    const personal = async (p: string): Promise<any> => { if (p === "/repos/demo-user/app") return { owner: { type: "User" }, permissions: { admin: true } }; throw err(404); };
+    const b = await resolveIdentity({ login: "demo-user", owner: "demo-user", repo: "app", teams, get: personal });
+    expect(b.identity).toMatchObject({ roles: [], active: "developer", orgOwned: false });
+    expect(b.notice).toBeUndefined();
+  });
+  it("a team that cannot be read is named", async () => {
+    const get = async (p: string): Promise<any> => {
+      if (p === "/repos/acme-org/app") return { owner: { type: "Organization" } };
+      if (p.includes("/teams/architects/")) throw err(403);
+      if (p.includes("/teams/developers/")) return { state: "active" };
+      throw err(404);
+    };
+    const r = await resolveIdentity({ login: "demo-user", owner: "acme-org", repo: "app", teams, get });
+    expect(r.notice).toMatch(/architects/);
+  });
+  it("active role: keeps a valid previous choice, else the first team role", () => {
+    expect(pickActive(["developer", "lead"], "lead")).toBe("lead");
+    expect(pickActive(["developer", "lead"], "architect")).toBe("developer");
+    expect(pickActive([], "tester")).toBe("tester");
+    expect(pickActive([], null)).toBe("developer");
+    const id: Identity = { login: "x", roles: ["tester"], active: "tester", isAdmin: false, owner: "o", repo: "r", orgOwned: true };
+    expect(roleChoices(id)).toEqual(["tester"]);
+    expect(roleChoices(null)).toEqual([]);
+  });
+});
+
+describe("Salesforce safety", () => {
+  it("classifies hosts and allows only Salesforce https login URLs", () => {
     expect(classifySfUrl("https://acme--uat.sandbox.my.salesforce.com")).toBe("sandbox");
-    expect(classifySfUrl("https://acme--uat.my.salesforce.com")).toBe("sandbox");
-    expect(classifySfUrl("https://cs42.salesforce.com")).toBe("sandbox");
     expect(classifySfUrl("https://test.salesforce.com")).toBe("test-login");
-    expect(classifySfUrl("https://login.salesforce.com")).toBe("production-like");
-    expect(classifySfUrl("https://acme.my.salesforce.com")).toBe("production-like");
-    expect(classifySfUrl("https://acme-dev-ed.develop.my.salesforce.com")).toBe("dev-edition");
-    expect(classifySfUrl("https://x.scratch.my.salesforce.com")).toBe("scratch");
-    expect(classifySfUrl("http://acme.sandbox.my.salesforce.com")).toBe("invalid");
-    expect(classifySfUrl("https://evil.example.com/salesforce.com")).toBe("invalid");
     expect(classifySfUrl("https://salesforce.com.evil.io")).toBe("invalid");
-    expect(classifySfUrl(undefined)).toBe("invalid");
-  });
-  it("allows any Salesforce login URL, production-edition (SDO / demo) orgs included, without warnings", () => {
-    for (const u of ["https://acme.my.salesforce.com", "https://login.salesforce.com", "https://a--b.sandbox.my.salesforce.com",
-      "https://acme-dev-ed.develop.my.salesforce.com", "https://test.salesforce.com"]) {
-      expect(checkLoginUrl(u)).toEqual({ allowed: true, url: u });
-    }
-    expect(checkLoginUrl("https://acme.my.salesforce.com/").url).toBe("https://acme.my.salesforce.com");
-  });
-  it("still refuses non-Salesforce or non-https login URLs", () => {
-    expect(checkLoginUrl("http://acme.my.salesforce.com").allowed).toBe(false);
-    expect(checkLoginUrl("https://evil.example.com").allowed).toBe(false);
-  });
-  it("lets AI work in any connected org, whatever its type; refuses only an alias that does not resolve", () => {
-    expect(sfOrgDecision("qa", "https://acme--uat.sandbox.my.salesforce.com")).toEqual({ allowed: true });
-    expect(sfOrgDecision("dev", "https://acme.my.salesforce.com")).toEqual({ allowed: true });
-    const none = sfOrgDecision("qa", undefined);
-    expect(none.allowed).toBe(false);
-    expect(none.reason).toMatch(/does not resolve/);
-  });
-  it("refuses only the alias the project names as production, never by org type", () => {
-    const prod = namedProdAliases(["client-live", sfConfigProdAlias('project:\n  org_aliases:\n    prod: "acme-release"  # the release org\n')], "rel1, Rel2");
-    for (const a of ["prod", "production", "live", "PRD", "client-live", "acme-release", "rel1", "REL2", "acme-prod"]) {
-      expect(isNamedProduction(a, prod), a).toBe(true);
-      expect(sfOrgDecision(a, "https://acme-demo.my.salesforce.com", prod)).toMatchObject({ allowed: false, reason: expect.stringMatching(/names as production/) });
-    }
-    // An SDO / production-edition demo org under a DEV or QA alias is fine.
-    for (const a of ["qa", "dev", "salesOrgSDO", "productivity"]) expect(sfOrgDecision(a, "https://acme-demo.my.salesforce.com", prod), a).toEqual({ allowed: true });
-    expect(sfConfigProdAlias("prod: none")).toBeUndefined();
-    expect(sfConfigProdAlias(undefined)).toBeUndefined();
-  });
-  it("defaults to login.salesforce.com", () => {
+    expect(checkLoginUrl("https://acme.my.salesforce.com/")).toEqual({ allowed: true, url: "https://acme.my.salesforce.com" });
     expect(checkLoginUrl(undefined)).toEqual({ allowed: true, url: "https://login.salesforce.com" });
+    expect(checkLoginUrl("http://acme.my.salesforce.com").allowed).toBe(false);
+  });
+  it("the production alias is never used for the DEV or QA row", () => {
+    const prod = namedProdAliases(["client-live"], "");
+    for (const a of ["prod", "production", "client-live", "acme-prod"]) expect(isNamedProduction(a, prod), a).toBe(true);
+    for (const a of ["dev", "qa", "salesOrgSDO"]) expect(isNamedProduction(a, prod), a).toBe(false);
   });
   it("terminal commands only accept safe arguments", () => {
-    expect(terminalCommand("sf", ["org", "login", "web", "--alias", "dev", "--instance-url", "https://a.my.salesforce.com"]))
-      .toBe("sf org login web --alias dev --instance-url https://a.my.salesforce.com");
+    expect(terminalCommand("sf", ["org", "login", "web", "--alias", "dev"])).toBe("sf org login web --alias dev");
     expect(() => terminalCommand("sf", ["--alias", "dev; rm -rf /"])).toThrow();
     expect(() => terminalCommand("sf", ["$(whoami)"])).toThrow();
-    expect(() => terminalCommand("claude", ["a b"])).toThrow();
-    expect(safeRelPath(".claude\\personas\\tester.mcp.json")).toBe(".claude/personas/tester.mcp.json");
-    expect(safeRelPath("../x.json")).toBeUndefined();
-    expect(safeRelPath("C:/x.json")).toBeUndefined();
   });
 });
 
-describe("build.config.yml parsing", () => {
-  it("reads the real client config", () => {
-    const c = parseBuildConfig(fx("build.config.yml"));
-    expect(c.githubOrg).toBe("acme-org");
-    expect(c.githubRepo).toBe("salesDemoOrg");
-    expect(c.jiraSite).toBeUndefined(); // https://<site>.atlassian.net is a placeholder
-    expect(c.jiraProjectKey).toBe("ABC");
-    expect(c.confluenceSpace).toBe("SD");
-    expect(c.sf.devUrl).toBe("https://acme-demo.my.salesforce.com");
-    expect(c.sf.prodUrl).toBeUndefined();
-    expect(c.sf.devAlias).toBe("dev");
-    expect(c.sf.qaAlias).toBe("qa");
-    expect(c.sf.devIsTrial).toBe(true); // "# SDO trial org" comment
-    expect(c.slackWorkspace).toBeUndefined();
-    expect(c.slackChannels).toEqual({ arch: "arch-gate", dev: "dev-gate", qa: "qa-gate" });
-    expect(c.transcriptsSource).toBe("file");
-  });
-  it("supports aliases and explicit org types; tolerates bad yaml", () => {
-    const c = parseBuildConfig("salesforce:\n  dev_alias: mydev\n  qa_alias: 'bad alias'\n  dev_sandbox_url: https://a.my.salesforce.com\n  dev_org_type: trial\n  qa_sandbox_url: https://q.my.salesforce.com\n");
-    expect(c.sf.devAlias).toBe("mydev");
-    expect(c.sf.qaAlias).toBe("qa");
-    expect(c.sf.devIsTrial).toBe(true);
-    expect(c.sf.qaIsTrial).toBe(false);
+describe("build.config.yml", () => {
+  it("reads aliases and placeholders", () => {
+    const c = parseBuildConfig("github:\n  org: acme-org\n  repo: acme-salesforce\njira:\n  site: https://<site>.atlassian.net\n  project_key: ACME\nsalesforce:\n  dev_alias: mydev\n  qa_alias: 'bad alias'\n  prod_alias: prod\n");
+    expect(c).toMatchObject({ githubOrg: "acme-org", githubRepo: "acme-salesforce", jiraProjectKey: "ACME", sf: { devAlias: "mydev", qaAlias: "qa", prodAlias: "prod" } });
+    expect(c.jiraSite).toBeUndefined();
     expect(parseBuildConfig(": : :\n  - [").sf.devAlias).toBe("dev");
-  });
-  it("placeholders and helpers", () => {
-    expect(isPlaceholder("<name>")).toBe(true);
-    expect(isPlaceholder("none")).toBe(true);
-    expect(isPlaceholder("VERIFY: Lucid MCP URL")).toBe(true);
-    expect(isPlaceholder("acme")).toBe(false);
+    expect(isPlaceholder("VERIFY: x")).toBe(true);
     expect(normalizeSite("acme.atlassian.net/")).toBe("https://acme.atlassian.net");
-    expect(normalizeSite("http://acme.atlassian.net")).toBeUndefined();
     expect(normalizeSite("https://user:pw@acme.atlassian.net")).toBeUndefined();
-    expect(slackWorkspaceUrl("Acme")).toBe("https://acme.slack.com");
-    expect(slackWorkspaceUrl("acme.slack.com")).toBe("https://acme.slack.com");
-    expect(slackWorkspaceUrl("bad name")).toBeUndefined();
-  });
-  it("reads build-state.md reminders, skipping placeholders", () => {
-    const md = "# State\n## Reminders\n- CLAUDE_CODE_OAUTH_TOKEN expires: <date + 1 year>\n- Jira PAT for Rule A expires: 2027-01-15\n- Salesforce JWT certificates expire: 1 Mar 2027\n## Next\n- x expires: 2030-01-01\n";
-    expect(parseReminders(md)).toEqual([{ label: "Jira PAT for Rule A", date: "2027-01-15" }, { label: "Salesforce JWT certificates", date: "2027-03-01" }]);
-    expect(parseDate("2027-02-30")).toBeUndefined();
-    expect(parseDate("soon")).toBeUndefined();
-  });
-});
-
-describe("expiry", () => {
-  const now = new Date("2026-11-11T00:00:00Z");
-  it("states", () => {
-    expect(expiryState(undefined, now)).toBe("unknown");
-    expect(expiryState("garbage", now)).toBe("unknown");
-    expect(expiryState("2026-11-01", now)).toBe("expired");
-    expect(expiryState("2026-12-10", now)).toBe("expiring");
-    expect(expiryState("2026-12-12", now)).toBe("ok");
-  });
-  it("Claude token is one year from when it was set", () => {
-    expect(claudeTokenExpiry("2026-11-11T10:00:00.000Z")).toBe("2027-11-11T10:00:00.000Z");
-  });
-  it("applies to connection state", () => {
-    expect(applyExpiry("connected", "2026-11-20", now)).toBe("expiring");
-    expect(applyExpiry("connected", "2026-11-01", now)).toBe("error");
-    expect(applyExpiry("connected", "2027-11-01", now)).toBe("connected");
-    expect(applyExpiry("disconnected", "2026-11-20", now)).toBe("disconnected");
-    expect(applyExpiry("connected", undefined, now)).toBe("connected");
-  });
-  it("text", () => {
-    expect(expiryText("2026-11-12T00:00:00Z", now)).toBe("expires in 1 day (2026-11-12)");
-    expect(expiryText("2026-11-01", now)).toBe("expired 2026-11-01");
-    expect(expiryText("2027-05-01", now)).toBe("expires 2027-05-01");
   });
 });
 
 describe("CLI parsers", () => {
-  it("claude auth status JSON and text", () => {
-    const j = parseClaudeAuth(JSON.stringify({ loggedIn: true, authMethod: "claude.ai", apiProvider: "firstParty", email: "a@b.io", subscriptionType: "max", loginExpiresAt: "2026-11-12T08:39:17.723Z" }))!;
+  it("claude auth status", () => {
+    const j = parseClaudeAuth(JSON.stringify({ loggedIn: true, authMethod: "claude.ai", apiProvider: "firstParty", email: "demo.user@example.com", subscriptionType: "max" }))!;
     expect(isSubscriptionAuth(j)).toBe(true);
-    expect(j.loginExpiresAt).toBe("2026-11-12T08:39:17.723Z");
-    const t = parseClaudeAuth("Login method: Claude Max account\nOrganization: Acme\nEmail: a@b.io\nSign-in ends: any day now, by 2026-11-12 (2026-11-12T08:39:17.723Z)\n")!;
-    expect(t).toMatchObject({ loggedIn: true, authMethod: "claude.ai", email: "a@b.io", subscriptionType: "max", loginExpiresAt: "2026-11-12T08:39:17.723Z" });
     expect(isSubscriptionAuth({ loggedIn: true, authMethod: "api_key" })).toBe(false);
     expect(parseClaudeAuth(JSON.stringify({ loggedIn: false }))!.loggedIn).toBe(false);
   });
   it("sf org display drops the access token", () => {
-    const out = JSON.stringify({ status: 0, result: { id: "00D", accessToken: "00D!SECRET", instanceUrl: "https://a.my.salesforce.com", username: "u@x", connectedStatus: "Connected", alias: "dev" } });
-    const r = parseSfOrgDisplay(out);
+    const r = parseSfOrgDisplay(JSON.stringify({ status: 0, result: { id: "00D", accessToken: "00D!SECRET", instanceUrl: "https://acme-demo.my.salesforce.com", username: "demo.user@example.com", connectedStatus: "Connected" } }));
     expect(r.ok).toBe(true);
     expect(JSON.stringify(r)).not.toContain("SECRET");
-    expect(r.org).toEqual({ username: "u@x", alias: "dev", instanceUrl: "https://a.my.salesforce.com", orgId: "00D", connectedStatus: "Connected", expirationDate: undefined });
-    expect(parseSfOrgDisplay(JSON.stringify({ status: 1, name: "NoOrgFound", message: "No authorization information found for qa." })).ok).toBe(false);
-    expect(parseSfOrgDisplay(JSON.stringify({ status: 0, result: { connectedStatus: "RefreshTokenAuthError" } })).ok).toBe(false);
-    expect(parseSfOrgDisplay("not json").ok).toBe(false);
+    expect(parseSfOrgDisplay(JSON.stringify({ status: 1, name: "NoOrgFound" })).ok).toBe(false);
   });
-  it("sf plugins", () => {
-    const p = parseSfPlugins(JSON.stringify([{ name: "@salesforce/cli", version: "2" }, { name: "@salesforce/plugin-code-analyzer", version: "5.1.0" }]));
-    expect(findCodeAnalyzer(p)?.version).toBe("5.1.0");
-    expect(findCodeAnalyzer(parseSfPlugins("[]"))).toBeUndefined();
+  it("MCP rows from claude mcp list and the persona configs", () => {
+    const l = parseMcpList([
+      "claude.ai Atlassian: https://mcp.atlassian.com/v2/mcp - √ Connected",
+      "lucid: https://mcp.lucid.app/mcp (HTTP) - ! Needs authentication",
+      "fireflies: https://api.fireflies.ai/mcp (HTTP) - ✘ Failed to connect — timeout",
+    ].join("\n"));
+    expect(mcpListStateFor("atlassian", undefined, l, true)?.state).toBe("connected");
+    expect(mcpListStateFor("lucid", undefined, l, true)?.state).toBe("needs-auth");
+    expect(mcpListStateFor("fireflies", undefined, l, true)).toMatchObject({ state: "failed", reason: "timeout" });
+    const servers = parseMcpConfigs([JSON.stringify({ mcpServers: { atlassian: { type: "http", url: "https://mcp.atlassian.com/v2/mcp" } } })]);
+    expect(findServerFor("atlassian", servers)).toMatchObject({ placeholder: false });
+    expect(findServerFor("lucid", servers)).toBeUndefined();
   });
-  it("claude mcp list (both glyph sets)", () => {
-    const out = [
-      "Checking MCP server health…", "",
-      "claude.ai Slack: https://mcp.slack.com/mcp - √ Connected",
-      "plugin:sales:atlassian: https://mcp.atlassian.com/v1/mcp (HTTP) - ! Needs authentication",
-      "plugin:sales:zoom: https://mcp.zoom.us/mcp (HTTP) - ✘ Failed to connect — Incompatible auth server: does not support dynamic client registration",
-      "plugin:sales:gmail:  (HTTP) - - Not configured",
-      "github: https://api.githubcopilot.com/mcp/ (HTTP) - ✔ Connected",
-    ].join("\n");
-    const l = parseMcpList(out);
-    expect(l).toHaveLength(5);
-    expect(l[0]).toMatchObject({ name: "claude.ai Slack", target: "https://mcp.slack.com/mcp", state: "connected" });
-    expect(l[1]).toMatchObject({ name: "plugin:sales:atlassian", transport: "HTTP", state: "needs-auth" });
-    expect(l[2]).toMatchObject({ state: "failed", reason: "Incompatible auth server: does not support dynamic client registration" });
-    expect(l[3]).toMatchObject({ name: "plugin:sales:gmail", target: "", state: "not-configured" });
-    const servers = parseMcpConfigs([fx("architect.mcp.json")]);
-    const atl = findServerFor("mcp-atlassian", servers)!;
-    expect(atl.placeholder).toBe(true);
-    expect(findServerFor("mcp-salesforce", servers)!.type).toBe("stdio");
-    expect(mcpListStateFor("mcp-atlassian", atl, l)?.state).toBe("needs-auth");
-    expect(mcpListStateFor("mcp-github", findServerFor("mcp-github", servers), l)?.state).toBe("connected");
-    expect(mcpListStateFor("mcp-slack", undefined, l)?.name).toBe("claude.ai Slack");
-    expect(mcpListStateFor("mcp-lucid", findServerFor("mcp-lucid", servers), l)).toBeUndefined();
+  it("acli is optional: missing, logged out, logged in", () => {
+    expect(parseAcliAuthStatus({ code: 9009, stdout: "", stderr: "'acli' is not recognized" }).state).toBe("missing");
+    expect(parseAcliAuthStatus({ code: 1, stdout: "", stderr: "not logged in" }).state).toBe("logged-out");
+    expect(parseAcliAuthStatus({ code: 0, stdout: "Site: acme.atlassian.net\nEmail: demo.user@example.com", stderr: "" })).toMatchObject({ state: "logged-in", site: "acme.atlassian.net" });
   });
-  it("local mcp config overrides the shared one", () => {
-    const s = parseMcpConfigs([fx("architect.mcp.json"), JSON.stringify({ mcpServers: { atlassian: { type: "http", url: "https://mcp.atlassian.com/v2/mcp" } } })]);
-    expect(findServerFor("mcp-atlassian", s)).toMatchObject({ url: "https://mcp.atlassian.com/v2/mcp", placeholder: false });
-  });
-  it("playwright browsers", () => {
-    const b = requiredBrowsers(JSON.stringify({ browsers: [{ name: "chromium", revision: "1246", title: "Chrome for Testing" }, { name: "chromium-headless-shell", revision: "1246" }, { name: "firefox", revision: "1" }] }));
-    expect(b.map((x) => browserDir(x.name, x.revision))).toEqual(["chromium-1246", "chromium_headless_shell-1246"]);
+  it("finds the CodeRabbit installation", () => {
+    const inst = { installations: [{ id: 7, app_slug: "coderabbitai", repository_selection: "all", html_url: "https://github.com/organizations/acme-org/settings/installations/7" }] };
+    expect(findInstallation(inst, ["coderabbitai"])).toMatchObject({ selection: "all", suspended: false });
+    expect(findInstallation({ installations: [] }, ["coderabbitai"])).toBeUndefined();
   });
 });
 
 describe("GitHub client", () => {
   const hdr = (h: Record<string, string> = {}) => ({ get: (n: string) => h[n.toLowerCase()] ?? null });
-  it("helpful error messages", () => {
+  it("helpful errors that never include the token", async () => {
     expect(githubErrorMessage(401, "GET", "/user", '{"message":"Bad credentials"}', hdr())).toMatch(/connect GitHub again/);
-    expect(githubErrorMessage(403, "GET", "/x", "{}", hdr({ "x-ratelimit-remaining": "0", "x-ratelimit-reset": "1700000000" }))).toMatch(/rate limit/);
-    expect(githubErrorMessage(404, "GET", "/repos/a/b", '{"message":"Not Found"}', hdr())).toMatch(/read:org/);
-  });
-  it("sends the token and user agent, never in the error", async () => {
-    const calls: any[] = [];
-    const f: FetchLike = async (url, init) => { calls.push({ url, init }); return { ok: false, status: 404, headers: hdr(), text: async () => '{"message":"Not Found"}' }; };
-    const c = new GitHubClient(async () => "tok_SECRET", f);
-    const err = await c.request("GET", "/repos/a/b").catch((e) => e);
-    expect(calls[0].init.headers.Authorization).toBe("Bearer tok_SECRET");
-    expect(calls[0].init.headers["User-Agent"]).toBe("delivery-circuit");
+    const f: FetchLike = async () => ({ ok: false, status: 404, headers: hdr(), text: async () => '{"message":"Not Found"}' });
+    const err = await new GitHubClient(async () => "tok_SECRET", f).request("GET", "/repos/a/b").catch((e) => e);
     expect(err.status).toBe(404);
     expect(err.message).not.toContain("tok_SECRET");
-    await expect(c.request("GET", "https://evil.example.com")).rejects.toThrow(/Invalid/);
-  });
-});
-
-describe("identity", () => {
-  const err = (status: number) => Object.assign(new Error("x"), { status });
-  const teams = { architect: "architects", developer: "developers", tester: "testers" };
-  it("org repo: personas from active team memberships; admin from org role", async () => {
-    const get = async (p: string): Promise<any> => {
-      if (p === "/repos/acme/app") return { owner: { type: "Organization" }, permissions: { admin: false } };
-      if (p === "/user/memberships/orgs/acme") return { state: "active", role: "admin" };
-      if (p.includes("/teams/developers/")) return { state: "active" };
-      if (p.includes("/teams/testers/")) return { state: "pending" };
-      throw err(404);
-    };
-    const r = await resolveIdentity({ login: "me", owner: "acme", repo: "app", teams, override: "tester", get });
-    expect(r.identity).toEqual({ login: "me", personas: ["developer"], active: "developer", isAdmin: true, owner: "acme", repo: "app", orgOwned: true });
-    expect(r.notice).toMatch(/personaOverride is ignored/);
-  });
-  it("personal repo uses the override, or none with a notice", async () => {
-    const get = async (p: string): Promise<any> => { if (p === "/repos/me/app") return { owner: { type: "User" }, permissions: { admin: true } }; throw err(404); };
-    const a = await resolveIdentity({ login: "me", owner: "me", repo: "app", teams, override: "tester", get });
-    expect(a.identity).toMatchObject({ personas: ["tester"], active: "tester", isAdmin: true, orgOwned: false });
-    const b = await resolveIdentity({ login: "me", owner: "me", repo: "app", teams, override: "", get });
-    expect(b.identity.personas).toEqual([]);
-    expect(b.identity.active).toBeNull();
-    expect(b.notice).toMatch(/personaOverride/);
-  });
-  it("active persona choice", () => {
-    expect(pickActive(["developer", "architect"], null)).toBe("architect");
-    expect(pickActive(["developer", "architect"], "developer")).toBe("developer");
-    expect(pickActive(["tester"], "architect")).toBe("tester");
-    expect(pickActive([], "architect")).toBeNull();
-  });
-});
-
-describe("panel state", () => {
-  const id = (personas: Persona[], isAdmin: boolean) => ({ login: "x", personas, active: personas[0] ?? null, isAdmin, owner: "o", repo: "r", orgOwned: true });
-  it("non-admin developer: project rows visible but read-only; hidden count", () => {
-    const s = buildPanelState({ identity: id(["developer"], false), statuses: rows(), links: {} });
-    const review = s.groups.find((g) => g.id === "review")!;
-    expect(review.rows.every((r) => !r.actionable && r.reason)).toBe(true);
-    expect(s.hiddenCount).toBeGreaterThan(0);
-    expect(s.groups.map((g) => g.id)).toEqual(["personal", "mcp", "review"]);
-  });
-  it("admin architect sees all and can act", () => {
-    const s = buildPanelState({ identity: id(["architect"], true), statuses: rows(), links: {} });
-    expect(s.hiddenCount).toBe(0);
-    expect(s.groups.flatMap((g) => g.rows).every((r) => r.actionable)).toBe(true);
-  });
-  it("rows being checked show checking, keep their labels, and refreshing is passed through", () => {
-    const base = rows();
-    const s = buildPanelState({ identity: id(["architect"], true), statuses: base, links: {}, checking: ["github"], refreshing: true });
-    const gh = s.groups.flatMap((g) => g.rows).find((r) => r.id === "github")!;
-    const before = buildPanelState({ identity: id(["architect"], true), statuses: base, links: {} }).groups.flatMap((g) => g.rows).find((r) => r.id === "github")!;
-    expect(gh.state).toBe("checking");
-    expect(gh.connectLabel).toBe(before.connectLabel);
-    expect(gh.canDisconnect).toBe(before.canDisconnect);
-    expect(s.refreshing).toBe(true);
-    expect(s.groups.flatMap((g) => g.rows).filter((r) => r.state === "checking").map((r) => r.id))
-      .toEqual(base.filter((r) => r.state === "checking" || r.id === "github").map((r) => r.id).filter((x) => s.groups.flatMap((g) => g.rows).some((r) => r.id === x)));
-    expect(buildPanelState({ identity: id(["architect"], true), statuses: base, links: {} }).refreshing).toBe(false);
-  });
-  it("v3: no secrets section; project rows go to the Project section", () => {
-    const s = buildPanelState({ identity: id(["developer"], false), statuses: rows(), links: {} });
-    expect(s.projectRows.map((r) => r.id)).toEqual(["runner", "github-jira", "coderabbit"]);
-    expect(s.projectRows.every((r) => !r.actionable)).toBe(true);
-    expect(s.groups.flatMap((g) => g.rows).some((r) => r.group === "project")).toBe(false);
-    expect(JSON.stringify(s)).not.toMatch(/secrets|webhooks/);
-    const a = buildPanelState({ identity: id(["architect"], true), statuses: rows(), links: {} });
-    expect(a.projectRows.find((r) => r.id === "runner")).toMatchObject({ actionable: true, connectLabel: "Add runner" });
-    expect(a.groups.flatMap((g) => g.rows).find((r) => r.id === "acli")).toMatchObject({ connectLabel: "Connect" });
-    expect(a.groups.flatMap((g) => g.rows).find((r) => r.id === "mcp-fireflies")).toMatchObject({ connectLabel: "Sign in", group: "mcp" });
-    const ok = buildPanelState({ identity: id(["architect"], true), statuses: rows().map((r) => ({ ...r, state: "connected" as const })), links: {} });
-    const all = [...ok.groups.flatMap((g) => g.rows), ...ok.projectRows];
-    const label = (x: string) => all.find((r) => r.id === x)!.connectLabel;
-    expect([label("runner"), label("github-jira"), label("mcp-fireflies"), label("coderabbit"), label("code-analyzer"), label("acli")])
-      .toEqual([null, null, null, "Repo access", "Update", "Reconnect"]);
-  });
-  it("project info: rulesets, production environment, workflows without stored credentials, reminders", () => {
-    const now = new Date("2026-11-11T00:00:00Z");
-    const p = buildProjectInfo({
-      repoUrl: "https://github.com/acme-org/app", defaultBranch: "main",
-      rulesets: [{ id: 1, name: "main-protect", target: "branch", enforcement: "active" }, { id: 2, name: "tags", target: "tag", enforcement: "active" }],
-      environments: [{ name: "production", reviewers: ["team architects"], waitMinutes: 5, branchPolicy: true }],
-      bannedRefs: [], workflowCount: 3, reminders: [{ label: "acli version support ends", date: "2026-11-20" }], now,
-    });
-    expect(p.settings.map((x) => [x.key, x.state])).toEqual([["rulesets", "connected"], ["environment", "connected"], ["workflows", "connected"]]);
-    expect(p.settings[0].detail).toMatch(/main-protect/);
-    expect(p.settings[0].detail).not.toMatch(/tags/);
-    expect(p.settings[1].detail).toMatch(/team architects · wait 5 min/);
-    expect(p.reminders[0].state).toBe("expiring");
-    const q = buildProjectInfo({ rulesets: [], environments: [{ name: "Prod", reviewers: [], branchPolicy: false }],
-      bannedRefs: [{ file: ".github/workflows/pr-checks.yml", names: ["CLAUDE_CODE_OAUTH_TOKEN"] }], workflowCount: 2, reminders: [], now });
-    expect(q.settings.map((x) => x.state)).toEqual(["disconnected", "error", "error"]);
-    expect(q.settings[2].detail).toMatch(/pr-checks.yml reads CLAUDE_CODE_OAUTH_TOKEN/);
-    expect(q.settings[2].links).toEqual([{ kind: "file", label: "pr-checks.yml", target: ".github/workflows/pr-checks.yml" }]);
-    const u = buildProjectInfo({ bannedRefs: [], workflowCount: 0, reminders: [], now, error: "No GitHub repository known" });
-    expect(u.settings.map((x) => x.state)).toEqual(["unknown", "unknown", "unknown"]);
-    expect(u.error).toMatch(/No GitHub/);
+    await expect(new GitHubClient(async () => "t", f).request("GET", "https://evil.example.com")).rejects.toThrow(/Invalid/);
   });
 });

@@ -1,20 +1,16 @@
-/* Views pages (Home, Persona, Feature) on top of the shared kit (DESIGN.md §6.1-6.3). Only layout glue lives here:
-   colours, type and rows come from base.css. No persona tint, no boxes, no status backgrounds. */
+/* Sidebar tabs and the story panel on top of the shared kit (base.css). Only layout glue lives here. */
 
-/* Home: notices sit together above the queue; "Show all" sits under the list */
-.dc-notices { margin-top: var(--dc-s-2); }
-.dc-more { padding: var(--dc-s-2) 0 0 28px; }
+/* sidebar: tabs sit right under the header */
+body.sidebar .dc-tabs { margin-bottom: var(--dc-s-2); }
+.dc-mono-muted { font-family: var(--dc-mono); font-size: var(--dc-meta); color: var(--dc-muted); }
+/* one button per row: keep it on the title line */
+.dc-row.compact > .dc-primary { align-self: start; }
+.dc-row.compact > .dc-primary > .dc-status { padding-top: 2px; }
 
-/* Feature detail: stage line and the next gate under the header */
-.dc-fsum { display: grid; gap: var(--dc-s-2); margin-top: var(--dc-s-4); }
-.dc-fsum-line { display: flex; align-items: center; gap: var(--dc-s-3); }
-.dc-fsum-line > .dc-stage { flex: 1 1 auto; }
-.dc-fsum-line > .dc-stage-n { flex: none; font-size: var(--dc-meta); color: var(--dc-muted); }
-.dc-fsum-next { display: flex; align-items: center; justify-content: space-between; gap: var(--dc-s-3); flex-wrap: wrap; min-height: 28px; }
-.dc-strong { font-weight: 500; }
-.dc-linkbox { padding: var(--dc-s-1) 0; }
-.small { font-size: var(--dc-meta); }
-
-/* compact rows without a status line (Home "Go to"): title and arrow on one centred line */
-.dc-row.compact:not(:has(> .dc-status)) { grid-template-areas: "ic title primary"; align-items: center; }
-.dc-cmd { margin: var(--dc-s-2) 0 0; text-align: left; font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; color: var(--dc-fg); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* story panel: Design → Stories → Build → QA → Release */
+.dc-flow { list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: var(--dc-s-2) 0; margin: var(--dc-s-4) 0 0; padding: 0; }
+.dc-flow-step { display: inline-flex; align-items: center; gap: 6px; color: var(--dc-muted); font-size: var(--dc-meta); }
+.dc-flow-step + .dc-flow-step::before { content: ""; width: 20px; height: 1px; background: var(--dc-border-strong); margin: 0 10px; }
+.dc-flow-step.done { color: var(--dc-fg); }
+.dc-flow-step.active { color: var(--dc-fg); font-weight: 600; }
+.dc-flow-step .dc-ic.ok { color: var(--dc-ok); }

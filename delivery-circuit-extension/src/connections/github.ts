@@ -1,4 +1,4 @@
-// GitHub REST/GraphQL client used by ConnectionsService. No vscode import; token and fetch are injected.
+// GitHub REST/GraphQL client used by ConnectionsService (the person's VS Code GitHub sign-in). No vscode import; token and fetch are injected.
 
 export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => Promise<{
@@ -67,26 +67,4 @@ export class GitHubClient {
     }
     return j.data as T;
   }
-
-  /** Paginates `?per_page=100&page=n` for list endpoints that wrap items in `key` (e.g. "secrets"). */
-  async listAll<T>(path: string, key: string, maxPages = 10): Promise<T[]> {
-    const out: T[] = [];
-    for (let page = 1; page <= maxPages; page++) {
-      const sep = path.includes("?") ? "&" : "?";
-      const r = await this.request<any>("GET", `${path}${sep}per_page=100&page=${page}`);
-      const items: T[] = r?.[key] ?? [];
-      out.push(...items);
-      if (items.length < 100) break;
-    }
-    return out;
-  }
-
-  async secretNames(owner: string, repo: string, env?: string): Promise<string[]> {
-    const base = env ? `/repos/${enc(owner)}/${enc(repo)}/environments/${enc(env)}/secrets` : `/repos/${enc(owner)}/${enc(repo)}/actions/secrets`;
-    const list = await this.listAll<{ name: string }>(base, "secrets");
-    return list.map((s) => s.name).sort();
-  }
-
 }
-
-const enc = (s: string) => encodeURIComponent(s);

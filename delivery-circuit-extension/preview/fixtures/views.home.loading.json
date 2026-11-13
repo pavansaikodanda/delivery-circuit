@@ -1,0 +1,52 @@
+{
+  "mode": "ready",
+  "user": {
+    "login": "demo-user",
+    "role": "developer",
+    "roleLabel": "Developer",
+    "roles": [
+      {
+        "id": "developer",
+        "label": "Developer"
+      },
+      {
+        "id": "lead",
+        "label": "Lead"
+      }
+    ]
+  },
+  "connections": [
+    {
+      "id": "github",
+      "label": "GitHub",
+      "state": "checking",
+      "button": "Check"
+    },
+    {
+      "id": "claude",
+      "label": "Claude",
+      "state": "checking",
+      "button": "Check"
+    },
+    {
+      "id": "sf-dev",
+      "label": "Salesforce DEV org",
+      "state": "checking",
+      "button": "Check"
+    },
+    {
+      "id": "atlassian",
+      "label": "Atlassian",
+      "state": "checking",
+      "button": "Check"
+    },
+    {
+      "id": "coderabbit",
+      "label": "CodeRabbit",
+      "state": "checking",
+      "button": "Check"
+    }
+  ],
+  "missingCount": 0,
+  "repo": "acme-org/acme-salesforce"
+}

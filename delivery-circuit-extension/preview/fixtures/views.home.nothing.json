@@ -1,0 +1,50 @@
+{
+  "mode": "ready",
+  "user": {
+    "login": "demo-user",
+    "role": "lead",
+    "roleLabel": "Lead",
+    "roles": [
+      {
+        "id": "lead",
+        "label": "Lead"
+      }
+    ]
+  },
+  "connections": [
+    {
+      "id": "github",
+      "label": "GitHub",
+      "state": "connected",
+      "button": "Check",
+      "account": "demo-user",
+      "detail": "acme-org/acme-salesforce"
+    },
+    {
+      "id": "atlassian",
+      "label": "Atlassian",
+      "state": "connected",
+      "button": "Check",
+      "account": "claude.ai Atlassian",
+      "detail": "Jira + Confluence through Claude"
+    },
+    {
+      "id": "coderabbit",
+      "label": "CodeRabbit",
+      "state": "error",
+      "button": "Fix",
+      "detail": "The app is suspended on this org."
+    }
+  ],
+  "missingCount": 0,
+  "repo": "acme-org/acme-salesforce",
+  "work": {
+    "next": [],
+    "sprint": {
+      "stories": []
+    },
+    "errors": [],
+    "updatedAt": "2026-11-13T11:58:00.000Z"
+  },
+  "missing": []
+}

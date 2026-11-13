@@ -1,8 +1,7 @@
 /* Delivery Circuit UI kit, design v2 "Quiet Circuit" (design/DESIGN.md). Plain CSS, no framework.
    Three brand colours (primary indigo, secondary teal, tertiary slate), status as 6 px dots or thin text, lists with
    1 px dividers instead of cards, calm motion that collapses to instant changes under prefers-reduced-motion.
-   Component classes are prefixed dc-; the un-prefixed classes at the end keep pages written for the first kit
-   working (quiet versions of .row, .card, .badge, .notice, tables, ...). */
+   Component classes are prefixed dc-. */
 
 /* =====================================================================================================
    1. Tokens (DESIGN.md §2). Declared on body so the derived tokens (soft mixes) follow the theme class VS Code
@@ -256,7 +255,6 @@ body.vscode-high-contrast .dc-row.selected, body.vscode-high-contrast-light .dc-
 .dc-row > .dc-title.mono { font-weight: 400; }
 .dc-row.draft > .dc-title { color: var(--dc-muted); font-weight: 400; }
 .dc-row > .dc-meta-line { grid-area: meta; font-size: var(--dc-meta); color: var(--dc-muted); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-.dc-row > .dc-meta-line:has(.dc-stage) { display: flex; align-items: center; gap: var(--dc-s-3); }
 .dc-row > .dc-strip { grid-area: strip; display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity var(--dc-d-hover) ease; }
 .dc-row:hover > .dc-strip, .dc-row:focus-within > .dc-strip, .dc-item.is-open > .dc-row > .dc-strip, .dc-row > .dc-strip:has(.dc-menu) { opacity: 1; }
 .dc-row > .dc-status { grid-area: status; }
@@ -294,19 +292,6 @@ body.vscode-high-contrast .dc-row.selected, body.vscode-high-contrast-light .dc-
 .dc-links { display: flex; flex-wrap: wrap; gap: var(--dc-s-1) var(--dc-s-4); }
 .dc-links a { display: inline-flex; align-items: center; gap: 6px; color: var(--dc-fg); min-width: 0; }
 .dc-links a > .dc-ext { color: var(--dc-icon); }
-.dc-checks { display: flex; flex-wrap: wrap; gap: var(--dc-s-1) 14px; }
-.dc-checks > span { display: inline-flex; align-items: center; gap: 6px; color: var(--dc-fg); }
-.dc-checks .dc-w { color: var(--dc-muted); }
-.dc-reviews { display: grid; gap: var(--dc-s-1); }
-.dc-reviews > .dc-review { display: grid; grid-template-columns: 16px auto auto minmax(0, 1fr); gap: var(--dc-s-2); align-items: center; color: var(--dc-fg); }
-.dc-reviews > a.dc-review:hover { text-decoration: none; }
-.dc-reviews > a.dc-review:hover .dc-sum { color: var(--dc-fg); }
-.dc-review .dc-st { white-space: nowrap; }
-.dc-review .dc-sum { color: var(--dc-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dc-gates { display: grid; gap: 2px; }
-.dc-gates > div { display: grid; grid-template-columns: 6px 24px minmax(0, 1fr) auto 72px; gap: var(--dc-s-2); align-items: center; color: var(--dc-fg); }
-.dc-gates > div.own { font-weight: 500; }
-.dc-gates > div > .muted { font-weight: 400; white-space: nowrap; }
 .dc-acts { display: flex; flex-wrap: wrap; gap: var(--dc-s-2); align-items: center; }
 .dc-reason { display: flex; align-items: flex-start; gap: 6px; color: var(--dc-muted); font-size: var(--dc-meta); }
 .dc-reason > .dc-ic { margin-top: 3px; }
@@ -412,19 +397,8 @@ body.vscode-high-contrast .dc-menu-item:focus-visible, body.vscode-high-contrast
 .dc-tab-ink { position: absolute; bottom: 0; left: 0; width: 0; height: 2px; background: var(--dc-primary); border-radius: 2px 2px 0 0;
   transition: left var(--dc-d-expand) ease, width var(--dc-d-expand) ease; pointer-events: none; }
 
-.dc-seg { display: inline-flex; border: 1px solid var(--dc-border); border-radius: var(--dc-r-pill); padding: 2px; gap: 2px; vertical-align: middle; }
-.dc-seg > button {
-  border: 0; background: transparent; font: 400 var(--dc-meta)/1 var(--dc-font); color: var(--dc-muted); height: 22px; padding: 0 10px;
-  border-radius: var(--dc-r-pill); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: background var(--dc-d-hover) ease, color var(--dc-d-hover) ease;
-}
-.dc-seg > button:hover { color: var(--dc-fg); }
-.dc-seg > button[aria-checked="true"] { background: var(--dc-primary-soft); color: var(--dc-primary); font-weight: 500; }
-body.vscode-high-contrast .dc-seg > button[aria-checked="true"], body.vscode-high-contrast-light .dc-seg > button[aria-checked="true"] { outline: 1px solid var(--dc-primary); outline-offset: -1px; }
-.dc-seg > button:focus-visible { outline: 2px solid var(--dc-primary); outline-offset: 1px; }
-.dc-seg > button:disabled { opacity: .5; cursor: not-allowed; }
-.dc-seg-l { font-size: var(--dc-meta); color: var(--dc-muted); margin-right: 6px; }
 
-.dc-chip, .badge {
+.dc-chip {
   display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px; border-radius: var(--dc-r-1); max-width: 100%;
   background: var(--dc-chip); border: 1px solid var(--dc-chip-border); color: var(--dc-muted); font: 500 var(--dc-meta)/1 var(--dc-font); white-space: nowrap; vertical-align: 1px;
 }
@@ -433,58 +407,9 @@ body.vscode-high-contrast .dc-seg > button[aria-checked="true"], body.vscode-hig
 .dc-chip.primary { background: var(--dc-primary-soft); color: var(--dc-primary); }
 .dc-chip.secondary { background: var(--dc-secondary-soft); color: var(--dc-secondary); }
 .dc-chip .dc-ic { color: inherit; }
-/* badge (first-kit name): a dot + word in a neutral chip; status colour paints only the dot */
-.badge > .dc-dot { margin-right: 2px; }
 
 /* =====================================================================================================
-   9. Stage line, progress, ring (DESIGN.md §5.5, §5.14)
-   ===================================================================================================== */
-.dc-stage { display: flex; gap: 2px; height: 3px; flex: 1; min-width: 80px; }
-.dc-stage > i { flex: 1; border-radius: 2px; background: var(--dc-border); }
-.dc-stage > i.done { background: var(--dc-secondary); }
-.dc-stage > i.active { background: var(--dc-primary); }
-.dc-stage > i.blocked { background: var(--dc-err); }
-body.vscode-high-contrast .dc-stage > i:not(.done):not(.active):not(.blocked), body.vscode-high-contrast-light .dc-stage > i:not(.done):not(.active):not(.blocked) { background: transparent; box-shadow: inset 0 0 0 1px var(--dc-border); }
-.dc-stage-n { flex: none; color: var(--dc-muted); font-size: var(--dc-meta); }
-.dc-bar { display: flex; height: 4px; border-radius: 2px; background: var(--dc-border); overflow: hidden; }
-.dc-bar > i { display: block; height: 100%; background: var(--dc-secondary); transition: width var(--dc-d-progress) ease; }
-.dc-bar > i.ok, .dc-bar > i.passed { background: var(--dc-ok); }
-.dc-bar > i.err, .dc-bar > i.failed, .dc-bar > i.error { background: var(--dc-err); }
-.dc-bar > i.warn, .dc-bar > i.blocked { background: var(--dc-warn); }
-.dc-bar > i.info { background: var(--dc-info); }
-svg.dc-ring { flex: none; transform: rotate(-90deg); vertical-align: middle; }
-svg.dc-ring circle { fill: none; }
-svg.dc-ring .bg { stroke: var(--dc-border); }
-svg.dc-ring .fg { stroke: var(--dc-secondary); transition: stroke-dashoffset var(--dc-d-progress) ease; }
-svg.dc-ring.ok .fg { stroke: var(--dc-ok); } svg.dc-ring.err .fg { stroke: var(--dc-err); } svg.dc-ring.warn .fg { stroke: var(--dc-warn); }
-
-/* =====================================================================================================
-   10. The one box per page, log (DESIGN.md §5.15)
-   ===================================================================================================== */
-.dc-box { border: 1px solid var(--dc-border-strong); border-radius: var(--dc-r-3); background: var(--dc-surface-1); padding: var(--dc-s-3) var(--dc-s-4); margin-top: var(--dc-s-5); }
-.dc-box-h { display: flex; align-items: center; justify-content: space-between; gap: var(--dc-s-3); }
-.dc-box-h h3 { font-size: var(--dc-size); font-weight: 600; margin: 0; display: flex; align-items: center; gap: var(--dc-s-2); min-width: 0; }
-.dc-box > .dc-bar { margin-top: 10px; }
-.dc-log-wrap { position: relative; }
-pre.dc-log {
-  margin: var(--dc-s-2) 0 0; padding: var(--dc-s-2) 10px; background: var(--dc-surface-1); border: 1px solid var(--dc-border); border-radius: var(--dc-r-2);
-  font: 12px/1.5 var(--dc-mono); color: var(--dc-muted); max-height: 240px; overflow: auto; white-space: pre-wrap; word-break: break-word;
-}
-.dc-box pre.dc-log { background: var(--dc-surface-0); }
-pre.dc-log > .w, pre.dc-log .w { color: var(--dc-icon); }
-pre.dc-log > .case { color: var(--dc-fg); }
-pre.dc-log > .err { color: var(--dc-err); }
-pre.dc-log > .ok { color: var(--dc-ok); }
-pre.dc-log > .tool { color: var(--dc-muted); }
-.dc-jump { position: absolute; right: 8px; bottom: 6px; }
-.dc-log-row { display: flex; align-items: center; gap: var(--dc-s-2); margin-top: 10px; font-size: var(--dc-meta); color: var(--dc-muted); cursor: pointer; border-radius: 2px; }
-.dc-log-row:focus-visible { outline: 1px solid var(--dc-primary); outline-offset: 2px; }
-.dc-log-row > .dc-last { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; font-family: var(--dc-mono); }
-.dc-log-row > .dc-ic { transition: transform var(--dc-d-expand) ease; }
-.dc-log-row[aria-expanded="true"] > .dc-ic { transform: rotate(90deg); }
-
-/* =====================================================================================================
-   11. Toast, skeleton, empty, notice, footer (DESIGN.md §5.11-§5.13)
+   9. Toast, skeleton, empty, notice, footer (DESIGN.md §5.11-§5.13)
    ===================================================================================================== */
 #dc-toasts { position: fixed; right: var(--dc-s-4); bottom: var(--dc-s-4); display: grid; gap: var(--dc-s-2); z-index: 50; max-width: min(360px, calc(100vw - 32px)); }
 .dc-toast {
@@ -520,40 +445,3 @@ body.vscode-high-contrast .dc-sk, body.vscode-high-contrast-light .dc-sk { backg
 .dc-notice.err > .dc-ic { color: var(--dc-err); }
 .dc-notice.ok > .dc-ic { color: var(--dc-ok); }
 .dc-footer { font-size: var(--dc-meta); color: var(--dc-muted); margin-top: var(--dc-s-6); }
-
-/* =====================================================================================================
-   12. First-kit classes (pages not yet rebuilt). Quiet versions: no tints, no rails, dividers not boxes.
-   ===================================================================================================== */
-.row { display: flex; gap: var(--dc-s-2); align-items: center; flex-wrap: wrap; }
-.spread { display: flex; gap: var(--dc-s-2); align-items: center; justify-content: space-between; }
-.stack > * + * { margin-top: var(--dc-s-2); }
-.grid { display: grid; gap: var(--dc-s-3); grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
-.header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--dc-s-3); padding: var(--dc-s-4) 0 var(--dc-s-3); border-bottom: 1px solid var(--dc-border); margin-bottom: var(--dc-s-4); }
-.header .sub { color: var(--dc-muted); font-size: var(--dc-meta); }
-.tabs:not(.dc-tabs) { display: flex; gap: 20px; border-bottom: 1px solid var(--dc-border); margin-bottom: var(--dc-s-4); }
-.tab:not(.dc-tab) { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--dc-muted); padding: var(--dc-s-2) 0; cursor: pointer; font: 500 var(--dc-size)/1.4 var(--dc-font); }
-.tab:not(.dc-tab)[aria-selected="true"] { color: var(--dc-fg); border-bottom-color: var(--dc-primary); }
-.card { border: 1px solid var(--dc-border); border-radius: var(--dc-r-3); padding: var(--dc-s-3) var(--dc-s-4); }
-.card h3 { margin-top: 0; }
-.list:not(.dc-list) { border-top: 1px solid var(--dc-border); }
-.item:not(.dc-item) { padding: 10px 0; border-bottom: 1px solid var(--dc-border); }
-.item .title { font-weight: 500; }
-.empty { padding: var(--dc-s-4) 0; color: var(--dc-muted); }
-.notice:not(.dc-notice) { display: flex; gap: var(--dc-s-2); align-items: flex-start; font-size: var(--dc-meta); color: var(--dc-muted); padding: var(--dc-s-2) 0; }
-.steps { display: inline-flex; gap: 4px 12px; flex-wrap: wrap; font-size: var(--dc-meta); }
-.step { display: inline-flex; align-items: center; gap: 6px; color: var(--dc-muted); }
-.step::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--dc-border-strong); }
-.step.done::before { background: var(--dc-ok); }
-.step.active::before, .step.waiting::before { background: var(--dc-info); }
-.step.blocked::before { background: var(--dc-err); }
-.step.active, .step.waiting { color: var(--dc-fg); }
-.links:not(.dc-links) { display: inline-flex; gap: 2px 12px; flex-wrap: wrap; }
-.links:not(.dc-links) a { display: inline-flex; align-items: center; gap: 6px; font-size: var(--dc-meta); color: var(--dc-fg); }
-.title { font-weight: 500; }
-table { border-collapse: collapse; width: 100%; }
-th, td { text-align: left; padding: var(--dc-s-2) var(--dc-s-2) var(--dc-s-2) 0; border-bottom: 1px solid var(--dc-border); vertical-align: top; }
-th { font-weight: 500; color: var(--dc-muted); font-size: var(--dc-meta); }
-tbody tr { transition: background var(--dc-d-hover) ease; }
-tbody tr:hover { background: var(--dc-hover); }
-details > summary { cursor: pointer; }
-.fade { animation: dc-fade var(--dc-d-enter) ease-out; }

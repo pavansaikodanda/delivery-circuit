@@ -1,9 +1,0 @@
-/* Sources page (Architect) on top of the shared kit. Only layout glue: colours, type and rows come from base.css. */
-.src-compose { display: grid; gap: var(--dc-s-2); max-width: 760px; }
-.src-compose textarea { width: 100%; min-height: 120px; }
-.src-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--dc-s-2) var(--dc-s-3); }
-.src-row .src-title { flex: 1 1 220px; min-width: 180px; }
-.src-check { display: inline-flex; align-items: center; gap: 6px; color: var(--dc-muted); }
-.src-hint { margin: 0; color: var(--dc-muted); font-size: var(--dc-meta); }
-.src-excerpt { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--dc-fg); font-size: var(--dc-meta); max-height: 180px; overflow: auto; }
-.src-more { padding: var(--dc-s-2) 0 0 28px; }

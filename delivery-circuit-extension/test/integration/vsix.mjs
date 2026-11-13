@@ -1,13 +1,12 @@
-// Checks the packaged VSIX: unpacks delivery-circuit.vsix, verifies the files activation needs are inside (bundles,
-// media, plugin, every esbuild external under node_modules), loads each external from the unpacked folder, and then
-// runs the integration suite against the unpacked extension instead of the source folder.
+// Checks the packaged VSIX: unpacks delivery-circuit.vsix, verifies the files activation needs are inside (the one
+// bundle, media) and that removed pages and node_modules are not, then runs the integration suite against it.
 //   npm run package && npm run test:vsix
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createRequire } from "node:module";
-import { fileURLToPath, pathToFileURL } from "node:url";
+
+import { fileURLToPath } from "node:url";
 
 const extRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const vsix = path.resolve(extRoot, process.argv[2] || "delivery-circuit.vsix");
@@ -28,32 +27,20 @@ const mustNot = (rel) => { if (fs.existsSync(path.join(ext, rel))) problems.push
 
 const pkg = JSON.parse(fs.readFileSync(path.join(ext, "package.json"), "utf8"));
 must(pkg.main.replace(/^\.\//, ""));
-must("dist/circuit-mcp.js");
+mustNot("dist/circuit-mcp.js");
 must("media/shared/ui.js");
 must("media/shared/icon.svg");
 must("media/shared/codicons/codicon.css");
 must("media/shared/codicons/codicon.ttf");
 must("media/shared/brands.js");
 must("media/shared/base.css");
-mustNot("media/shared/kit.js");
-for (const m of ["connections", "views", "testing", "setup", "sessions"]) must(`media/${m}`);
-must("plugin/skills/circuit-bootstrap/scripts/install.mjs");
-must("plugin/templates/bootstrap/build-state.md");
-must("plugin/hooks");
-must("plugin/templates/workflows");
+must("media/views/home.js");
+must("media/views/story.js");
+for (const m of ["connections", "testing", "setup", "sessions"]) mustNot(`media/${m}`);
+mustNot("plugin");
+mustNot("node_modules");
 mustNot("src");
 mustNot("test");
-mustNot("node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/claude.exe");
-
-// esbuild externals (build.mjs) must resolve from the unpacked extension, like the extension host loads them.
-const req = createRequire(path.join(ext, "dist", "extension.js"));
-const cjs = ["playwright", "playwright-core", "exceljs", "@playwright/mcp/package.json"];
-for (const m of cjs) { try { req.resolve(m); } catch (e) { problems.push(`cannot resolve ${m}: ${e.code ?? e.message}`); } }
-try {
-  const sdkDir = path.join(ext, "node_modules", "@anthropic-ai", "claude-agent-sdk");
-  const sdk = await import(pathToFileURL(path.join(sdkDir, "sdk.mjs")).href);
-  if (typeof sdk.query !== "function") problems.push("Agent SDK has no query()");
-} catch (e) { problems.push(`Agent SDK does not load: ${e.message}`); }
 
 const count = (dir) => { let n = 0; for (const d of fs.readdirSync(dir, { withFileTypes: true })) n += d.isDirectory() ? count(path.join(dir, d.name)) : 1; return n; };
 console.log(`VSIX ${path.basename(vsix)}: ${(fs.statSync(vsix).size / 1048576).toFixed(1)} MB, ${count(ext)} files`);

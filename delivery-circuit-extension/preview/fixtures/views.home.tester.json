@@ -1,216 +1,182 @@
 {
   "mode": "ready",
-  "waiting": [
-    {
-      "id": "t-g4-43",
-      "kind": "approve-testplan",
-      "title": "Approve test plan: ACME-13 Tier 2 routing",
-      "detail": "docs/plans/ACME-13/TESTPLAN.md",
-      "gate": "G4",
-      "gateLabel": "G4 AI test plan approved",
-      "age": "1 d",
-      "since": "2026-11-10T13:00:00.000Z",
-      "featureId": "ACME-10",
-      "prNumber": 43,
-      "storyKey": "ACME-13",
-      "links": [
-        {
-          "kind": "github",
-          "label": "PR #43",
-          "target": "https://github.com/acme-org/salesDemoOrg/pull/43"
-        },
-        {
-          "kind": "jira",
-          "label": "ACME-13",
-          "target": "https://acme.atlassian.net/browse/ACME-13"
-        }
-      ],
-      "actions": [
-        {
-          "id": "ai:/qa-review-testplan",
-          "label": "AI review test plan",
-          "persona": "tester",
-          "kind": "ai",
-          "args": {
-            "command": "/qa-review-testplan",
-            "argKind": "pr",
-            "arg": 43
-          },
-          "allowed": true
-        },
-        {
-          "id": "gate:label:testplan-approved",
-          "label": "Add testplan-approved",
-          "persona": "tester",
-          "kind": "gate",
-          "args": {
-            "pr": 43
-          },
-          "allowed": true
-        }
-      ]
-    },
-    {
-      "id": "t-tests-43",
-      "kind": "add-tests",
-      "title": "Add tests to ACME-13",
-      "detail": "2 test cases in Jira; the draft PR has no tests/ACME-13.tc.json yet",
-      "age": "1 d",
-      "since": "2026-11-10T14:00:00.000Z",
-      "featureId": "ACME-10",
-      "prNumber": 43,
-      "storyKey": "ACME-13",
-      "links": [
-        {
-          "kind": "github",
-          "label": "PR #43",
-          "target": "https://github.com/acme-org/salesDemoOrg/pull/43"
-        },
-        {
-          "kind": "jira",
-          "label": "ACME-13",
-          "target": "https://acme.atlassian.net/browse/ACME-13"
-        }
-      ],
-      "actions": [
-        {
-          "id": "qa:add-tests",
-          "label": "Add tests to ACME-13",
-          "persona": "tester",
-          "kind": "ai",
-          "args": {
-            "command": "/qa-add-tests",
-            "arg": "ACME-13",
-            "pr": 43,
-            "storyKey": "ACME-13",
-            "suite": "test-cases/ACME-13.sf-tests.yaml",
-            "tcIndex": "tests/ACME-13.tc.json"
-          },
-          "allowed": true
-        }
-      ]
-    },
-    {
-      "id": "t-g2-ACME-16",
-      "kind": "testability",
-      "title": "Confirm testability: ACME-16 Escalation report",
-      "detail": "Set Testability confirmed and label ai-ready in Jira",
-      "gate": "G2",
-      "gateLabel": "G2 Testability confirmed (ai-ready)",
-      "age": "20 h",
-      "since": "2026-11-10T19:00:00.000Z",
-      "featureId": "ACME-10",
-      "storyKey": "ACME-16",
-      "links": [
-        {
-          "kind": "jira",
-          "label": "ACME-16",
-          "target": "https://acme.atlassian.net/browse/ACME-16"
-        }
-      ],
-      "actions": [
-        {
-          "id": "ai:/qa-design-tests",
-          "label": "Design tests",
-          "persona": "tester",
-          "kind": "ai",
-          "args": {
-            "command": "/qa-design-tests",
-            "argKind": "feature",
-            "arg": "ACME-10"
-          },
-          "allowed": true
-        }
-      ]
-    },
-    {
-      "id": "t-g6-42",
-      "kind": "qa-pr",
-      "title": "QA on sandbox: ACME-12 Agent escalates a Case",
-      "detail": "SF AI Tester: 3/3 passed in CI",
-      "gate": "G6",
-      "gateLabel": "G6 QA on sandbox",
-      "age": "5 h",
-      "since": "2026-11-11T10:00:00.000Z",
-      "featureId": "ACME-10",
-      "prNumber": 42,
-      "storyKey": "ACME-12",
-      "links": [
-        {
-          "kind": "github",
-          "label": "PR #42",
-          "target": "https://github.com/acme-org/salesDemoOrg/pull/42"
-        },
-        {
-          "kind": "jira",
-          "label": "ACME-12",
-          "target": "https://acme.atlassian.net/browse/ACME-12"
-        }
-      ],
-      "actions": [
-        {
-          "id": "ai:/qa-explore",
-          "label": "Explore on QA",
-          "persona": "tester",
-          "kind": "ai",
-          "args": {
-            "command": "/qa-explore",
-            "argKind": "pr",
-            "arg": 42
-          },
-          "allowed": true
-        },
-        {
-          "id": "gate:review",
-          "label": "Approve (G6)",
-          "persona": "tester",
-          "kind": "gate",
-          "args": {
-            "pr": 42
-          },
-          "allowed": true
-        }
-      ]
-    }
-  ],
-  "waitingTotal": 4,
-  "notices": [],
-  "nav": [
-    {
-      "target": "persona:tester",
-      "label": "Tester view"
-    },
-    {
-      "target": "testing",
-      "label": "Testing"
-    },
-    {
-      "target": "connections",
-      "label": "Connections",
-      "count": 1,
-      "cls": "warn",
-      "detail": "1 needs attention"
-    }
-  ],
-  "setupNeeded": false,
-  "teams": {
-    "architect": "architects",
-    "developer": "developers",
-    "tester": "testers"
+  "user": {
+    "login": "demo-user",
+    "role": "tester",
+    "roleLabel": "QA",
+    "roles": [
+      {
+        "id": "tester",
+        "label": "QA"
+      }
+    ]
   },
-  "attention": 1,
-  "updated": "2026-11-11T15:00:00.000Z",
-  "identity": {
-    "login": "tess-qa",
-    "active": "tester",
-    "activeLabel": "Tester",
-    "personas": [
-      "tester"
+  "connections": [
+    {
+      "id": "github",
+      "label": "GitHub",
+      "state": "connected",
+      "button": "Check",
+      "account": "demo-user",
+      "detail": "acme-org/acme-salesforce"
+    },
+    {
+      "id": "claude",
+      "label": "Claude",
+      "state": "connected",
+      "button": "Check",
+      "account": "demo.user@example.com",
+      "detail": "Max plan"
+    },
+    {
+      "id": "sf-qa",
+      "label": "Salesforce QA org",
+      "state": "disconnected",
+      "button": "Connect",
+      "detail": "No org with alias \"qa\"."
+    },
+    {
+      "id": "atlassian",
+      "label": "Atlassian",
+      "state": "connected",
+      "button": "Check",
+      "account": "claude.ai Atlassian",
+      "detail": "Jira + Confluence through Claude"
+    }
+  ],
+  "missingCount": 13,
+  "repo": "acme-org/acme-salesforce",
+  "work": {
+    "next": [
+      {
+        "id": "qa:ABC-11",
+        "title": "Test ABC-11 in QA",
+        "detail": "Foundation",
+        "button": "Test"
+      }
     ],
-    "canSwitch": false,
-    "owner": "acme-org",
-    "repo": "salesDemoOrg",
-    "orgOwned": true,
-    "isAdmin": false
-  }
+    "sprint": {
+      "name": "sprint/2026-11",
+      "stories": [
+        {
+          "key": "ABC-11",
+          "title": "Foundation",
+          "status": "qa",
+          "statusLabel": "QA"
+        },
+        {
+          "key": "ABC-12",
+          "title": "Agent escalates a Case",
+          "status": "in-pr",
+          "statusLabel": "In PR"
+        },
+        {
+          "key": "ABC-13",
+          "title": "Escalation queue",
+          "status": "in-pr",
+          "statusLabel": "In PR"
+        },
+        {
+          "key": "ABC-14",
+          "title": "Escalation report",
+          "status": "ready",
+          "statusLabel": "Ready"
+        },
+        {
+          "key": "ABC-15",
+          "title": "Escalation email",
+          "status": "design",
+          "statusLabel": "Design"
+        }
+      ]
+    },
+    "errors": [],
+    "updatedAt": "2026-11-13T11:58:00.000Z"
+  },
+  "missing": [
+    {
+      "id": "conn:sf-qa",
+      "title": "Connect Salesforce QA org",
+      "detail": "No org with alias \"qa\".",
+      "button": "Connect",
+      "group": "connections"
+    },
+    {
+      "id": "repo:bootstrap",
+      "title": "Set up the repo",
+      "detail": "Runs /circuit-bootstrap",
+      "button": "Set up",
+      "group": "repo"
+    },
+    {
+      "id": "repo:branch:uat",
+      "title": "Branch uat is missing",
+      "button": "Open",
+      "group": "repo"
+    },
+    {
+      "id": "repo:secret:sit",
+      "title": "sit: no SFDX_AUTH_URL secret",
+      "detail": "Checked by name only",
+      "button": "Open",
+      "group": "repo"
+    },
+    {
+      "id": "repo:env:uat",
+      "title": "Environment uat is missing",
+      "button": "Open",
+      "group": "repo"
+    },
+    {
+      "id": "repo:automerge",
+      "title": "Auto-merge is off",
+      "detail": "Allow auto-merge in the repo settings",
+      "button": "Open",
+      "group": "repo"
+    },
+    {
+      "id": "ac:ABC-13",
+      "title": "ABC-13: no acceptance criteria",
+      "button": "Open",
+      "group": "stories"
+    },
+    {
+      "id": "ac:ABC-14",
+      "title": "ABC-14: no acceptance criteria",
+      "button": "Open",
+      "group": "stories"
+    },
+    {
+      "id": "ac:ABC-15",
+      "title": "ABC-15: no acceptance criteria",
+      "button": "Open",
+      "group": "stories"
+    },
+    {
+      "id": "scan:41",
+      "title": "ABC-12: scan failing",
+      "button": "Open",
+      "group": "stories"
+    },
+    {
+      "id": "rabbit:41",
+      "title": "ABC-12: CodeRabbit asked for changes",
+      "button": "Open",
+      "group": "stories"
+    },
+    {
+      "id": "wait:41",
+      "title": "PR #41 waits for a review",
+      "detail": "3 d without an approval",
+      "button": "Open",
+      "group": "stories"
+    },
+    {
+      "id": "nokey:43",
+      "title": "PR #43 has no Jira key",
+      "detail": "Name the branch feature/<KEY>-<slug>",
+      "button": "Open",
+      "group": "stories"
+    }
+  ]
 }

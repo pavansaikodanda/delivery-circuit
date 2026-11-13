@@ -1,6 +1,4 @@
-// Locating Claude Code. No vscode import: used by sessions (terminal + panel), setup checks and the testing engine.
-import * as fs from "fs";
-import { createRequire } from "module";
+// Locating Claude Code. No vscode import: used by sessions (terminal) and the read-only design-page reader.
 import * as path from "path";
 
 export interface ClaudeExecutable {
@@ -53,52 +51,3 @@ export function parseCmdShim(content: string, dir: string): { exe?: string; scri
   return /\.exe$/i.test(p) ? { exe: p } : { script: p };
 }
 
-
-const realFs: FsProbe = { exists: (p) => { try { return fs.statSync(p).isFile(); } catch { return false; } }, read: (p) => fs.readFileSync(p, "utf8") };
-
-/** True when the Agent SDK's own platform package (with its bundled Claude Code binary) is installed next to it. */
-export function bundledClaudeAvailable(platform = process.platform, arch = process.arch): boolean {
-  const names = platform === "linux"
-    ? [`@anthropic-ai/claude-agent-sdk-linux-${arch}`, `@anthropic-ai/claude-agent-sdk-linux-${arch}-musl`]
-    : [`@anthropic-ai/claude-agent-sdk-${platform}-${arch}`];
-  const req = createRequire(typeof __filename === "string" ? __filename : path.join(process.cwd(), "index.js"));
-  return names.some((n) => { try { req.resolve(`${n}/package.json`); return true; } catch { return false; } });
-}
-
-let cachedExe: string | null | undefined;
-
-/**
- * Executable for Agent SDK sessions. undefined = let the SDK use its bundled binary. The packaged VSIX leaves the
- * 300 MB platform binary out, so sessions then run the person's installed Claude Code (native claude.exe / claude,
- * or an npm install's cli.js). Returns undefined too when nothing usable is found; the SDK then explains.
- */
-export function sdkClaudeExecutable(): string | undefined {
-  if (cachedExe !== undefined) return cachedExe ?? undefined;
-  cachedExe = null;
-  if (bundledClaudeAvailable()) return undefined;
-  const exe = resolveClaude(process.env.PATH ?? process.env.Path ?? "", process.platform, realFs);
-  if (exe.viaCmdShim) return undefined;
-  const target = exe.prefixArgs[0] ?? exe.shellPath;
-  if (path.isAbsolute(target) && realFs.exists(target)) cachedExe = target;
-  return cachedExe ?? undefined;
-}
-
-type AgentSdk = typeof import("@anthropic-ai/claude-agent-sdk", { with: { "resolution-mode": "import" } });
-
-/**
- * Loads the ESM-only Agent SDK lazily (the extension bundle is CommonJS) and fills in pathToClaudeCodeExecutable
- * when the SDK's bundled binary is not installed. Use this instead of import("@anthropic-ai/claude-agent-sdk").
- */
-export async function loadAgentSdk(): Promise<AgentSdk> {
-  const sdk = await import("@anthropic-ai/claude-agent-sdk");
-  const withExe = <T extends { options?: any }>(params: T): T => {
-    const exe = sdkClaudeExecutable();
-    if (!exe || params?.options?.pathToClaudeCodeExecutable) return params;
-    return { ...params, options: { ...(params.options ?? {}), pathToClaudeCodeExecutable: exe } };
-  };
-  return {
-    ...sdk,
-    query: ((params: any) => sdk.query(withExe(params))) as AgentSdk["query"],
-    startup: ((params: any) => sdk.startup(withExe(params))) as AgentSdk["startup"],
-  };
-}

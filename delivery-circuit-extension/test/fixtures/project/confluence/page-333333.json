@@ -1,6 +1,0 @@
-{
-  "type": "result",
-  "subtype": "success",
-  "is_error": false,
-  "result": "```json\n{\"id\":\"333333\",\"title\":\"Design: Returns portal\",\"url\":\"https://acme.atlassian.net/wiki/spaces/SD/pages/333333/Returns+portal\",\"status\":\"Rough draft\",\"version\":1,\"versions\":[],\"sections\":[],\"openQuestions\":0}\n```"
-}

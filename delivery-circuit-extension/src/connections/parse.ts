@@ -55,18 +55,6 @@ export function parseSfOrgDisplay(stdout: string): SfOrgResult {
   return { ok, org, error: ok ? undefined : cs };
 }
 
-export interface SfPlugin { name: string; version?: string }
-export function parseSfPlugins(stdout: string): SfPlugin[] {
-  try {
-    const j = JSON.parse(stdout.slice(Math.max(0, stdout.indexOf("["))));
-    const arr = Array.isArray(j) ? j : Array.isArray(j?.result) ? j.result : [];
-    return arr.filter((p: any) => p && typeof p.name === "string").map((p: any) => ({ name: p.name, version: str(p.version) }));
-  } catch { return []; }
-}
-export function findCodeAnalyzer(plugins: SfPlugin[]): SfPlugin | undefined {
-  return plugins.find((p) => p.name === "@salesforce/plugin-code-analyzer") ?? plugins.find((p) => p.name === "@salesforce/sfdx-scanner");
-}
-
 export type McpListState = "connected" | "needs-auth" | "failed" | "not-configured" | "pending" | "unknown";
 export interface McpListEntry { name: string; target: string; transport?: string; state: McpListState; reason?: string }
 
@@ -107,22 +95,18 @@ export function parseMcpConfigs(texts: string[]): McpServerEntry[] {
   return [...map.values()];
 }
 
-export type McpRowId = "mcp-atlassian" | "mcp-github" | "mcp-salesforce" | "mcp-slack" | "mcp-lucid" | "mcp-fireflies";
+export type McpRowId = "atlassian" | "lucid" | "fireflies";
 
-/** Documented server URLs (see docs facts); used to spot the right entry and to fill placeholders. */
-export const MCP_KNOWN: Record<McpRowId, { names: string[]; hosts: string[]; url?: string; stdioPackage?: string }> = {
-  "mcp-atlassian": { names: ["atlassian", "jira", "confluence"], hosts: ["mcp.atlassian.com"], url: "https://mcp.atlassian.com/v2/mcp" },
-  "mcp-github": { names: ["github"], hosts: ["api.githubcopilot.com"], url: "https://api.githubcopilot.com/mcp/" },
-  "mcp-salesforce": { names: ["salesforce", "sf"], hosts: [], stdioPackage: "@salesforce/mcp" },
-  "mcp-slack": { names: ["slack"], hosts: ["mcp.slack.com"], url: "https://mcp.slack.com/mcp" },
-  "mcp-lucid": { names: ["lucid", "lucidchart"], hosts: ["mcp.lucid.app"], url: "https://mcp.lucid.app/mcp" },
-  "mcp-fireflies": { names: ["fireflies"], hosts: ["api.fireflies.ai"], url: "https://api.fireflies.ai/mcp" },
+/** Documented remote MCP servers of the rows that sign in through Claude (/mcp or a claude.ai connector). */
+export const MCP_KNOWN: Record<McpRowId, { names: string[]; hosts: string[]; url: string }> = {
+  atlassian: { names: ["atlassian", "jira", "confluence"], hosts: ["mcp.atlassian.com"], url: "https://mcp.atlassian.com/v2/mcp" },
+  lucid: { names: ["lucid", "lucidchart"], hosts: ["mcp.lucid.app"], url: "https://mcp.lucid.app/mcp" },
+  fireflies: { names: ["fireflies"], hosts: ["api.fireflies.ai"], url: "https://api.fireflies.ai/mcp" },
 };
 
 export function findServerFor(id: McpRowId, servers: McpServerEntry[]): McpServerEntry | undefined {
   const k = MCP_KNOWN[id];
   return servers.find((s) => s.url && k.hosts.includes(hostOf(s.url) ?? ""))
-    ?? servers.find((s) => s.type === "stdio" && k.stdioPackage && (s.args ?? []).some((a) => a === k.stdioPackage || a.startsWith(k.stdioPackage + "@")))
     ?? servers.find((s) => k.names.includes(s.name.toLowerCase()));
 }
 
@@ -141,18 +125,6 @@ export function mcpListStateFor(id: McpRowId, entry: McpServerEntry | undefined,
 export function hostOf(url: string): string | undefined {
   try { return new URL(url).hostname.toLowerCase(); } catch { return undefined; }
 }
-
-/** Playwright's browsers.json -> revisions the bundled Playwright needs for Chrome for Testing + headless shell. */
-export function requiredBrowsers(browsersJson: string): { name: string; revision: string; title?: string }[] {
-  try {
-    const j = JSON.parse(browsersJson);
-    return (j.browsers ?? []).filter((b: any) => b.name === "chromium" || b.name === "chromium-headless-shell")
-      .map((b: any) => ({ name: String(b.name), revision: String(b.revision), title: str(b.title) }));
-  } catch { return []; }
-}
-
-/** Folder name Playwright installs a browser revision into, e.g. chromium-1246, chromium_headless_shell-1246. */
-export function browserDir(name: string, revision: string): string { return `${name.replace(/-/g, "_")}-${revision}`; }
 
 function str(v: unknown): string | undefined { return typeof v === "string" && v ? v : undefined; }
 
@@ -182,74 +154,11 @@ export function parseAcliAuthStatus(r: { code: number; stdout: string; stderr: s
   return { state: r.code === 0 ? "unknown" : "logged-out", site, email, note: firstLine(all) || `exit code ${r.code}` };
 }
 
-export interface InstallHelp { platform: NodeJS.Platform; guide: string; commands: string[][]; text: string }
-
-/** How to install acli on this platform (developer.atlassian.com/cloud/acli/guides/install-acli). */
-export function acliInstallHelp(platform: NodeJS.Platform, arch: string = "x64"): InstallHelp {
-  const a = arch === "arm64" ? "arm64" : "amd64";
-  if (platform === "darwin") {
-    return { platform, guide: "https://developer.atlassian.com/cloud/acli/guides/install-macos/",
-      commands: [["brew", "tap", "atlassian/homebrew-acli"], ["brew", "install", "acli"]],
-      text: "Install with Homebrew: brew tap atlassian/homebrew-acli, then brew install acli." };
-  }
-  if (platform === "win32") {
-    return { platform, guide: "https://developer.atlassian.com/cloud/acli/guides/install-windows/", commands: [],
-      text: `Download acli.exe from https://acli.atlassian.com/windows/latest/acli_windows_${a}/acli.exe into a folder on your PATH, then check it with acli --help.` };
-  }
-  return { platform, guide: "https://developer.atlassian.com/cloud/acli/guides/install-linux/", commands: [],
-    text: "Install from Atlassian's apt or yum repository (acli.atlassian.com/linux), or download the acli binary into a folder on your PATH." };
-}
-
-// ---------- GitHub: self-hosted runners, app installations, rulesets, environments ----------
-export const RUNNER_LABELS = ["circuit", "circuit-release"] as const;
-
-/** How to register the runners. Always two runners, on separate machines or service users: the PR runner
- *  (circuit) runs PR-branch code and must never hold the production sf login that the release runner
- *  (circuit-release, deploy-prod only) has. Never suggest one runner with both labels. */
-export const RUNNER_REGISTER_HINT =
-  ". Register two runners on separate machines or service users: ./config.sh --labels circuit for PR checks, and " +
-  "--labels circuit-release only on the release runner (Add runner opens the page with the commands)";
-export const RUNNER_CONNECT_MESSAGE =
-  "Register two runners, on separate machines or service users. PR-check runner (sf DEV/QA, claude and acli logins): " +
-  "at ./config.sh add --labels circuit. Release runner (deploy-prod only, the production sf login): --labels circuit-release. " +
-  "Never give one runner both labels: PR code must not run where the production login is. Run each as a service; " +
-  "the Setup wizard (step B2) has the exact commands. The row updates when they are online.";
-
-export interface RunnerInfo { id: number; name: string; os?: string; status: string; busy: boolean; labels: string[] }
-
-/** GET /repos/{o}/{r}/actions/runners -> runners (labels lower-cased; GitHub treats them case-insensitively). */
-export function parseRunners(json: unknown): RunnerInfo[] {
-  const list = (json as any)?.runners;
-  if (!Array.isArray(list)) return [];
-  return list.filter((r: any) => r && typeof r.name === "string").map((r: any) => ({
-    id: Number(r.id) || 0, name: r.name, os: str(r.os), status: String(r.status ?? "unknown").toLowerCase(), busy: !!r.busy,
-    labels: (Array.isArray(r.labels) ? r.labels : []).map((l: any) => String(l?.name ?? l ?? "").toLowerCase()).filter(Boolean),
-  }));
-}
-
-export interface RunnerLabelSummary { label: string; total: number; online: number; busy: number; names: string[] }
-export interface RunnerSummary { perLabel: RunnerLabelSummary[]; state: "connected" | "disconnected" | "error"; detail: string }
-
-/** Per label (self-hosted + label): how many runners, online, busy. connected = every label has an online runner;
- *  error = a label has runners but none online; disconnected = a label has no runner at all. */
-export function summarizeRunners(runners: RunnerInfo[], labels: readonly string[] = RUNNER_LABELS): RunnerSummary {
-  const perLabel = labels.map((label) => {
-    const l = label.toLowerCase();
-    const mine = runners.filter((r) => r.labels.includes("self-hosted") && r.labels.includes(l));
-    const online = mine.filter((r) => r.status === "online");
-    return { label, total: mine.length, online: online.length, busy: online.filter((r) => r.busy).length, names: mine.map((r) => r.name) };
-  });
-  const offline = perLabel.some((p) => p.total > 0 && p.online === 0);
-  const none = perLabel.some((p) => p.total === 0);
-  const detail = perLabel.map((p) => `${p.label}: ${p.total === 0 ? "none registered" : p.online === 0 ? `${p.total} offline`
-    : `${p.online} online${p.busy ? ` (${p.busy} busy)` : " (idle)"}${p.total > p.online ? `, ${p.total - p.online} offline` : ""}`}`).join(" · ");
-  return { perLabel, state: offline ? "error" : none ? "disconnected" : "connected", detail };
-}
-
+// ---------- GitHub apps ----------
 export interface AppInstall { id: number; slug: string; selection: "all" | "selected"; url?: string; suspended: boolean }
 
-/** GitHub App slugs. GitHub for Atlassian lives at github.com/apps/jira; the others are older names (unverified). */
-export const APP_SLUGS = { githubForJira: ["jira", "github-for-jira", "github-for-atlassian", "jira-cloud"], coderabbit: ["coderabbitai"] };
+/** GitHub App slug of CodeRabbit. */
+export const CODERABBIT_SLUGS = ["coderabbitai"];
 
 /** GET /orgs/{org}/installations -> the first installation of one of the slugs. */
 export function findInstallation(json: unknown, slugs: string[]): AppInstall | undefined {
@@ -259,28 +168,6 @@ export function findInstallation(json: unknown, slugs: string[]): AppInstall | u
   if (!i) return undefined;
   return { id: Number(i.id) || 0, slug: String(i.app_slug), selection: i.repository_selection === "all" ? "all" : "selected",
     url: str(i.html_url), suspended: !!i.suspended_at };
-}
-
-export interface RulesetInfo { id: number; name: string; target: string; enforcement: string }
-/** GET /repos/{o}/{r}/rulesets */
-export function parseRulesets(json: unknown): RulesetInfo[] {
-  if (!Array.isArray(json)) return [];
-  return json.filter((r: any) => r && typeof r.name === "string").map((r: any) => ({
-    id: Number(r.id) || 0, name: r.name, target: String(r.target ?? "branch"), enforcement: String(r.enforcement ?? "disabled") }));
-}
-
-export interface EnvironmentInfo { name: string; reviewers: string[]; waitMinutes?: number; branchPolicy: boolean }
-/** GET /repos/{o}/{r}/environments -> name, required reviewers (team slugs / logins), wait timer, branch policy. */
-export function parseEnvironments(json: unknown): EnvironmentInfo[] {
-  const list = (json as any)?.environments;
-  if (!Array.isArray(list)) return [];
-  return list.filter((e: any) => e && typeof e.name === "string").map((e: any) => {
-    const rules: any[] = Array.isArray(e.protection_rules) ? e.protection_rules : [];
-    const reviewers = rules.filter((r) => r?.type === "required_reviewers").flatMap((r) => (Array.isArray(r.reviewers) ? r.reviewers : []))
-      .map((x: any) => (x?.type === "Team" ? `team ${x?.reviewer?.slug ?? x?.reviewer?.name ?? "?"}` : String(x?.reviewer?.login ?? "?")));
-    const wait = rules.find((r) => r?.type === "wait_timer")?.wait_timer;
-    return { name: e.name, reviewers, waitMinutes: typeof wait === "number" && wait > 0 ? wait : undefined, branchPolicy: !!e.deployment_branch_policy };
-  });
 }
 
 function firstLine(s: string): string { return (s.split(/\r?\n/).map((l) => l.trim()).find(Boolean) ?? "").slice(0, 200); }

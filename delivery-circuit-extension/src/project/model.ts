@@ -1,8 +1,6 @@
 // Internal types of the project module (no vscode import). Public shapes live in core/contracts.ts.
-// v3: features come from Jira epics and their Confluence design pages; nothing is read from .specify/specs.
-import type { Feature, PrRef, Story, TestCaseRef } from "../core/contracts";
 
-// ---------- Jira (normalised from `acli jira workitem ... --json`) ----------
+// ---------- Jira (normalised from `acli jira workitem ... --json` or the Atlassian MCP reader) ----------
 
 /** One Jira link of an issue, seen from that issue. */
 export interface JiraLink {
@@ -10,7 +8,6 @@ export interface JiraLink {
   type: string;
   /** "inward" = the other issue points at this one (e.g. "is blocked by"), "outward" = this one points at the other */
   direction: "inward" | "outward";
-  /** the link phrase seen from this issue ("is blocked by", "blocks", "is tested by") */
   phrase: string;
   key: string;
   summary?: string;
@@ -32,16 +29,14 @@ export interface JiraIssue {
   updated?: string;
   created?: string;
   links: JiraLink[];
-  /** Every field the CLI returned (custom fields included), raw, for the configured field ids. */
+  /** Every field the reader returned (custom fields included), raw, for the configured field ids. */
   fields: Record<string, unknown>;
 }
 
-/** Jira custom fields of the circuit. Ids come from build.config.yml `jira.fields`, names are matched otherwise. */
+/** Jira custom fields of the circuit. Ids come from build.config.yml `jira.fields`; names are matched otherwise. */
 export interface JiraFieldMap {
   designPage?: string;
-  approvedDesignVersion?: string;
   acceptanceCriteria?: string;
-  testabilityConfirmed?: string;
 }
 
 /** The project's circuit settings read from build.config.yml (no secrets there). */
@@ -51,168 +46,113 @@ export interface CircuitConfig {
   projectKey?: string;
   spaceKey?: string;
   fields: JiraFieldMap;
-  /** Atlassian emails / account ids / display names of the architects (G1 approver check). Empty = cannot verify. */
-  architects: string[];
-  /** ai.max_attempts (Fix with AI cap) */
-  maxAttempts: number;
+  /** jira.ready_status: the status people set at refinement (default "Ready for Dev") */
+  readyStatus: string;
+  /** environments: branch pattern -> GitHub Environment (section 3) */
+  environments: { branch: string; environment: string }[];
 }
 
-// ---------- Confluence design page (read through the Atlassian MCP by a read-only Claude call) ----------
+// ---------- Confluence design pages (one read-only listing per space) ----------
 
-export interface PageVersion {
-  number: number;
-  /** author: email, account id or display name, whatever the reader returned */
-  by?: string;
-  at?: string;
-  message?: string;
-}
-
-export interface Decision {
-  date?: string;
-  decision: string;
-  who?: string;
-  why?: string;
-  source?: string;
-}
-
-export interface OrgSnapshot {
-  pageId?: string;
-  url?: string;
-  title?: string;
-  version?: number;
-  objects: string[];
-  fields: string[];
-  flows: string[];
-  permissionSets: string[];
-  other?: string[];
-}
-
-/** What the reader returns for one design page (all optional except id: pages may be partially readable). */
 export interface DesignPage {
   id: string;
-  title?: string;
+  title: string;
   url?: string;
-  spaceKey?: string;
   /** Confluence content status, e.g. "Approved", "Rough draft", "In progress", "Ready for review" */
   status?: string;
-  /** current page version number */
-  version?: number;
-  /** recent versions, newest first */
-  versions: PageVersion[];
-  /** who set the current content status, when, and at which page version (the status-change record; version messages
-   *  are free text any editor can write, so they never count as approval) */
-  statusChange?: { by?: string; at?: string; version?: number };
-  /** headings on the page (to tell spec, plan and data model apart) */
-  sections: string[];
+  /** unanswered rows of "Open questions" */
   openQuestions: number;
-  decisions: Decision[];
-  /** source ids cited on the page (fireflies:<id>, upload:<id>) */
-  sources: string[];
-  orgSnapshot?: OrgSnapshot;
-  /** ISO time this was read */
-  readAt: string;
-  /** set when the page could not be read */
-  error?: string;
+  /** feature slug from the label feature-<slug> */
+  slug?: string;
+  /** Lucid diagram link on the page */
+  diagramUrl?: string;
 }
 
-export type DesignState = "approved" | "changed" | "draft" | "unverified-approver" | "missing" | "unknown";
-
-/** G1 evaluation of a design page. */
-export interface DesignApproval {
-  state: DesignState;
-  /** the version that the Approved status refers to */
-  approvedVersion?: number;
-  /** where approvedVersion came from: the epic's architects-only Jira field, the page's status-change record, or
-   *  neither (then the current version is assumed and nothing can be said about drift) */
-  approvedVersionSource?: "jira-epic" | "status-change" | "current";
-  approvedBy?: string;
-  /** true = approver is a configured architect; false = not one; undefined = cannot tell (no architects configured) */
-  approverIsArchitect?: boolean;
-  /** current version is newer than the approved one */
-  changedSinceApproval: boolean;
-  /** one line for the UI */
-  detail: string;
-}
-
-/** C5: the story's Approved design version compared with the page's current approved version. */
-export type DesignSync = "ok" | "changed" | "missing" | "ahead" | "unknown";
-
-// ---------- features ----------
-
-export interface StoryInfo extends Story {
-  status?: string;
-  statusCategory?: string;
-  labels: string[];
-  acceptanceCriteria?: string;
-  approvedDesignVersion?: number;
-  testabilityConfirmed?: boolean;
-  /** C5 against the feature's design page */
-  designSync: DesignSync;
-  /** keys of issues that block this story (Jira "is blocked by") */
-  blockedBy: string[];
-  url?: string;
-}
-
-/** A Feature (contract shape) with the v3 facts. Structurally a Feature, so it can be served as one. */
-export interface FeatureInfo extends Feature {
-  /** the Jira epic; absent while the feature is only a design page */
-  epicKey?: string;
-  stories: StoryInfo[];
-  design?: {
-    pageId: string;
-    url?: string;
-    title?: string;
-    status?: string;
-    version?: number;
-    approval: DesignApproval;
-    orgSnapshotUrl?: string;
-    readAt?: string;
-    error?: string;
-  };
-}
-
-/** Raw inputs of one feature before gates and stages are computed. A feature is an epic with its design page, or a
- *  design page (label circuit-design) that has no epic yet (steps 2-4 come before the epic exists). */
-export interface FeatureSource {
+/** A feature: a Jira epic with its design page, or a design page without an epic yet. */
+export interface Feature {
+  /** epic key, or "page-<id>" for a design page without an epic */
+  id: string;
+  title: string;
+  slug?: string;
   epic?: JiraIssue;
-  stories: JiraIssue[];
-  /** test-case issues linked to the stories */
-  tests: JiraIssue[];
-  pageId?: string;
   page?: DesignPage;
-  /** title/url of a page-only feature, from the design-page listing */
-  pageListing?: DesignPageListing;
 }
 
-/** One design page found by the Confluence listing (label circuit-design in the project's space). */
-export interface DesignPageListing { id: string; title: string; url?: string; status?: string; version?: number }
+// ---------- GitHub ----------
 
-/** A PR with the fields gates need. prs() returns these (structurally PrRef). */
-export interface PrInfo extends PrRef {
+export type CheckState = "success" | "failure" | "pending" | "missing";
+
+export interface PrInfo {
+  number: number;
+  url: string;
+  title: string;
+  author: string;
+  head: string;
+  base: string;
+  draft: boolean;
   state: "open" | "merged" | "closed";
+  createdAt: string;
+  updatedAt: string;
   mergedAt?: string;
-  headSha: string;
-  /** paths changed by the PR (first 100), to tell whether the Tester's suite is on it */
-  files?: string[];
+  mergeSha?: string;
+  /** Jira key from feature/<KEY>-... or a title that starts with the key */
+  storyKey?: string;
+  /** the required `scan` check */
+  scan: CheckState;
+  scanUrl?: string;
+  /** CodeRabbit's latest review */
+  coderabbit: "approved" | "changes" | "pending";
+  /** people (not bots) whose latest review approves */
+  approvedBy: string[];
+  /** people (not bots) whose latest review requests changes */
+  changesBy: string[];
+  autoMerge: boolean;
 }
 
 export interface DeployRun {
   id: number;
-  /** GitHub run status: queued | in_progress | waiting | completed | ... */
+  branch: string;
+  /** queued | in_progress | waiting | completed | ... */
   status: string;
   conclusion: string | null;
   url: string;
   createdAt: string;
-  headSha: string;
-}
-
-export interface DeployInfo {
-  runs: DeployRun[];
-  /** commit date of the prod-deployed tag */
-  prodDeployedAt?: string;
-  prodDeployedSha?: string;
 }
 
 export interface RepoRef { owner: string; repo: string }
 
-export type { TestCaseRef };
+/** Repo setup facts for the Missing tab (names only; a secret value is never read). undefined = could not tell. */
+export interface RepoSetup {
+  /** environment branch -> exists */
+  branches: Record<string, boolean>;
+  /** at least one sprint/* branch */
+  sprintBranch?: string;
+  /** GitHub Environment -> exists, and whether it has a secret named SFDX_AUTH_URL */
+  environments: Record<string, { exists: boolean; authUrl?: boolean }>;
+  /** branch -> covered by an active ruleset */
+  rulesets?: Record<string, boolean>;
+  autoMerge?: boolean;
+}
+
+/** Everything the work model reads, gathered by the service. */
+export interface WorkData {
+  repo?: RepoRef;
+  readyStatus: string;
+  features: Feature[];
+  /** stories of the current sprint (Jira open sprint, else the stories of open epics) */
+  stories: JiraIssue[];
+  /** test-case issues linked to those stories */
+  tests: JiraIssue[];
+  prs: PrInfo[];
+  deploys: DeployRun[];
+  /** current sprint branch (newest sprint/*) */
+  sprint?: string;
+  /** commits the sprint branch has that dev does not */
+  sprintAhead?: number;
+  setup?: RepoSetup;
+  fields: JiraFieldMap;
+  site?: string;
+  /** whether design pages were read (else "no approved design" cannot be told) */
+  designsRead: boolean;
+  errors: string[];
+}

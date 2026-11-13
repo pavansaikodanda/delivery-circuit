@@ -40,15 +40,9 @@ export function checkLoginUrl(url: string | undefined, _declaredTrial?: boolean)
     : { allowed: true, url: target };
 }
 
-// ---------- the org the project names as production (CIRCUIT-V3 principle 4) ----------
+// ---------- the org the project names as production (AI never works there) ----------
 /** The fixed production names the guard (circuit-guard.mjs) also protects. */
 export const FIXED_PROD_ALIASES = ["prod", "production", "live", "prd"];
-
-/** The prod alias in .specify/extensions/sf/sf-config.yml (`prod: "client-live"`), the same line the guard reads. */
-export function sfConfigProdAlias(text: string | undefined): string | undefined {
-  const m = /^\s*prod:\s*["']?([^"'\s#]+)/m.exec(text ?? "");
-  return m && m[1].toLowerCase() !== "none" ? m[1] : undefined;
-}
 
 /** Aliases the project names as production: the fixed names, CIRCUIT_PROD_ALIASES and the configured prod aliases. */
 export function namedProdAliases(configured: Array<string | undefined> = [], env: string | undefined = process.env.CIRCUIT_PROD_ALIASES): Set<string> {
@@ -63,20 +57,6 @@ export function isNamedProduction(alias: string | undefined, prod: Set<string> =
   return !!alias && (prod.has(alias.toLowerCase()) || /(^|[-_.])(prod|production|live)([-_.]|$)/i.test(alias));
 }
 
-/**
- * Whether AI (the SF AI Tester browser agent, org exploration) may work in the org an alias resolves to: yes when the
- * alias resolves to a connected Salesforce org, whatever its type (sandbox, scratch, Developer Edition, SDO or another
- * production-edition demo org), unless the alias is the one the project names as production.
- */
-export function sfOrgDecision(alias: string, instanceUrl: string | undefined, prod: Set<string> = namedProdAliases()): { allowed: boolean; reason?: string } {
-  if (isNamedProduction(alias, prod)) {
-    return { allowed: false, reason: `The sf CLI alias "${alias}" is the org the project names as production. AI never works there; production is deployed only by deploy-prod after approval (G9).` };
-  }
-  return classifySfUrl(instanceUrl) === "invalid"
-    ? { allowed: false, reason: `The sf CLI alias "${alias}" does not resolve to a connected Salesforce org. Connect it on the Connections page.` }
-    : { allowed: true };
-}
-
 const SAFE_ARG =/^[A-Za-z0-9_@%+=:,./\\-]+$/;
 
 /**
@@ -88,10 +68,4 @@ export function terminalCommand(program: string, args: string[]): string {
     if (!SAFE_ARG.test(a)) throw new Error(`Refusing to put an unsafe argument in a terminal command: ${JSON.stringify(a)}`);
   }
   return [program, ...args].join(" ");
-}
-
-/** A path relative to the workspace root that is safe for terminalCommand (forward slashes). */
-export function safeRelPath(p: string): string | undefined {
-  const s = p.replace(/\\/g, "/");
-  return SAFE_ARG.test(s) && !s.split("/").includes("..") && !/^[a-z]:|^\//i.test(s) ? s : undefined;
 }

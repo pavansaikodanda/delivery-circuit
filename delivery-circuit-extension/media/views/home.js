@@ -1,135 +1,113 @@
-// Sidebar "Circuit" (DESIGN.md §6.1): who you are, what waits on you, where to go. Compact rows, one notice line per
-// problem, nothing else. State comes from src/views/model.ts buildHome().
+// Sidebar "Circuit" (docs/CIRCUIT-V4.md section 7): header (user · role chip · refresh) and three tabs: Work,
+// Connections, Missing. One button per row; the row id goes back to the extension, which knows what it runs.
+// State comes from src/views/model.ts buildHome().
 (function () {
   const { h, post } = DC;
   const me = document.currentScript && document.currentScript.src;
   if (me) document.head.append(h("link", { rel: "stylesheet", href: me.replace(/[^/]*$/, "views.css") }));
   document.body.classList.add("sidebar");
 
-  const go = (target) => post({ type: "nav", target });
-  const refresh = () => post({ type: "refresh" });
-  const NAV_ICON = { sources: "notebook", testing: "beaker", connections: "plug", setup: "tools" };
+  const TABS = ["work", "connections", "missing"];
+  const saved = (() => { try { return DC.vscode.getState() || {}; } catch { return {}; } })();
+  const fromHash = /tab=(\w+)/.exec(location.hash || "");
+  let tab = TABS.includes(fromHash && fromHash[1]) ? fromHash[1] : TABS.includes(saved.tab) ? saved.tab : "work";
+  const setTab = (t) => {
+    tab = t;
+    try { DC.vscode.setState(Object.assign({}, DC.vscode.getState() || {}, { tab })); } catch { /* preview */ }
+    if (DC.state) DC.mount(render(DC.state));
+  };
 
-  DC.mount(DC.skeleton({ n: 3, label: "Loading the circuit" }));
+  const refresh = () => post({ type: "refresh" });
+  const run = (id) => post({ type: "run", id });
+  const STEP_ICON = { intake: "mic", design: "edit", stories: "list-tree", build: "tools", fix: "wrench", review: "code-review",
+    qa: "beaker", tests: "checklist", promote: "git-pull-request", prod: "rocket" };
+  const STATUS_TONE = { design: "", ready: "", building: "info", "in-pr": "info", qa: "info", done: "ok" };
+  const CONN = { connected: ["ok", "Connected"], disconnected: ["", "Not connected"], error: ["err", "Problem"], checking: ["checking", "Checking"], unknown: ["", "Not checked"] };
+  const GROUPS = [["connections", "Connections"], ["repo", "Repo setup"], ["stories", "Stories"]];
+
+  DC.mount(DC.skeleton({ n: 3, label: "Loading" }));
   DC.onState(render);
 
   function render(s) {
     if (!s) return DC.skeleton({ n: 3 });
-    return [head(s), ...body(s), footer(s)];
-  }
-
-  function head(s) {
-    const id = s.identity;
-    if (!id) return DC.header({ title: "Delivery Circuit", sub: s.mode === "no-remote" ? "No GitHub remote" : "Not signed in", onRefresh: refresh });
-    return DC.header({
-      title: id.login, persona: id.active, personas: id.personas, onRefresh: refresh,
-    });
-  }
-
-  function body(s) {
-    if (s.mode === "no-remote") {
-      return [DC.empty({
-        icon: "repo", title: "No GitHub remote",
-        text: h("span", "The circuit works on a Salesforce DX repo on GitHub. Add a remote named origin, then refresh:",
-          h("pre.dc-cmd", "git remote add origin https://github.com/<owner>/<repo>.git")),
-        action: { label: "Refresh", icon: "refresh", onClick: refresh },
-      })];
-    }
     if (s.mode === "signin") {
-      return [DC.empty({
-        icon: "github", title: "Sign in to GitHub",
-        text: "Your persona comes from your GitHub team membership. Gate actions use your own GitHub account.",
-        action: { label: "Connect GitHub", kind: "primary", onClick: () => post({ type: "connectGithub" }) },
-      })];
+      return [DC.header({ title: "Delivery Circuit", onRefresh: refresh }),
+        DC.empty({ icon: "github", title: "Sign in to GitHub", text: "Your role comes from your GitHub teams.",
+          action: { label: "Sign in", kind: "primary", onClick: () => post({ type: "connectGithub" }) } })];
     }
-    if (s.mode === "loading") return [DC.notice("Reading your GitHub teams…", "info", { icon: "loading" }), DC.skeleton({ n: 3, label: "Reading your GitHub teams" })];
-    if (s.mode === "no-persona") return [...noPersona(s), nav(s)];
-    return [...notices(s), waiting(s), nav(s)];
+    const u = s.user;
+    const head = DC.header({ title: u.login, sub: s.repo || "No GitHub remote", role: u.role, roles: u.roles.map((r) => r.id), onRefresh: refresh });
+    const tabs = DC.tabs([
+      { id: "work", label: "Work" },
+      { id: "connections", label: "Connections" },
+      { id: "missing", label: "Missing", count: s.missingCount || null },
+    ], tab, setTab);
+    const body = tab === "connections" ? connections(s) : tab === "missing" ? missing(s) : work(s);
+    return [head, tabs, s.notice ? DC.notice(s.notice, "info") : null, ...body];
   }
 
-  function noPersona(s) {
-    const id = s.identity || {};
-    const t = s.teams || {};
-    const out = [];
-    if (id.orgOwned) {
-      out.push(DC.section("No persona yet", { first: true },
-        h("p.muted.small", "You are signed in, but not in a persona team of " + (id.owner || "this organisation") + ". Ask an organisation admin to add you to one of these GitHub teams:"),
-        DC.list(["architect", "developer", "tester"].map((p) => DC.row({
-          key: "team-" + p, icon: DC.icon((DC.PERSONA[p] || {}).icon || "account"), title: DC.personaLabel(p), compact: true,
-          status: h("span.dc-status", h("span.mono.muted", "team " + (t[p] || p + "s"))),
-        })), { label: "Persona teams" }),
-        DC.notice("Team names come from a setting.", "info", { action: { label: "Open setting", onClick: () => post({ type: "openSettings", setting: "deliveryCircuit.githubTeams" }) } })));
-    } else {
-      out.push(DC.section("No persona yet", { first: true },
-        DC.notice("This repo belongs to a personal account, so there are no GitHub teams to read your persona from. Choose it in deliveryCircuit.personaOverride.", "info",
-          { action: { label: "Open setting", onClick: () => post({ type: "openSettings", setting: "deliveryCircuit.personaOverride" }) } })));
+  // ---------- Work ----------
+  function work(s) {
+    if (s.mode === "no-remote") {
+      return [DC.empty({ icon: "repo", title: "No GitHub remote", text: "Open a Salesforce DX repo whose origin is on GitHub." })];
     }
-    out.push(...notices(s));
+    const w = s.work;
+    if (!w) return [DC.skeleton({ n: 4, label: "Reading Jira and GitHub" })];
+    const out = [];
+    (w.errors || []).forEach((e) => out.push(DC.notice(e, "warn", { action: { label: "Retry", onClick: refresh } })));
+    out.push(DC.section("Next steps", { key: "sec:next", first: true },
+      w.next.length
+        ? DC.list(w.next.map((r) => DC.row({
+          key: "n-" + r.id, compact: true, icon: DC.icon(STEP_ICON[r.id.split(":")[0]] || "arrow-right"), title: r.title, meta: r.detail || null,
+          primary: { label: r.button, onClick: () => run(r.id), kind: "secondary" }, hash: r,
+        })), { label: "Next steps" })
+        : DC.empty({ icon: "check", title: "Nothing to do", text: "Nothing waits on you right now." })));
+    const sp = w.sprint;
+    out.push(DC.section("Sprint", { key: "sec:sprint", count: sp.stories.length || null, action: sp.name ? h("span.dc-mono-muted", sp.name) : null },
+      sp.stories.length
+        ? DC.list(sp.stories.map((x) => DC.row({
+          key: "s-" + x.key, compact: true, num: x.key, title: x.title, onClick: () => post({ type: "openStory", key: x.key }),
+          primary: DC.status(STATUS_TONE[x.status], x.statusLabel), hash: x,
+        })), { label: "Sprint stories" })
+        : DC.empty("No stories in the sprint yet.")));
+    out.push(footer(s, w.updatedAt));
     return out;
   }
 
-  // One quiet line per problem (icon + text + one link), above the queue.
-  function notices(s) {
-    const out = [];
-    if (s.notice) out.push(DC.notice(s.notice, "info"));
-    if (s.error) out.push(DC.notice("Some data could not be loaded: " + s.error, "warn", { action: { label: "Retry", onClick: refresh } }));
-    if (s.setupNeeded) {
-      const admin = s.identity && s.identity.isAdmin;
-      out.push(DC.notice(admin ? "This repo is not set up with the circuit yet." : "This repo is not set up with the circuit yet. Ask a repo admin to run Project setup.", "warn",
-        admin ? { action: { label: "Project setup", onClick: () => go("setup") } } : {}));
-    }
-    (s.notices || []).forEach((q) => {
-      const act = (q.actions || []).find((a) => a.allowed);
-      const link = (q.links || [])[0];
-      const action = act ? { label: act.label, onClick: () => DC.action(act) } : link ? { label: link.label || "Open", onClick: () => DC.openLink(link) } : null;
-      out.push(DC.notice(q.title + (q.detail ? ": " + q.detail : ""), "warn", action ? { action } : {}));
+  // ---------- Connections ----------
+  function connections(s) {
+    return [DC.list(s.connections.map((c) => {
+      const st = CONN[c.state] || ["", c.state];
+      const busy = c.state === "checking";
+      const msg = c.button === "Check" ? "check" : "connect";
+      return DC.row({
+        key: "c-" + c.id, compact: true, icon: DC.brand(c.id, { size: 16 }), title: c.label, busy,
+        status: { tone: st[0], text: c.state === "connected" && c.account ? c.account : st[1] },
+        meta: c.detail || null,
+        primary: { label: busy ? "Check" : c.button, kind: c.button === "Fix" ? "primary" : c.button === "Check" ? "ghost" : "secondary",
+          disabled: busy, reason: busy ? "Checking" : null, onClick: () => post({ type: msg, id: c.id }) },
+        hash: c, state: c.state,
+      });
+    }), { label: "Connections" })];
+  }
+
+  // ---------- Missing ----------
+  function missing(s) {
+    if (!s.missing) return [DC.skeleton({ n: 3, label: "Checking what is missing" })];
+    if (!s.missing.length) return [DC.empty({ icon: "pass", title: "Nothing missing", text: "Everything the flow needs is in place." })];
+    return GROUPS.map(([g, title]) => {
+      const items = s.missing.filter((m) => m.group === g);
+      if (!items.length) return null;
+      return DC.section(title, { key: "sec:m-" + g, count: items.length },
+        DC.list(items.map((m) => DC.row({
+          key: "m-" + m.id, compact: true, icon: DC.icon(m.id === "repo:bootstrap" ? "tools" : "circle-outline"), title: m.title, meta: m.detail || null,
+          primary: { label: m.button, onClick: () => run(m.id), kind: m.id === "repo:bootstrap" ? "primary" : "secondary" }, hash: m,
+        })), { label: title }));
     });
-    return out.length ? [h("div.dc-notices", { "data-key": "notices" }, out)] : [];
   }
 
-  function waiting(s) {
-    const id = s.identity || {};
-    const total = s.waitingTotal || 0;
-    const items = s.waiting || [];
-    const view = id.active ? "persona:" + id.active : null;
-    const more = total > items.length && view ? DC.button("Show all " + total, () => go(view), { kind: "link", size: "sm" }) : null;
-    if (!items.length) {
-      return DC.section("Waiting on you", { key: "sec:waiting", first: true },
-        DC.empty({ icon: "check", title: "Nothing waiting", text: "Nothing is waiting on you as " + (id.activeLabel || "your persona") + "." }));
-    }
-    return DC.section("Waiting on you", { key: "sec:waiting", count: total, needs: total > 0, first: true },
-      DC.list(items.map((q) => DC.queueRow(q, {
-        compact: true, viewer: id.active, view: id.active,
-        onOpen: view ? () => go(view) : q.featureId ? () => post({ type: "openFeature", id: q.featureId }) : null,
-      })), { label: "Waiting on you" }),
-      more ? h("div.dc-more", more) : null);
-  }
-
-  function navIcon(n) {
-    if (n.target.startsWith("persona:")) { const p = n.target.slice(8); return (DC.PERSONA[p] || {}).icon || "account"; }
-    return NAV_ICON[n.target] || "arrow-right";
-  }
-
-  function nav(s) {
-    const list = s.nav || [];
-    if (!list.length) return null;
-    return DC.section("Go to", { key: "sec:nav" },
-      DC.list(list.map((n) => DC.row({
-        key: "nav-" + n.target, icon: DC.icon(navIcon(n)), title: n.label, compact: true,
-        status: n.count ? { tone: n.cls || "warn", text: n.detail || String(n.count) } : n.detail === "view only" ? { tone: "muted", text: "view only" } : null,
-        titleTip: n.detail && !n.count && n.detail !== "view only" ? n.detail : null,
-        onClick: () => go(n.target),
-        primary: DC.button("Open " + n.label, () => go(n.target), { kind: "ghost", size: "sm", icon: "arrow-right", iconOnly: true }),
-        hash: n,
-      })), { label: "Go to" }));
-  }
-
-  function footer(s) {
-    const t = s.updated ? new Date(s.updated) : null;
-    const ok = t && !isNaN(t.getTime());
-    const id = s.identity;
-    const repo = id && id.owner && id.repo ? id.owner + "/" + id.repo : "";
-    const when = ok ? "Updated " + t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
-    return h("p.dc-footer", { "data-key": "footer" }, [repo, when].filter(Boolean).join(" · "));
+  function footer(s, at) {
+    const t = at ? new Date(at) : null;
+    return h("p.dc-footer", { "data-key": "footer" }, t && !isNaN(t.getTime()) ? "Updated " + t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "");
   }
 })();

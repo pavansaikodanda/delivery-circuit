@@ -1,63 +1,49 @@
-// Project context v3: features from Jira epics (Atlassian CLI, the person's `acli jira auth login --web`) and their
-// Confluence design pages (read-only `claude -p` call through the person's Atlassian MCP login), PRs and gates from
-// GitHub (the person's VS Code sign-in), transcript sources. No API token is read or stored anywhere.
-// Logic lives in the vscode-free files next to this one; this file wires caching, watching and the processes.
+// Project context v4: Jira stories (acli when installed, else the Atlassian MCP through a read-only `claude -p`),
+// Confluence design pages (one read-only listing per space), GitHub PRs, deploy runs and repo setup (the person's VS
+// Code GitHub sign-in), and the local transcript store for "New design from transcript". No API token anywhere.
+// The logic lives in the vscode-free files next to this one (work.ts, github.ts, jira.ts); this file fetches and caches.
 import { promises as fs, readFileSync, statSync } from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
-import type {
-  ConnectionsService, Identity, IdentityService, Persona, ProjectContextService, PrRef, QueueItem, SourceRef,
-} from "../core/contracts";
+import type { ConnectionsService, ProjectService, Role, SourceRef, StoryDetail, WorkSnapshot } from "../core/contracts";
 import { resolveClaude } from "../core/claude";
 import { gitRemote, run, type ModuleBase } from "../core/util";
 import { AcliError, authSite, searchIssues, viewIssue, type AcliExec } from "./acli";
-import { withPageOnlyFeatures } from "./design";
-import { decisionsDetail, designDetail, orgSnapshotDetail, storyDetail } from "./details";
-import { buildFeatures, linkPrs } from "./gates";
-import { deployInfo, mapDeployRuns, mapPrsResponse, mapStoryPrsResponse, missingStoryKeys, PRS_QUERY, STORY_SEARCH_BATCH, storyPrsQuery } from "./github";
-import { childrenJql, epicsJql, groupFeatures, parseConfig, testCasesJql } from "./jira";
 import {
-  firefliesPointer, MEETING_ID_RE, readDesignPage, readDesignPages, readFirefliesMeta, readFirefliesRecent, type ClaudeExec,
-} from "./mcpReader";
-import type { CircuitConfig, DeployInfo, DesignPage, DesignPageListing, FeatureInfo, FeatureSource, JiraIssue, PrInfo, RepoRef } from "./model";
-import { buildQueue } from "./queue";
-import {
-  extractText, isSourceOrigin, loadUpload, newKey, readIndex, SOURCE_REF_RE, storeUpload, uploadId, upsertSource, withUsage, writeIndex,
-} from "./sources";
-
-/** One-line title for the sources index (no newlines, at most 200 characters). */
-const cleanTitle = (t: string, fallback: string) => String(t ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, 200) || fallback;
+  environmentNames, hasAuthSecret, mapDeployRuns, mapWorkResponse, rulesetCoverage, sampleBranch, workQuery,
+} from "./github";
+import { childrenJql, designPageOf, epicsJql, parseConfig, sprintJql, storiesOf, testCasesJql } from "./jira";
+import { firefliesPointer, readDesignPages, readFirefliesRecent, readJiraIssues, type ClaudeExec } from "./mcpReader";
+import type { CircuitConfig, DeployRun, DesignPage, Feature, JiraIssue, PrInfo, RepoRef, RepoSetup, WorkData } from "./model";
+import { extractText, loadUpload, newKey, SOURCE_REF_RE, storeUpload, uploadId } from "./sources";
+import { missingItems, nextSteps, sprintRows, storyDetail } from "./work";
 
 const KEY_SECRET = "deliveryCircuit.sourcesKey";
 const JIRA_TTL = 2 * 60_000;
 const DESIGN_TTL = 10 * 60_000;
+const SETUP_TTL = 10 * 60_000;
 const FIREFLIES_TTL = 5 * 60_000;
-/** Merged story PRs found outside the recent-PR window. Merged is final, so they are kept across sessions. */
-const MERGED_STORY_KEY = "deliveryCircuit.mergedStoryPrs";
-/** Design pages read last (metadata, decisions, org snapshot lists): shown at once in a new window, refreshed behind. */
-const DESIGN_CACHE_KEY = "deliveryCircuit.designPages";
-/** How long a story key with no merged PR is not searched again. */
-const STORY_MISS_TTL = 15 * 60_000;
+const MAX_TEXT = 20 * 1024 * 1024;
 
-interface GhState { prs: PrInfo[]; deploy?: DeployInfo; at: number; error?: string }
-interface JiraState { epics: JiraIssue[]; children: JiraIssue[]; tests: JiraIssue[]; at: number; error?: string }
-interface Cached<T> { value: T; at: number }
-
-/** The Circuit MCP detail reads (design_get, decisions_get, org_snapshot_get, story_get); now part of the contract. */
-export type ProjectDetails = Pick<ProjectContextService, "design" | "decisions" | "orgSnapshot" | "story">;
+interface JiraState { epics: JiraIssue[]; stories: JiraIssue[]; tests: JiraIssue[]; at: number; error?: string }
+interface GhState { prs: PrInfo[]; sprints: string[]; branches: Record<string, boolean>; autoMerge?: boolean; deploys: DeployRun[]; sprintAhead?: number; at: number; error?: string }
 
 export interface ProjectDeps {
-  identity: IdentityService;
   connections: ConnectionsService;
+  /** owner/repo from the identity, when known */
+  repo: () => RepoRef | undefined;
   /** for tests: replaces `acli` */
   acli?: AcliExec;
   /** for tests: replaces `claude -p` */
   claude?: ClaudeExec;
 }
 
-export function createProject(base: ModuleBase, deps: ProjectDeps): ProjectContextService & ProjectDetails {
+/** One line for the sidebar and the log. */
+const short = (e: unknown) => String((e as any)?.message ?? e).split(/\r?\n/)[0].slice(0, 200);
+
+export function createProject(base: ModuleBase, deps: ProjectDeps): ProjectService {
   const { ctx, root, log } = base;
-  const { identity, connections } = deps;
+  const { connections } = deps;
   const changed = new vscode.EventEmitter<void>();
   ctx.subscriptions.push(changed);
   const conf = () => vscode.workspace.getConfiguration("deliveryCircuit");
@@ -77,206 +63,192 @@ export function createProject(base: ModuleBase, deps: ProjectDeps): ProjectConte
   });
   const readerModel = () => String(conf().get("designReaderModel", "haiku") || "haiku");
   const readerOn = () => conf().get<string>("designReader", "claude") !== "off";
+  const refreshMs = () => Math.max(15, Number(conf().get("refreshSeconds", 60)) || 60) * 1000;
 
   let cfg: CircuitConfig = parseConfig(undefined);
   let cfgLoaded: Promise<void> | undefined;
   const loadConfig = () => (cfgLoaded ??= fs.readFile(path.join(root, "build.config.yml"), "utf8")
     .then((y) => { cfg = parseConfig(y); }, () => { cfg = parseConfig(undefined); }));
 
-  let gh: GhState | undefined;
-  let ghInflight: Promise<GhState> | undefined;
-  let ghNext: Promise<GhState> | undefined;
-  let jira: JiraState | undefined;
-  let jiraInflight: Promise<JiraState> | undefined;
-  let acliSite: string | undefined;
-  const mergedStories = new Map<number, PrInfo>(
-    Object.entries(ctx.workspaceState?.get<Record<string, PrInfo>>(MERGED_STORY_KEY) ?? {}).map(([n, pr]) => [Number(n), pr]));
-  const pages = new Map<string, Cached<DesignPage>>(
-    Object.entries(ctx.workspaceState?.get<Record<string, Cached<DesignPage>>>(DESIGN_CACHE_KEY) ?? {}));
-  const pageReads = new Map<string, Promise<void>>();
-  let listing: Cached<DesignPageListing[]> | undefined;
-  let listingRead: Promise<void> | undefined;
-  let ff: { limit: number; list: SourceRef[]; at: number } | undefined;
-  const storyMissAt = new Map<string, number>();
-  let repoRef: RepoRef | undefined;
-  let lastHash = "";
   const logged = new Set<string>();
   const logOnce = (m: string) => { if (!logged.has(m)) { logged.add(m); log(m); } };
-
-  const refreshMs = () => Math.max(15, Number(conf().get("refreshSeconds", 60)) || 60) * 1000;
-
+  let repoRef: RepoRef | undefined;
   async function repo(): Promise<RepoRef | undefined> {
-    const id = identity.get();
-    if (id?.owner && id.repo) return (repoRef = { owner: id.owner, repo: id.repo });
-    if (!repoRef) repoRef = await gitRemote(root).catch(() => undefined);
+    const r = deps.repo();
+    if (r) return (repoRef = r);
+    repoRef ??= await gitRemote(root).catch(() => undefined);
     return repoRef;
   }
 
-  // ---------- Jira (acli) ----------
+  // ---------- Jira ----------
+  let acliOff = false;
+  let acliSite: string | undefined;
+  async function search(jql: string): Promise<JiraIssue[]> {
+    if (!acliOff) {
+      try { return await searchIssues(acli, jql); } catch (e) {
+        if (!(e instanceof AcliError) || e.kind === "failed") throw e;
+        // acli is optional (section 7): without it, or logged out, Jira goes through the Atlassian MCP
+        acliOff = true;
+        logOnce(`project: ${e.message.split(".")[0]}; reading Jira through the Atlassian MCP`);
+      }
+    }
+    if (!readerOn()) throw new Error("Jira cannot be read: acli is not set up and deliveryCircuit.designReader is off");
+    return readJiraIssues(claude, jql, readerModel());
+  }
+
+  let jira: JiraState | undefined;
+  let jiraInflight: Promise<JiraState> | undefined;
   async function fetchJira(): Promise<JiraState> {
     await loadConfig();
     const pk = cfg.projectKey;
-    if (!pk) return { epics: [], children: [], tests: [], at: Date.now(), error: "Set jira.project_key in build.config.yml to read epics and stories" };
+    if (!pk) return { epics: [], stories: [], tests: [], at: Date.now(), error: "Set jira.project_key in build.config.yml" };
     try {
-      const epics = await searchIssues(acli, epicsJql(pk));
-      const jql = childrenJql(epics.map((e) => e.key));
-      const [children, tests] = await Promise.all([jql ? searchIssues(acli, jql) : Promise.resolve([]), searchIssues(acli, testCasesJql(pk))]);
-      if (!cfg.site && !acliSite) {
-        const a = await authSite(acli).catch(() => undefined);
-        if (a?.site) acliSite = a.site;
-      }
-      return { epics, children, tests, at: Date.now() };
-    } catch (e: any) {
-      const msg = String(e?.message ?? e).slice(0, 300);
-      logOnce(`project: Jira read failed: ${msg}`);
-      const keep = e instanceof AcliError && e.kind === "failed" ? jira : undefined;
-      return { epics: keep?.epics ?? [], children: keep?.children ?? [], tests: keep?.tests ?? [], at: Date.now(), error: msg };
+      const epics = await search(epicsJql(pk));
+      const jql = childrenJql(epics.filter((e) => e.statusCategory !== "done").map((e) => e.key));
+      const [children, tests, sprint] = await Promise.all([
+        jql ? search(jql) : Promise.resolve([]),
+        search(testCasesJql(pk)),
+        search(sprintJql(pk)).catch(() => undefined),
+      ]);
+      // the open sprint's stories when the project uses sprints, else the stories of the open epics
+      const stories = storiesOf(sprint?.length ? sprint : children);
+      if (!cfg.site && !acliSite && !acliOff) acliSite = (await authSite(acli).catch(() => undefined))?.site;
+      return { epics, stories, tests, at: Date.now() };
+    } catch (e) {
+      logOnce(`project: Jira read failed: ${short(e)}`);
+      return { epics: jira?.epics ?? [], stories: jira?.stories ?? [], tests: jira?.tests ?? [], at: Date.now(), error: `Jira: ${short(e)}` };
     }
   }
-  async function loadJira(force = false): Promise<JiraState> {
-    if (!force && jira && Date.now() - jira.at < JIRA_TTL) return jira;
+  function loadJira(force = false): Promise<JiraState> {
+    // through the MCP reader each read is a Claude call: read less often
+    if (!force && jira && Date.now() - jira.at < (acliOff ? DESIGN_TTL : JIRA_TTL)) return Promise.resolve(jira);
     jiraInflight ??= fetchJira().then((s) => { jira = s; return s; }).finally(() => { jiraInflight = undefined; });
     return jiraInflight;
   }
 
-  const jiraBrowseUrl = (key: string): string | undefined => {
-    if (!/^[A-Z][A-Z0-9_]+-\d+$/.test(key)) return undefined;
-    const site = cfg.site ?? acliSite;
-    return site ? `${site}/browse/${key}` : undefined;
-  };
-
-  // ---------- Confluence (read-only Claude call, background) ----------
-  function persistPages(): void {
-    void ctx.workspaceState?.update(DESIGN_CACHE_KEY, Object.fromEntries(pages));
-  }
-  function readPage(pageId: string): Promise<void> {
-    let p = pageReads.get(pageId);
-    if (p) return p;
-    p = (async () => {
-      try {
-        const page = await readDesignPage(claude, pageId, readerModel());
-        if (page.error) logOnce(`project: design page ${pageId}: ${page.error}`);
-        pages.set(pageId, { value: page, at: Date.now() });
-      } catch (e: any) {
-        const msg = String(e?.message ?? e).slice(0, 200);
-        logOnce(`project: reading design page ${pageId} failed: ${msg}`);
-        const prev = pages.get(pageId)?.value;
-        pages.set(pageId, { value: prev ? { ...prev, error: msg } : { id: pageId, versions: [], sections: [], openQuestions: 0, decisions: [], sources: [], readAt: new Date().toISOString(), error: msg }, at: Date.now() });
-      }
-      persistPages();
-      changed.fire();
-    })().finally(() => pageReads.delete(pageId));
-    pageReads.set(pageId, p);
-    return p;
-  }
-  /** Starts reads for stale pages (2 at a time) and returns at once with what is cached. */
-  function refreshPages(ids: string[], force = false): void {
-    if (!readerOn()) return;
-    const stale = [...new Set(ids)].filter((id) => force || !pages.has(id) || Date.now() - pages.get(id)!.at >= DESIGN_TTL).filter((id) => !pageReads.has(id));
-    let i = 0;
-    const next = (): Promise<void> | undefined => (i < stale.length ? readPage(stale[i++]).then(() => next()) : undefined);
-    next(); next();
-  }
-  function refreshListing(force = false): void {
-    if (!readerOn() || !cfg.spaceKey || listingRead) return;
-    if (!force && listing && Date.now() - listing.at < DESIGN_TTL) return;
-    listingRead = readDesignPages(claude, cfg.spaceKey, readerModel())
-      .then((l) => { listing = { value: l, at: Date.now() }; changed.fire(); },
-        (e: any) => { logOnce(`project: listing design pages failed: ${String(e?.message ?? e).slice(0, 200)}`); listing = { value: listing?.value ?? [], at: Date.now() }; })
-      .finally(() => { listingRead = undefined; });
+  // ---------- Confluence design pages (background; the tabs render with what is cached) ----------
+  let pages: { list: DesignPage[]; at: number; read: boolean } = { list: [], at: 0, read: false };
+  let pagesInflight: Promise<void> | undefined;
+  function refreshPages(force = false): void {
+    if (!readerOn() || !cfg.spaceKey || pagesInflight) return;
+    if (!force && pages.at && Date.now() - pages.at < DESIGN_TTL) return;
+    pagesInflight = readDesignPages(claude, cfg.spaceKey, readerModel())
+      .then((list) => { pages = { list, at: Date.now(), read: true }; changed.fire(); },
+        (e) => { logOnce(`project: reading design pages failed: ${short(e)}`); pages = { ...pages, at: Date.now() }; })
+      .finally(() => { pagesInflight = undefined; });
   }
 
   // ---------- GitHub ----------
-  function rememberMerged(prs: PrInfo[]): void {
-    let added = false;
-    for (const pr of prs) {
-      if (pr.state !== "merged" || !pr.storyKey || mergedStories.has(pr.number)) continue;
-      mergedStories.set(pr.number, pr);
-      added = true;
-    }
-    if (added) void ctx.workspaceState?.update(MERGED_STORY_KEY, Object.fromEntries(mergedStories));
-  }
-  const storyKeys = (j: JiraState | undefined) => new Set((j?.children ?? []).map((c) => c.key));
-
-  /** Merged PRs of Jira stories that fell out of PRS_QUERY's recent-merged window. */
-  async function olderStoryPrs(r: RepoRef, recent: PrInfo[]): Promise<PrInfo[]> {
-    rememberMerged(recent);
-    const keys = storyKeys(await loadJira().catch(() => undefined));
-    const now = Date.now();
-    const todo = missingStoryKeys(keys, [...recent, ...mergedStories.values()])
-      .filter((k) => now - (storyMissAt.get(k) ?? 0) >= STORY_MISS_TTL).slice(0, 2 * STORY_SEARCH_BATCH);
-    for (let i = 0; i < todo.length; i += STORY_SEARCH_BATCH) {
-      const batch = todo.slice(i, i + STORY_SEARCH_BATCH);
-      try {
-        const q = storyPrsQuery(r.owner, r.repo, batch);
-        const found = mapStoryPrsResponse(await connections.githubGraphql(q.query, q.variables), batch);
-        rememberMerged(found);
-        for (const k of batch) if (!found.some((p) => p.storyKey === k)) storyMissAt.set(k, now);
-      } catch (e: any) {
-        logOnce(`project: looking up older story PRs failed: ${String(e?.message ?? e).slice(0, 200)}`);
-        break;
-      }
-    }
-    const seen = new Set(recent.map((p) => p.number));
-    return [...mergedStories.values()].filter((p) => !seen.has(p.number) && keys.has(p.storyKey!)).map((p) => ({ ...p }));
-  }
-
+  let gh: GhState | undefined;
+  let ghInflight: Promise<GhState> | undefined;
+  const enc = encodeURIComponent;
+  const fixedBranches = () => cfg.environments.map((e) => e.branch).filter((b) => !b.includes("*"));
   async function fetchGithub(): Promise<GhState> {
+    await loadConfig();
     const r = await repo();
-    if (!r) return { prs: [], at: Date.now(), error: "No GitHub remote \"origin\" in this workspace" };
+    if (!r) return { prs: [], sprints: [], branches: {}, deploys: [], at: Date.now(), error: "No GitHub remote \"origin\"" };
+    const p = `/repos/${enc(r.owner)}/${enc(r.repo)}`;
     try {
-      const resp = await connections.githubGraphql(PRS_QUERY, { owner: r.owner, name: r.repo });
-      const mapped = mapPrsResponse(resp);
-      const older = await olderStoryPrs(r, mapped.prs);
-      let runs: ReturnType<typeof mapDeployRuns> = [];
-      try {
-        runs = mapDeployRuns(await connections.githubRequest("GET",
-          `/repos/${encodeURIComponent(r.owner)}/${encodeURIComponent(r.repo)}/actions/workflows/deploy-prod.yml/runs?per_page=10`));
-      } catch { /* workflow not installed yet */ }
-      return { prs: [...mapped.prs, ...older], deploy: deployInfo(runs, mapped.prodDeployedAt, mapped.prodDeployedSha), at: Date.now() };
-    } catch (e: any) {
-      const msg = String(e?.message ?? e).slice(0, 200);
-      logOnce(`project: GitHub read failed: ${msg}`);
-      return { prs: gh?.prs ?? [], deploy: gh?.deploy, at: Date.now(), error: msg };
+      const w = mapWorkResponse(await connections.githubGraphql(workQuery(fixedBranches()), { owner: r.owner, name: r.repo }), fixedBranches());
+      let deploys: DeployRun[] = [];
+      try { deploys = mapDeployRuns(await connections.githubRequest("GET", `${p}/actions/workflows/deploy.yml/runs?per_page=30`)); } catch { /* not installed yet */ }
+      let sprintAhead: number | undefined;
+      const sprint = w.sprints[0];
+      if (sprint && w.branches.dev) {
+        try { sprintAhead = Number((await connections.githubRequest<any>("GET", `${p}/compare/dev...${sprint.split("/").map(enc).join("/")}`))?.ahead_by) || 0; }
+        catch { /* compare failed: no promotion hint */ }
+      }
+      return { ...w, deploys, sprintAhead, at: Date.now() };
+    } catch (e) {
+      logOnce(`project: GitHub read failed: ${short(e)}`);
+      return { prs: gh?.prs ?? [], sprints: gh?.sprints ?? [], branches: gh?.branches ?? {}, deploys: gh?.deploys ?? [], at: Date.now(), error: `GitHub: ${short(e)}` };
     }
   }
-  function startFetch(): Promise<GhState> {
-    const p: Promise<GhState> = fetchGithub()
-      .then((state) => { gh = state; return state; })
-      .finally(() => { if (ghInflight === p) ghInflight = undefined; });
-    ghInflight = p;
-    return p;
+  function loadGithub(force = false): Promise<GhState> {
+    if (!force && gh && Date.now() - gh.at < refreshMs()) return Promise.resolve(gh);
+    ghInflight ??= fetchGithub().then((s) => { gh = s; return s; }).finally(() => { ghInflight = undefined; });
+    return ghInflight;
   }
-  /** GitHub state, cached for refreshSeconds. force = queue one fresh read behind a read already in flight. */
-  async function loadGithub(force = false): Promise<GhState> {
-    if (!force && gh && Date.now() - gh.at < refreshMs()) return gh;
-    if (!ghInflight) return startFetch();
-    if (!force) return ghInflight;
-    ghNext ??= ghInflight.catch(() => undefined).then(() => { ghNext = undefined; return startFetch(); });
-    return ghNext;
+
+  // Repo setup (environments, SFDX_AUTH_URL by name, rulesets): slow-changing, read in the background.
+  let setup: { value?: Omit<RepoSetup, "branches" | "sprintBranch" | "autoMerge">; at: number } = { at: 0 };
+  let setupInflight: Promise<void> | undefined;
+  function refreshSetup(force = false): void {
+    if (setupInflight || (!force && setup.at && Date.now() - setup.at < SETUP_TTL)) return;
+    setupInflight = (async () => {
+      const r = await repo();
+      if (!r) return;
+      const p = `/repos/${enc(r.owner)}/${enc(r.repo)}`;
+      const environments: RepoSetup["environments"] = {};
+      try {
+        const names = new Set(environmentNames(await connections.githubRequest("GET", `${p}/environments?per_page=100`)));
+        for (const e of cfg.environments) {
+          const exists = names.has(e.environment);
+          let authUrl: boolean | undefined;
+          if (exists) {
+            // names only: the secrets API never returns values
+            try { authUrl = hasAuthSecret(await connections.githubRequest("GET", `${p}/environments/${enc(e.environment)}/secrets?per_page=100`)); }
+            catch { authUrl = undefined; /* needs repo admin: cannot tell */ }
+          }
+          environments[e.environment] = authUrl === undefined ? { exists } : { exists, authUrl };
+        }
+      } catch (e) { logOnce(`project: reading environments failed: ${short(e)}`); }
+      let rulesets: Record<string, boolean> | undefined;
+      try {
+        const list = await connections.githubRequest<any[]>("GET", `${p}/rulesets?per_page=100`);
+        const details = await Promise.all((Array.isArray(list) ? list : []).slice(0, 20).map((x) => connections.githubRequest("GET", `${p}/rulesets/${Number(x.id)}`).catch(() => x)));
+        const sprint = gh?.sprints[0];
+        rulesets = rulesetCoverage(details, cfg.environments.map((e) => sampleBranch(e.branch, sprint)), "main");
+      } catch (e) { logOnce(`project: reading rulesets failed: ${short(e)}`); }
+      setup = { value: { environments, ...(rulesets ? { rulesets } : {}) }, at: Date.now() };
+      changed.fire();
+    })().catch((e) => { logOnce(`project: repo setup read failed: ${short(e)}`); setup = { ...setup, at: Date.now() }; })
+      .finally(() => { setupInflight = undefined; });
   }
 
   // ---------- snapshot ----------
-  function sourcesOf(j: JiraState): FeatureSource[] {
-    const grouped = groupFeatures(j.epics, j.children, j.tests, cfg.fields);
-    const all = withPageOnlyFeatures(grouped, listing?.value ?? []);
-    refreshPages(all.map((s) => s.pageId).filter((x): x is string => !!x));
-    refreshListing();
-    return all.map((s) => (s.pageId && pages.has(s.pageId) ? { ...s, page: pages.get(s.pageId)!.value } : s));
+  function features(j: JiraState): Feature[] {
+    const out: Feature[] = [];
+    const linked = new Set<string>();
+    for (const epic of j.epics) {
+      if (epic.statusCategory === "done") continue;
+      const link = designPageOf(epic, cfg.fields);
+      const slug = epic.labels.map((l) => /^feature-([a-z0-9-]+)$/.exec(l)?.[1]).find(Boolean);
+      const page = pages.list.find((p) => p.id === link?.id || (slug && p.slug === slug));
+      if (page) linked.add(page.id);
+      out.push({ id: epic.key, title: epic.summary, epic, ...(page ? { page } : {}), ...(slug ?? page?.slug ? { slug: slug ?? page?.slug } : {}) });
+    }
+    for (const page of pages.list) {
+      if (linked.has(page.id)) continue;
+      out.push({ id: `page-${page.id}`, title: page.title.replace(/^Design:\s*/i, ""), page, ...(page.slug ? { slug: page.slug } : {}) });
+    }
+    return out;
   }
 
-  async function snapshot(): Promise<{ features: FeatureInfo[]; gh: GhState; jira: JiraState; repo?: RepoRef }> {
+  async function snapshot(): Promise<WorkData> {
     await loadConfig();
     const [j, g] = await Promise.all([loadJira(), loadGithub()]);
+    refreshPages();
+    refreshSetup();
     const r = await repo();
-    const prs = g.prs.map((x) => ({ ...x }));
-    const features = buildFeatures(sourcesOf(j), prs, g.deploy, cfg, { repo: r, jiraBrowseUrl });
-    return { features, gh: { ...g, prs }, jira: j, repo: r };
+    const data: WorkData = {
+      readyStatus: cfg.readyStatus, features: features(j), stories: j.stories, tests: j.tests, prs: g.prs, deploys: g.deploys,
+      fields: cfg.fields, designsRead: pages.read, errors: [j.error, g.error].filter((x): x is string => !!x),
+    };
+    if (r) data.repo = r;
+    const site = cfg.site ?? acliSite;
+    if (site) data.site = site;
+    if (g.sprints[0]) data.sprint = g.sprints[0];
+    if (g.sprintAhead !== undefined) data.sprintAhead = g.sprintAhead;
+    if (!g.error && r) {
+      data.setup = { branches: g.branches, environments: setup.value?.environments ?? {}, ...(g.sprints[0] ? { sprintBranch: g.sprints[0] } : {}) };
+      if (setup.value?.rulesets) data.setup.rulesets = setup.value.rulesets;
+      if (g.autoMerge !== undefined) data.setup.autoMerge = g.autoMerge;
+    }
+    return data;
   }
-  const findFeature = (list: FeatureInfo[], id: string) => list.find((f) => f.id === id || f.slug === id || f.design?.pageId === id);
-  const pageOf = (f: FeatureInfo | undefined) => (f?.design ? pages.get(f.design.pageId)?.value : undefined);
 
-  // ---------- sources ----------
+  // ---------- transcripts ----------
   async function keyBuffer(): Promise<Buffer> {
     const s = await ctx.secrets.get(KEY_SECRET);
     if (s) return Buffer.from(s, "base64");
@@ -284,130 +256,85 @@ export function createProject(base: ModuleBase, deps: ProjectDeps): ProjectConte
     await ctx.secrets.store(KEY_SECRET, k.toString("base64"));
     return k;
   }
-  async function sourcesWithUsage(): Promise<SourceRef[]> {
-    const index = await readIndex(root);
-    let citations: Record<string, string[]> = {};
-    try { citations = Object.fromEntries((await snapshot()).features.map((f) => [f.id, f.sources])); } catch { /* index only */ }
-    // usedBy recorded in the index (the epic an intake used) stays; design-page citations are added to it.
-    const recorded = new Map(index.map((s) => [s.id, s.usedBy ?? []]));
-    return withUsage(index, citations).map((s) => {
-      const by = [...new Set([...(s.usedBy ?? []), ...(recorded.get(s.id) ?? [])])].sort();
-      const o = { ...s };
-      if (by.length) o.usedBy = by; else delete o.usedBy;
-      return o;
-    });
+  const oneLine = (s: string, fallback: string) => String(s ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, 200) || fallback;
+  async function store(text: string, title: string, origin: "paste" | "file"): Promise<SourceRef> {
+    const body = String(text ?? "").trim();
+    if (!body) throw new Error("There is no text in it");
+    if (Buffer.byteLength(body, "utf8") > MAX_TEXT) throw new Error("The transcript is larger than 20 MB");
+    const id = uploadId(body);
+    // encrypted straight into the extension's storage: no temp file, nothing in the repo
+    await storeUpload(ctx.globalStorageUri.fsPath, id, body, await keyBuffer());
+    return { id, kind: "upload", title: oneLine(title, id), date: new Date().toISOString(), origin };
   }
-  async function addToIndex(ref: SourceRef): Promise<SourceRef> {
-    const list = upsertSource(await readIndex(root), ref);
-    await writeIndex(root, list);
-    changed.fire();
-    return (await sourcesWithUsage()).find((s) => s.id === ref.id) ?? ref;
-  }
+  let ff: { list: SourceRef[]; at: number } | undefined;
 
-  // ---------- change detection: file watcher, connections, periodic poll ----------
-  let debounce: NodeJS.Timeout | undefined;
-  const onFiles = () => {
-    cfgLoaded = undefined;
-    if (debounce) clearTimeout(debounce);
-    debounce = setTimeout(() => changed.fire(), 300);
-  };
-  const folder = vscode.workspace.workspaceFolders?.find((f) => f.uri.fsPath === root)?.uri ?? vscode.Uri.file(root);
-  const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder, "{.circuit/**,build.config.yml}"));
-  watcher.onDidCreate(onFiles); watcher.onDidChange(onFiles); watcher.onDidDelete(onFiles);
-  ctx.subscriptions.push(watcher);
-  // Drop the remote caches only when a connection this module reads through actually changed state or account.
-  const REMOTE: ReadonlySet<string> = new Set(["github", "jira", "confluence", "mcp-atlassian", "fireflies", "mcp-fireflies"]);
-  let connSig: string | undefined;
-  let connTimer: NodeJS.Timeout | undefined;
-  ctx.subscriptions.push(connections.onDidChange(() => {
-    if (connTimer) clearTimeout(connTimer);
-    connTimer = setTimeout(async () => {
-      let sig: string;
-      try {
-        const list = await connections.list();
-        sig = JSON.stringify(list.filter((c) => REMOTE.has(c.id) && c.state !== "checking").map((c) => [c.id, c.state, c.account ?? ""]));
-      } catch { sig = `error:${Date.now()}`; }
-      if (sig === connSig) return;
-      connSig = sig;
-      gh = undefined; jira = undefined; ff = undefined;
-      changed.fire();
-    }, 500);
-  }));
-  ctx.subscriptions.push({ dispose: () => { if (connTimer) clearTimeout(connTimer); } });
-
-  const hashOf = (g: GhState, j?: JiraState) => JSON.stringify([g.error ?? "", g.prs.map((p) => [p.number, p.updatedAt, p.state, p.labels, p.checks]),
-    g.deploy?.runs.map((r) => [r.id, r.status, r.conclusion]), j?.error ?? "", [...(j?.epics ?? []), ...(j?.children ?? []), ...(j?.tests ?? [])].map((i) => [i.key, i.updated ?? i.status, i.labels])]);
+  // ---------- change detection ----------
+  let lastHash = "";
+  const hashOf = () => JSON.stringify([gh?.prs.map((p) => [p.number, p.updatedAt, p.state, p.scan, p.coderabbit, p.approvedBy]),
+    gh?.deploys.map((d) => [d.id, d.status, d.conclusion]), gh?.sprints, jira?.stories.map((s) => [s.key, s.status, s.updated]), jira?.error, gh?.error]);
   const poll = setInterval(async () => {
-    const [g, j] = await Promise.all([loadGithub(true).catch(() => undefined), loadJira().catch(() => undefined)]);
-    if (!g) return;
-    const h = hashOf(g, j);
+    await Promise.all([loadGithub(true).catch(() => undefined), loadJira().catch(() => undefined)]);
+    const h = hashOf();
     if (lastHash && h !== lastHash) changed.fire();
     lastHash = h;
   }, refreshMs());
-  ctx.subscriptions.push({ dispose: () => { clearInterval(poll); if (debounce) clearTimeout(debounce); } });
-
-  const syntheticIdentity = (persona: Persona): Identity =>
-    ({ login: "", personas: [persona], active: persona, isAdmin: false, owner: repoRef?.owner ?? "", repo: repoRef?.repo ?? "", orgOwned: true });
+  const folder = vscode.workspace.workspaceFolders?.find((f) => f.uri.fsPath === root)?.uri ?? vscode.Uri.file(root);
+  const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder, "build.config.yml"));
+  const onConfig = () => { cfgLoaded = undefined; jira = undefined; changed.fire(); };
+  watcher.onDidCreate(onConfig); watcher.onDidChange(onConfig); watcher.onDidDelete(onConfig);
+  ctx.subscriptions.push(watcher, { dispose: () => clearInterval(poll) });
 
   return {
-    async features() { return (await snapshot()).features; },
-    async feature(id) { return findFeature((await snapshot()).features, id); },
-    async prs(): Promise<PrRef[]> {
-      const s = await snapshot();
-      return linkPrs(s.features, s.gh.prs).filter((x) => x.state === "open");
+    async work(role: Role, login, conns): Promise<WorkSnapshot> {
+      const data = await snapshot();
+      lastHash ||= hashOf();
+      return {
+        next: nextSteps(role, data, login),
+        sprint: { ...(data.sprint ? { name: data.sprint } : {}), stories: sprintRows(data) },
+        missing: missingItems(role, data, conns, cfg.environments),
+        errors: data.errors,
+        updatedAt: new Date().toISOString(),
+      };
     },
-    async queue(id: Identity, persona: Persona): Promise<QueueItem[]> {
-      const s = await snapshot();
-      const who = id ?? syntheticIdentity(persona);
-      return buildQueue(persona, {
-        features: s.features, prs: s.gh.prs, deploy: s.gh.deploy,
-        env: { login: who.login || undefined, repo: s.repo, jiraBrowseUrl, githubError: s.gh.error, jiraError: s.jira.error, maxAttempts: cfg.maxAttempts },
-      });
+    async story(key): Promise<StoryDetail | undefined> {
+      if (!/^[A-Z][A-Z0-9_]+-\d+$/.test(key)) return undefined;
+      const data = await snapshot();
+      let issue = data.stories.find((s) => s.key === key);
+      if (!issue) {
+        try { issue = acliOff ? (await readJiraIssues(claude, `key = ${key}`, readerModel()))[0] : await viewIssue(acli, key); }
+        catch (e) { logOnce(`project: reading ${key} failed: ${short(e)}`); }
+      }
+      if (!issue) return undefined;
+      // Release: the story's merge commit is on main (compare main...<sha> is "behind" or "identical")
+      let inMain: boolean | undefined;
+      const pr = data.prs.find((p) => p.storyKey === key && p.state === "merged" && p.mergeSha);
+      const r = data.repo;
+      if (pr && r) {
+        try {
+          const c = await connections.githubRequest<any>("GET", `/repos/${enc(r.owner)}/${enc(r.repo)}/compare/main...${pr.mergeSha}`);
+          inMain = c?.status === "behind" || c?.status === "identical";
+        } catch { inMain = undefined; }
+      }
+      return storyDetail(issue, data, { inMain });
     },
-    jiraBrowseUrl,
-    sources: sourcesWithUsage,
+    async addText(text, opts) { return store(text, opts.title, opts.origin === "file" ? "file" : "paste"); },
+    async addFile(file) {
+      const stat = await fs.stat(file);
+      if (stat.size > MAX_TEXT) throw new Error("The file is larger than 20 MB");
+      const text = extractText(file, await fs.readFile(file));
+      return store(text, path.basename(file, path.extname(file)), "file");
+    },
     async firefliesRecent(limit = 10) {
-      if (ff && ff.limit >= limit && Date.now() - ff.at < FIREFLIES_TTL) return ff.list.slice(0, limit);
+      if (ff && Date.now() - ff.at < FIREFLIES_TTL) return ff.list.slice(0, limit);
       if (!readerOn()) return [];
       try {
         const list = await readFirefliesRecent(claude, limit, readerModel());
-        ff = { limit, list, at: Date.now() };
+        ff = { list, at: Date.now() };
         return list;
-      } catch (e: any) {
-        logOnce(`project: Fireflies read failed: ${String(e?.message ?? e).slice(0, 200)}`);
+      } catch (e) {
+        logOnce(`project: Fireflies read failed: ${short(e)}`);
         return [];
       }
-    },
-    async indexFireflies(meetingId, meta) {
-      const id = meetingId.replace(/^fireflies:/, "");
-      if (!MEETING_ID_RE.test(id)) throw new Error("Invalid Fireflies meeting id");
-      // The Sources page already listed the meeting: its title and date avoid a second Fireflies read.
-      const given = meta && typeof meta.title === "string" && meta.title.trim()
-        ? { id: `fireflies:${id}`, kind: "fireflies" as const, title: cleanTitle(meta.title, id), date: String(meta.date ?? "") } : undefined;
-      const known = given ?? ff?.list.find((m) => m.id === `fireflies:${id}`);
-      return addToIndex({ ...(known ?? await readFirefliesMeta(claude, id, readerModel())), origin: "fireflies" });
-    },
-    async addUpload(fileUri, title) {
-      const file = fileUri.fsPath;
-      const stat = await fs.stat(file);
-      if (stat.size > 20 * 1024 * 1024) throw new Error("Transcript file is larger than 20 MB");
-      const text = extractText(file, await fs.readFile(file)).trim();
-      if (!text) throw new Error("The transcript file has no text");
-      const id = uploadId(text);
-      await storeUpload(ctx.globalStorageUri.fsPath, id, text, await keyBuffer());
-      const name = cleanTitle(title ?? path.basename(file, path.extname(file)), id);
-      return addToIndex({ id, kind: "upload", title: name, date: new Date().toISOString(), origin: "file" });
-    },
-    async addText(text, opts) {
-      const body = String(text ?? "").trim();
-      if (!body) throw new Error("There is no text to add");
-      if (Buffer.byteLength(body, "utf8") > 20 * 1024 * 1024) throw new Error("The text is larger than 20 MB");
-      const origin = isSourceOrigin(opts?.origin) ? opts.origin : "paste";
-      const id = uploadId(body);
-      // Encrypted straight into the extension's storage: no temp file, nothing in the repo but the index entry.
-      await storeUpload(ctx.globalStorageUri.fsPath, id, body, await keyBuffer());
-      const date = opts?.date && !Number.isNaN(Date.parse(opts.date)) ? new Date(opts.date).toISOString() : new Date().toISOString();
-      return addToIndex({ id, kind: "upload", title: cleanTitle(opts?.title ?? "", id), date, origin });
     },
     async transcript(sourceId) {
       const m = SOURCE_REF_RE.exec(sourceId);
@@ -416,44 +343,15 @@ export function createProject(base: ModuleBase, deps: ProjectDeps): ProjectConte
       return firefliesPointer(m[2]);
     },
     async refresh() {
-      cfgLoaded = undefined; jira = undefined; ff = undefined;
+      cfgLoaded = undefined; ff = undefined;
       await loadConfig();
-      const [g, j] = await Promise.all([loadGithub(true), loadJira(true)]);
-      refreshPages([...pages.keys(), ...groupFeatures(j.epics, j.children, j.tests, cfg.fields).map((s) => s.pageId).filter((x): x is string => !!x)], true);
-      refreshListing(true);
-      lastHash = hashOf(g, j);
+      await Promise.all([loadGithub(true), loadJira(true)]);
+      refreshPages(true);
+      refreshSetup(true);
+      lastHash = hashOf();
       changed.fire();
     },
     onDidChange: changed.event,
-
-    // ---- v3 detail reads (Circuit MCP) ----
-    async design(featureId) {
-      const f = findFeature((await snapshot()).features, featureId);
-      if (!f) throw new Error(`No feature ${featureId} (an epic key, a feature slug or a design page id)`);
-      return designDetail(f, pageOf(f));
-    },
-    async decisions(featureId) {
-      const f = findFeature((await snapshot()).features, featureId);
-      if (!f) throw new Error(`No feature ${featureId}`);
-      return decisionsDetail(f, pageOf(f));
-    },
-    async orgSnapshot(featureId) {
-      const f = findFeature((await snapshot()).features, featureId);
-      if (!f) throw new Error(`No feature ${featureId}`);
-      return orgSnapshotDetail(f, pageOf(f));
-    },
-    async story(key) {
-      if (!/^[A-Z][A-Z0-9_]+-\d+$/.test(key)) throw new Error(`Not a Jira key: ${key}`);
-      const s = await snapshot();
-      for (const f of s.features) {
-        const st = f.stories.find((x) => x.jiraKey === key);
-        if (st) return storyDetail(f, st, s.gh.prs);
-      }
-      // Not a story of a feature epic: read it directly.
-      const issue = await viewIssue(acli, key);
-      if (!issue) throw new Error(`Jira issue ${key} not found`);
-      return { key: issue.key, summary: issue.summary, issueType: issue.issueType, status: issue.status, labels: issue.labels, parent: issue.parentKey ?? null,
-        description: issue.description ?? null, url: jiraBrowseUrl(issue.key) ?? null, note: "Not a story under a feature epic." };
-    },
   };
 }
+

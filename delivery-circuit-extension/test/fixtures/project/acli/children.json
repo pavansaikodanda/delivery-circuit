@@ -227,7 +227,7 @@
         "name": "Story"
       },
       "status": {
-        "name": "To Do",
+        "name": "Ready for Dev",
         "statusCategory": {
           "key": "new"
         }

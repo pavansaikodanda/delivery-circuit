@@ -1,0 +1,190 @@
+{
+  "mode": "ready",
+  "user": {
+    "login": "demo-user",
+    "role": "lead",
+    "roleLabel": "Lead",
+    "roles": [
+      {
+        "id": "developer",
+        "label": "Developer"
+      },
+      {
+        "id": "lead",
+        "label": "Lead"
+      }
+    ]
+  },
+  "connections": [
+    {
+      "id": "github",
+      "label": "GitHub",
+      "state": "connected",
+      "button": "Check",
+      "account": "demo-user",
+      "detail": "acme-org/acme-salesforce"
+    },
+    {
+      "id": "atlassian",
+      "label": "Atlassian",
+      "state": "connected",
+      "button": "Check",
+      "account": "claude.ai Atlassian",
+      "detail": "Jira + Confluence through Claude"
+    },
+    {
+      "id": "coderabbit",
+      "label": "CodeRabbit",
+      "state": "error",
+      "button": "Fix",
+      "detail": "The app is suspended on this org."
+    }
+  ],
+  "missingCount": 13,
+  "repo": "acme-org/acme-salesforce",
+  "work": {
+    "next": [
+      {
+        "id": "prod:901",
+        "title": "Approve production deploy",
+        "detail": "main · waiting",
+        "button": "Open"
+      },
+      {
+        "id": "promote:sprint/2026-11",
+        "title": "Sprint review: promote sprint/2026-11 → dev",
+        "detail": "3 new commits",
+        "button": "Create"
+      },
+      {
+        "id": "promote:dev",
+        "title": "Promote dev → sit",
+        "detail": "PR #45 · waits for a lead",
+        "button": "Open"
+      }
+    ],
+    "sprint": {
+      "name": "sprint/2026-11",
+      "stories": [
+        {
+          "key": "ABC-11",
+          "title": "Foundation",
+          "status": "qa",
+          "statusLabel": "QA"
+        },
+        {
+          "key": "ABC-12",
+          "title": "Agent escalates a Case",
+          "status": "in-pr",
+          "statusLabel": "In PR"
+        },
+        {
+          "key": "ABC-13",
+          "title": "Escalation queue",
+          "status": "in-pr",
+          "statusLabel": "In PR"
+        },
+        {
+          "key": "ABC-14",
+          "title": "Escalation report",
+          "status": "ready",
+          "statusLabel": "Ready"
+        },
+        {
+          "key": "ABC-15",
+          "title": "Escalation email",
+          "status": "design",
+          "statusLabel": "Design"
+        }
+      ]
+    },
+    "errors": [],
+    "updatedAt": "2026-11-13T11:58:00.000Z"
+  },
+  "missing": [
+    {
+      "id": "conn:coderabbit",
+      "title": "Fix CodeRabbit",
+      "detail": "The app is suspended on this org.",
+      "button": "Fix",
+      "group": "connections"
+    },
+    {
+      "id": "repo:bootstrap",
+      "title": "Set up the repo",
+      "detail": "Runs /circuit-bootstrap",
+      "button": "Set up",
+      "group": "repo"
+    },
+    {
+      "id": "repo:branch:uat",
+      "title": "Branch uat is missing",
+      "button": "Open",
+      "group": "repo"
+    },
+    {
+      "id": "repo:secret:sit",
+      "title": "sit: no SFDX_AUTH_URL secret",
+      "detail": "Checked by name only",
+      "button": "Open",
+      "group": "repo"
+    },
+    {
+      "id": "repo:env:uat",
+      "title": "Environment uat is missing",
+      "button": "Open",
+      "group": "repo"
+    },
+    {
+      "id": "repo:automerge",
+      "title": "Auto-merge is off",
+      "detail": "Allow auto-merge in the repo settings",
+      "button": "Open",
+      "group": "repo"
+    },
+    {
+      "id": "ac:ABC-13",
+      "title": "ABC-13: no acceptance criteria",
+      "button": "Open",
+      "group": "stories"
+    },
+    {
+      "id": "ac:ABC-14",
+      "title": "ABC-14: no acceptance criteria",
+      "button": "Open",
+      "group": "stories"
+    },
+    {
+      "id": "ac:ABC-15",
+      "title": "ABC-15: no acceptance criteria",
+      "button": "Open",
+      "group": "stories"
+    },
+    {
+      "id": "scan:41",
+      "title": "ABC-12: scan failing",
+      "button": "Open",
+      "group": "stories"
+    },
+    {
+      "id": "rabbit:41",
+      "title": "ABC-12: CodeRabbit asked for changes",
+      "button": "Open",
+      "group": "stories"
+    },
+    {
+      "id": "wait:41",
+      "title": "PR #41 waits for a review",
+      "detail": "3 d without an approval",
+      "button": "Open",
+      "group": "stories"
+    },
+    {
+      "id": "nokey:43",
+      "title": "PR #43 has no Jira key",
+      "detail": "Name the branch feature/<KEY>-<slug>",
+      "button": "Open",
+      "group": "stories"
+    }
+  ]
+}

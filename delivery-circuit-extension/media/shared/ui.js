@@ -12,41 +12,15 @@
   // =====================================================================================================
   // Pure core (no DOM). Also loadable by unit tests through `module.exports`.
   // =====================================================================================================
-  const PERSONA = {
+  const ROLE = {
     architect: { label: "Architect", icon: "symbol-structure" },
     developer: { label: "Developer", icon: "code" },
-    tester: { label: "Tester", icon: "beaker" },
+    tester: { label: "QA", icon: "beaker" },
+    lead: { label: "Lead", icon: "organization" },
   };
-  const GATES = {
-    G1: { owner: "architect", label: "Plan signed off", icon: "checklist" },
-    G2: { owner: "tester", label: "Testability confirmed", icon: "beaker" },
-    G3: { owner: "developer", label: "AI plan approved", icon: "sparkle" },
-    G4: { owner: "tester", label: "AI test plan approved", icon: "tasklist" },
-    G5: { owner: "developer", label: "Code review", icon: "code-review" },
-    G6: { owner: "tester", label: "QA on sandbox", icon: "verified" },
-    G7: { owner: "architect", label: "Schema and design review", icon: "type-hierarchy" },
-    G8: { owner: "architect", label: "Merge", icon: "git-merge" },
-    G9: { owner: "architect", label: "Production approval", icon: "rocket" },
-  };
-  const STAGES = {
-    intake: { label: "Intake", icon: "inbox" }, clarify: { label: "Clarify", icon: "comment-discussion" }, plan: { label: "Plan", icon: "map" },
-    signoff: { label: "Sign-off", icon: "verified" }, stories: { label: "Stories", icon: "book" }, tests: { label: "Tests", icon: "beaker" },
-    jira: { label: "Jira", icon: "issues" }, build: { label: "Build", icon: "tools" }, qa: { label: "QA", icon: "bug" }, release: { label: "Release", icon: "rocket" },
-  };
-  const STAGE_ORDER = ["intake", "clarify", "plan", "signoff", "stories", "tests", "jira", "build", "qa", "release"];
   /** Concept icons (codicons). DC.iconFor(group, value). */
   const ICONS = {
-    persona: { architect: "symbol-structure", developer: "code", tester: "beaker" },
-    gate: Object.fromEntries(Object.entries(GATES).map(([k, v]) => [k, v.icon])),
-    stage: Object.fromEntries(Object.entries(STAGES).map(([k, v]) => [k, v.icon])),
-    queue: { "needs-human": "person", "needs-qa": "beaker", connect: "plug", clarify: "comment-discussion", "sign-off": "checklist",
-      "review-stories": "book", "design-tests": "beaker", testability: "beaker", "approve-plan": "sparkle", "approve-testplan": "tasklist",
-      "review-pr": "code-review", "qa-pr": "verified", merge: "git-merge", "deploy-approval": "rocket" },
-    link: { file: "file", report: "report", url: "link-external" },
-    test: { passed: "pass", failed: "error", blocked: "circle-slash", error: "warning", running: "loading", "not-run": "circle-outline" },
-    action: { refresh: "refresh", run: "play", "run-all": "run-all", cancel: "debug-stop", stop: "debug-stop", export: "export",
-      settings: "settings-gear", connect: "plug", disconnect: "debug-disconnect", check: "sync", manage: "link-external", validate: "checklist",
-      generate: "sparkle", ai: "sparkle", gate: "check", nav: "arrow-right", feature: "arrow-right", more: "ellipsis", send: "send", dismiss: "close" },
+    role: { architect: "symbol-structure", developer: "code", tester: "beaker", lead: "organization" },
     notice: { info: "info", warn: "warning", err: "error", ok: "pass" },
   };
 
@@ -90,42 +64,6 @@
     });
     return { ops, removed: [...prev.keys()].filter((k) => !seen.has(k)) };
   }
-  function kbdKeys(text) {
-    const s = String(text);
-    if (s === "+") return ["+"];
-    return s.split(/\+(?!$)/).map((k) => k.trim()).filter(Boolean);
-  }
-  /** Stages: [{id,label,state,title}] or Record<StageId,StageState> -> array in lifecycle order. */
-  function normStages(stages) {
-    if (!stages) return [];
-    if (Array.isArray(stages)) return stages.filter(Boolean).map((s) => Object.assign({ label: (STAGES[s.id] || {}).label || s.id || "" }, s));
-    return STAGE_ORDER.filter((id) => stages[id]).map((id) => ({ id, label: STAGES[id].label, state: stages[id] }));
-  }
-  /** Gates: [{id,state,own?}] or Partial<Record<GateId,GateState>>; own from the viewer persona. */
-  function normGates(gates, viewer) {
-    if (!gates) return [];
-    const list = Array.isArray(gates) ? gates.filter(Boolean).map((g) => Object.assign({}, g))
-      : Object.keys(GATES).filter((id) => gates[id]).map((id) => ({ id, state: gates[id] }));
-    return list.map((g) => {
-      const def = GATES[g.id] || {};
-      const owner = g.owner || def.owner || "";
-      const own = g.own != null ? !!g.own : viewer ? owner === viewer : false;
-      return Object.assign(g, { own, owner, gateLabel: def.label || (g.label !== g.id ? g.label : "") || g.id });
-    });
-  }
-  function normChecks(checks) {
-    if (!checks) return [];
-    if (Array.isArray(checks)) return checks.filter(Boolean);
-    return Object.entries(checks).map(([name, state]) => ({ name, state }));
-  }
-  /** Review signals from p.groups ([{source,label,signals}]) or p.reviews (ReviewSignal[]). */
-  const SOURCE_LABEL = { human: "", coderabbit: "CodeRabbit", "ai-reviewer": "AI Reviewer", "code-analyzer": "Code Analyzer", "sf-ai-tester": "SF AI Tester" };
-  function normReviews(p) {
-    const out = [];
-    if (p && Array.isArray(p.groups)) p.groups.forEach((g) => (g.signals || []).forEach((s) => out.push(Object.assign({ source: g.source, sourceLabel: g.label }, s))));
-    else if (p && Array.isArray(p.reviews)) p.reviews.forEach((s) => out.push(Object.assign({ sourceLabel: SOURCE_LABEL[s.source] || "" }, s)));
-    return out;
-  }
   function ageDays(iso, now = Date.now()) {
     const t = iso ? Date.parse(iso) : NaN;
     return isNaN(t) ? 0 : (now - t) / 86400000;
@@ -140,40 +78,8 @@
     if (s < 86400) return Math.round(s / 3600) + " h";
     return Math.round(s / 86400) + " d";
   }
-  /** One status phrase for a PR (DESIGN.md §5.6): {tone, text}. */
-  function prStatus(p, o = {}) {
-    const checks = normChecks(p.checks);
-    const reviews = normReviews(p);
-    const failing = checks.filter((c) => c.state === "failure").length;
-    if (p.state === "merged") return { tone: "ok", text: "merged" };
-    if (p.state === "closed") return { tone: "", text: "closed" };
-    if (failing) return { tone: "err", text: failing + " check" + (failing === 1 ? "" : "s") + " failing" };
-    const blocker = reviews.find((r) => r.state === "block" || r.state === "changes-requested");
-    if (blocker) return { tone: "err", text: "blocked by " + (blocker.sourceLabel || blocker.author || "review") };
-    if (p.draft) return { tone: "", text: "draft" };
-    if (p.needsYou) return o.canAct === false && o.waitingOn ? { tone: "", text: "waiting on " + o.waitingOn } : { tone: "info", text: "waiting on you" };
-    if (checks.some((c) => c.state === "pending")) return { tone: "info", text: "checks running" };
-    if ((p.missing || []).length) return { tone: "", text: "review pending" };
-    return { tone: "ok", text: "ready" };
-  }
-  const CONN = {
-    connected: { tone: "ok", text: "Connected" }, expiring: { tone: "warn", text: "Expiring" }, error: { tone: "err", text: "Problem" },
-    checking: { tone: "info", text: "Checking" }, unknown: { tone: "", text: "Not verified" }, disconnected: { tone: "", text: "Not connected" },
-  };
-  /** Connection status phrase: {tone, text}. */
-  function connStatus(r) {
-    const base = CONN[r.state] || { tone: stateClass(r.state), text: word(r.state) };
-    let text = r.statusText || base.text;
-    if (!r.statusText && r.state === "expiring") {
-      const days = r.expiresAt ? Math.ceil(-ageDays(r.expiresAt)) : NaN;
-      if (!isNaN(days) && days >= 0) text = days === 0 ? "Expires today" : "Expires in " + days + " day" + (days === 1 ? "" : "s");
-    }
-    if (r.state === "connected" && r.account) text += " · " + r.account;
-    return { tone: base.tone, text };
-  }
 
-  const core = { PERSONA, GATES, STAGES, STAGE_ORDER, ICONS, hash, stateClass, word, iconFor, planKeyed, kbdKeys, normStages, normGates,
-    normChecks, normReviews, ageDays, ago, prStatus, connStatus };
+  const core = { ROLE, ICONS, hash, stateClass, word, iconFor, planKeyed, ageDays, ago };
   if (typeof module === "object" && module && module.exports && typeof document === "undefined") { module.exports = core; return; }
 
   // =====================================================================================================
@@ -186,7 +92,7 @@
   const isNode = (x) => typeof Node !== "undefined" && x instanceof Node;
   const str = (x) => (x == null || x === false || x === true ? "" : String(x));
   const cap = (s) => (s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : "");
-  const personaLabel = (p) => (p && PERSONA[p] ? PERSONA[p].label : cap(p || ""));
+  const roleLabel = (r) => (r && ROLE[r] ? ROLE[r].label : cap(r || ""));
   let uid = 0;
   const nextId = (p) => "dc-" + p + "-" + (++uid);
 
@@ -507,22 +413,17 @@
     });
   }
   const BRAND_LABEL = { github: "GitHub", jira: "Jira", confluence: "Confluence", atlassian: "Atlassian", lucid: "Lucid", coderabbit: "CodeRabbit",
-    claude: "Claude", anthropic: "Anthropic", slack: "Slack", salesforce: "Salesforce", fireflies: "Fireflies" };
+    claude: "Claude", salesforce: "Salesforce", fireflies: "Fireflies" };
   /** Apps missing from simple-icons use neutral codicons. */
-  const BRAND_FALLBACK = { slack: "comment", salesforce: "cloud", fireflies: "mic", github: "github", jira: "issues", confluence: "book",
-    atlassian: "organization", lucid: "graph", coderabbit: "hubot", claude: "sparkle", anthropic: "sparkle" };
-  /** Connection ids, review sources and DeepLink kinds -> brand id (or codicon via ICONS.link). */
-  const BRAND_OF = {
-    "sf-dev": "salesforce", "sf-qa": "salesforce", "mcp-salesforce": "salesforce", "code-analyzer": "salesforce",
-    "mcp-atlassian": "atlassian", "mcp-github": "github", "mcp-slack": "slack", "mcp-lucid": "lucid", "mcp-fireflies": "fireflies",
-    "ai-reviewer": "anthropic", acli: "atlassian", "github-jira": "jira",
-  };
-  const OTHER_ICON = { "testing-browsers": "browser", runner: "server", "sf-ai-tester": "beaker", human: "person", file: "file", report: "report", url: "link-external" };
+  const BRAND_FALLBACK = { salesforce: "cloud", fireflies: "mic", github: "github", jira: "issues", confluence: "book",
+    atlassian: "organization", lucid: "graph", coderabbit: "hubot", claude: "sparkle" };
+  /** Connection ids and DeepLink kinds -> brand id. */
+  const BRAND_OF = { "sf-dev": "salesforce", "sf-qa": "salesforce" };
+  const OTHER_ICON = { url: "link-external" };
   function brandId(id) { return BRAND_OF[id] || id; }
   function brandLabel(id) { const b = brandId(id); return BRAND_LABEL[b] || (id ? cap(String(id).replace(/[-_]/g, " ")) : ""); }
-  /** DC.brand(id, {size: 16|12|20, label}): monochrome app logo from window.DC_BRANDS (simple-icons, CC0); Slack,
-   *  Salesforce, Fireflies and any missing logo fall back to a codicon. Also takes connection ids (sf-dev, mcp-*,
-   *  ai-reviewer, testing-browsers), review sources and DeepLink kinds (file, report, url), so pages never branch. */
+  /** DC.brand(id, {size: 16|12|20, label}): monochrome app logo from window.DC_BRANDS (simple-icons, CC0); Salesforce,
+   *  Fireflies and any missing logo fall back to a codicon. Also takes connection ids (sf-dev, sf-qa) and DeepLink kinds. */
   function brand(id, o = {}) {
     const b = brandId(id);
     const data = root.DC_BRANDS && root.DC_BRANDS[b];
@@ -562,19 +463,6 @@
       o.icon ? icon(o.icon, { size: 12 }) : null, str(text) ? h("span", str(text)) : null);
     if (o.tip) tip(el, o.tip);
     return el;
-  }
-  /** DC.badge(text, state) (first-kit name): neutral chip with a status dot. */
-  function badge(text, state) {
-    const t = TONE[state] || (["ok", "warn", "err", "info"].includes(state) ? state : "");
-    return h("span", { class: "badge dc-chip" }, state ? dot(t) : null, h("span", str(text)));
-  }
-  /** DC.kbd("Ctrl+Enter"). */
-  function kbd(keys) {
-    const parts = kbdKeys(keys);
-    if (parts.length === 1) return h("kbd", parts[0]);
-    const out = [];
-    parts.forEach((k, i) => { if (i) out.push("+"); out.push(h("kbd", k)); });
-    return h("span.dc-kbd", { "aria-label": parts.join(" plus ") }, out);
   }
   /** DC.when(iso): "5 h ago" (first-kit helper). DC.ago(iso): "5 h". */
   function when(iso) { const a = ago(iso); return !a ? "" : a === "now" ? "just now" : a + " ago"; }
@@ -719,26 +607,8 @@
   });
 
   // =====================================================================================================
-  // Links (DESIGN.md §4.1, §4.2)
+  // Hover strip (DESIGN.md §4.2)
   // =====================================================================================================
-  const isHttps = (t) => /^https:\/\//i.test(str(t));
-  const linkLabel = (l) => str(l && l.label) || brandLabel(l && l.kind) || "Open";
-  /** DC.links(list) / DC.linkList(list): logo + label (+ 12 px external icon for https) per DeepLink; posts openLink. */
-  function links(list) {
-    const ls = (list || []).filter((l) => l && (l.target || l.label));
-    if (!ls.length) return null;
-    return h("span.dc-links", ls.map((l) => h("a", {
-      href: "#", title: str(l.target) || null, onclick: (e) => { e.preventDefault(); e.stopPropagation(); DC.openLink(l); },
-    }, brand(l.kind, { size: 16 }), h("span", linkLabel(l)), isHttps(l.target) ? icon("link-external", { size: 12, cls: "dc-ext" }) : null)));
-  }
-  /** DC.linkStrip(links, n = 3): strip items (icon-only, tooltip = label) for the first n links. */
-  function linkStrip(list, n = 3) {
-    return (list || []).filter(Boolean).slice(0, n).map((l) => ({ brand: l.kind, label: linkLabel(l), link: l }));
-  }
-  /** DC.linkMenu(links, from = 3): menu items for the links after the first `from`. */
-  function linkMenu(list, from = 3) {
-    return (list || []).filter(Boolean).slice(from).map((l) => ({ brand: l.kind, label: linkLabel(l), link: l }));
-  }
   /** DC.strip(items): up to three icon-only ghost buttons ({brand | icon, label, onClick | link}). */
   function strip(items) {
     return (items || []).filter(Boolean).slice(0, 3).map((s) => button(s.label, s.onClick || (s.link ? () => DC.openLink(s.link) : null), {
@@ -849,317 +719,35 @@
     });
     return cells.length ? h("div.dc-kv", cells) : null;
   }
-  /** DC.checksLine(checks): dots + names (checks: [{name,state}] or Record<name,CheckState>). */
-  function checksLine(checks) {
-    const cs = normChecks(checks);
-    if (!cs.length) return null;
-    return h("div.dc-checks", cs.map((c) => h("span", { title: c.name + ": " + word(c.state) },
-      c.state === "pending" ? dot("info", { pulse: true }) : c.state === "missing" ? dot("", { hollow: true }) : dot(c.cls != null ? c.cls : stateClass(c.state)),
-      str(c.name), h("span.sr-only", " " + word(c.state)))));
-  }
-  /** DC.reviewList(signals, {missing}): source logo, author, state word in its tone, one-line summary; the line opens the review. */
-  function reviewList(signals, o = {}) {
-    const ss = (signals || []).filter(Boolean);
-    const missing = (o.missing || []).filter(Boolean);
-    if (!ss.length && !missing.length) return null;
-    return h("div.dc-reviews", ss.map((s) => {
-      const link = (s.links && s.links[0]) || (isHttps(s.url) ? { kind: "url", label: "Review", target: s.url } : null);
-      const tone = s.cls != null ? s.cls : stateClass(s.state);
-      const name = s.source === "human" ? s.author : s.sourceLabel || s.author;
-      const kids = [brand(s.source === "human" ? "human" : s.source, { size: 16 }), h("span", str(name)),
-        h("span.dc-st" + (tone ? "." + tone : ""), word(s.state)), h("span.dc-sum", { title: str(s.summary) || null }, str(s.summary))];
-      return link ? h("a.dc-review", { href: "#", title: str(link.target) || null, onclick: (e) => { e.preventDefault(); e.stopPropagation(); DC.openLink(link); } }, kids)
-        : h("div.dc-review", kids);
-    }), missing.length ? h("div.muted", "No signal yet: " + missing.join(", ")) : null);
-  }
-  /** DC.reasonLine(actions | text): one muted line with the reasons of disabled actions. */
-  function reasonLine(x) {
-    const text = typeof x === "string" ? x
-      : [...new Set((x || []).filter((a) => a && a.allowed === false && a.reason).map((a) => a.reason))].join(" · ");
-    return text ? h("div.dc-reason", icon("info", { size: 12 }), h("span", text)) : null;
-  }
 
-  // =====================================================================================================
-  // Actions (ActionRef with view-model allowed/reason)
-  // =====================================================================================================
-  const ACTION_ICON = (a) => a.icon || (a.kind === "gate" ? "check" : a.kind === "nav" ? "arrow-right" : a.kind === "ai" ? "sparkle" : null);
-  function defaultReason(a, o) {
-    if (a.reason) return a.reason;
-    if (o && o.viewer && a.persona && o.viewer !== a.persona) return "You act as " + personaLabel(o.viewer) + "; switch persona to run " + personaLabel(a.persona) + " actions";
-    return "Not available for your persona";
-  }
-  /** Splits actions into the primary (first allowed, else first) and the rest. */
-  function splitActions(actions, can) {
-    const as = (actions || []).filter((a) => a && a.label);
-    const first = as.find((a) => can(a)) || as[0] || null;
-    return { primary: first, rest: as.filter((a) => a !== first) };
-  }
-  /** DC.actionButtons(actions, allowed?, {onAction, size, viewer}): returns an element holding the primary button and
-   *  the rest as ghost buttons (disabled ones carry their reason as tooltip); the element also has .primary and .rest
-   *  (the ActionRefs) for pages that place them themselves. */
-  function actionButtons(actions, allowed, opts = {}) {
-    const can = typeof allowed === "function" ? allowed : (a) => a.allowed !== false;
-    const run = opts.onAction || ((a) => DC.action(a));
-    const { primary, rest } = splitActions(actions, can);
-    if (!primary) return null;
-    const mk = (a, kind) => button(a.label, () => run(a), {
-      kind, size: opts.size || "sm", disabled: !can(a), reason: can(a) ? null : defaultReason(a, opts), icon: kind === "ghost" ? ACTION_ICON(a) : null,
-    });
-    const el = h("span.dc-acts", mk(primary, can(primary) ? "primary" : "secondary"), rest.map((a) => mk(a, "ghost")));
-    el.primary = primary;
-    el.rest = rest;
-    return el;
-  }
-  function actionItems(actions, run, o) {
-    return (actions || []).filter((a) => a && a.label).map((a) => ({
-      label: a.label, icon: ACTION_ICON(a), disabled: a.allowed === false, reason: a.allowed === false ? defaultReason(a, o) : null, onClick: () => run(a),
-    }));
-  }
-  function actionGhosts(actions, run, o) {
-    return (actions || []).filter((a) => a && a.label).map((a) => button(a.label, () => run(a), {
-      kind: "ghost", size: "sm", icon: ACTION_ICON(a), disabled: a.allowed === false, reason: a.allowed === false ? defaultReason(a, o) : null,
-    }));
-  }
 
-  // =====================================================================================================
-  // Domain rows (DESIGN.md §5.4-§5.7)
-  // =====================================================================================================
-  const openFeatureMsg = (id) => post({ type: "openFeature", id });
-  function gateTip(gate) {
-    const g = GATES[gate];
-    return g ? gate + " · " + g.label + " · " + personaLabel(g.owner) : gate;
-  }
-  /** DC.queueRow(q, {viewer, view, canAct, onFeature, onAction, compact, onOpen}): one waiting item.
-   *  Status "waiting on you" (info) or "waiting on <persona>" (muted) when the viewer cannot act; overdue (> 3 d)
-   *  turns the age amber. Primary = first allowed action (disabled with reason otherwise). Compact (Home sidebar):
-   *  no strip, status under the title, an icon-only arrow that opens the persona view. */
-  function queueRow(q, o = {}) {
-    if (!q) return null;
-    const run = o.onAction || ((a) => DC.action(a));
-    const onFeature = o.onFeature || openFeatureMsg;
-    const acts = (q.actions || []).filter((a) => a && a.label);
-    const anyAllowed = acts.some((a) => a.allowed !== false);
-    const can = o.canAct != null ? !!o.canAct && (anyAllowed || !acts.length) : anyAllowed || (!acts.length && !o.viewer);
-    const owner = q.persona || (q.gate && GATES[q.gate] ? GATES[q.gate].owner : "") || o.view || "";
-    const human = q.kind === "needs-human";
-    const stText = can ? (human ? "needs a human" : "waiting on you") : owner ? "waiting on " + personaLabel(owner) : "waiting";
-    const age = q.age || ago(q.since);
-    const late = ageDays(q.since) > 3;
-    const ic = icon(q.gate ? (GATES[q.gate] || {}).icon || "circle-outline" : ICONS.queue[q.kind] || "circle-outline",
-      { label: q.gate ? gateTip(q.gate) : human ? "Needs a human" : null });
-    const { primary, rest } = splitActions(acts, (a) => a.allowed !== false);
-    const pOpts = { viewer: o.viewer };
-    if (o.compact) {
-      const onOpen = o.onOpen || (q.featureId ? () => onFeature(q.featureId) : null);
-      return row({
-        key: "q-" + q.id, icon: ic, title: q.title, titleTip: q.gate ? gateTip(q.gate) : null, compact: true,
-        status: { tone: can ? "info" : "muted", text: stText }, age, since: q.since, late,
-        onClick: onOpen || undefined,
-        primary: onOpen ? button("Open " + (owner ? personaLabel(owner) + " view" : "item"), onOpen, { kind: "ghost", size: "sm", icon: "arrow-right", iconOnly: true }) : null,
-        hash: [q, can, "compact"],
-      });
-    }
-    const featureItem = q.featureId ? { label: "Open feature " + q.featureId, icon: "arrow-right", onClick: () => onFeature(q.featureId) } : null;
-    const menuList = [...actionItems(rest, run, pOpts)];
-    const extraLinks = linkMenu(q.links, 3);
-    if (extraLinks.length) { if (menuList.length) menuList.push("-"); menuList.push(...extraLinks); }
-    if (featureItem) { if (menuList.length) menuList.push("-"); menuList.push(featureItem); }
-    return row({
-      key: "q-" + q.id, icon: ic, title: q.title, titleTip: q.gate ? gateTip(q.gate) : null,
-      status: { tone: can ? "info" : "muted", text: stText }, age, since: q.since, late,
-      primary: primary ? button(primary.label, () => run(primary), {
-        kind: can && primary.allowed !== false ? "primary" : "secondary", size: "sm",
-        disabled: primary.allowed === false, reason: primary.allowed === false ? defaultReason(primary, pOpts) : null,
-      }) : null,
-      strip: linkStrip(q.links), menu: menuList,
-      expanded: () => [
-        kv([["Detail", str(q.detail)], ["Links", links(q.links)],
-          ["Actions", rest.length || featureItem ? h("div.dc-acts", actionGhosts(rest, run, pOpts),
-            featureItem ? button(featureItem.label, featureItem.onClick, { kind: "ghost", size: "sm", icon: "arrow-right" }) : null) : null]]),
-        reasonLine(acts.map((a) => (a.allowed === false ? Object.assign({}, a, { reason: a.label + ": " + defaultReason(a, pOpts) }) : a))),
-      ],
-      hash: [q, can, o.viewer || null],
-      announce: q.title + ": " + stText,
-    });
-  }
-
-  /** DC.stageLine(stages, {label}): 10 thin segments (done teal, active indigo, todo slate, blocked red) + "7/10 stages". */
-  function stageLine(stages, o = {}) {
-    const ls = normStages(stages);
-    if (!ls.length) return null;
-    const done = ls.filter((s) => s.state === "done").length;
-    const cur = ls.find((s) => s.state === "active") || ls.find((s) => s.state === "blocked");
-    const text = (cur ? cur.label + ", " : "") + done + " of " + ls.length + " stages";
-    const line = h("span.dc-stage", { role: "progressbar", "aria-valuemin": "0", "aria-valuenow": String(done), "aria-valuemax": String(ls.length), "aria-valuetext": text },
-      ls.map((s) => h("i." + (["done", "active", "blocked"].includes(s.state) ? s.state : "todo"), { title: str(s.title) || s.label + ": " + word(s.state) })));
-    if (o.label === false) return line;
-    return [line, h("span.dc-stage-n", done + "/" + ls.length + " stages")];
-  }
-
-  /** DC.featureRow(f, {onOpen, viewer}): slug · current stage (· "G3 next, you") · Open; stage line under the title;
-   *  expanded: title, gates list (own gates 500), questions/stories/score, links. */
-  function featureRow(f, o = {}) {
-    if (!f) return null;
-    const onOpen = o.onOpen || openFeatureMsg;
-    const ls = normStages(f.stages);
-    const gates = normGates(f.gates, o.viewer);
-    const cur = ls.find((s) => s.state === "active") || ls.find((s) => s.state === "blocked");
-    const allDone = ls.length && ls.every((s) => s.state === "done");
-    const nx = f.next || null;
-    const nextOwn = nx && (nx.own || (o.viewer && nx.owner === o.viewer));
-    const stories = Array.isArray(f.stories) ? f.stories.length : Number(f.stories) || 0;
-    const questions = Number(f.openQuestions) || 0;
-    const tone = cur && cur.state === "blocked" ? "err" : allDone ? "ok" : "info";
-    const stText = cur ? cur.label + (cur.state === "blocked" ? " blocked" : "") : allDone ? "Done" : "Not started";
-    const extra = nextOwn && nx.id ? nx.id + " next, you" : null;
-    const extraMuted = !extra && questions ? questions + " question" + (questions === 1 ? "" : "s") : null;
-    const summary = [questions + " open question" + (questions === 1 ? "" : "s"), stories + " stor" + (stories === 1 ? "y" : "ies"),
-      f.score != null ? "score " + f.score : null, f.signedOff ? "signed off" : null].filter(Boolean).join(" · ");
-    return row({
-      key: "f-" + f.id, icon: icon("map"), title: f.slug || f.id, titleTip: str(f.title) || null,
-      status: { tone, text: stText + (extraMuted ? " · " + extraMuted : ""), extra },
-      meta: ls.length ? stageLine(ls) : null,
-      primary: button("Open", () => onOpen(f.id), { kind: "secondary", size: "sm" }),
-      strip: linkStrip(f.links), menu: linkMenu(f.links, 3),
-      expanded: () => kv([
-        ["Feature", str(f.title)],
-        ["Gates", gates.length ? h("div.dc-gates", gates.map((g) => h("div" + (g.own ? ".own" : ""),
-          dot(g.state === "done" ? "ok" : g.state === "blocked" ? "err" : g.state === "waiting" ? "info" : "", { hollow: g.state === "not-started" }),
-          h("span", g.id), h("span", g.gateLabel), h("span.muted", personaLabel(g.owner) + (g.own ? " (you)" : "")), h("span.muted", word(g.state))))) : null],
-        ["Summary", summary],
-        ["Links", links(f.links)],
-      ]),
-      hash: [f, o.viewer || null],
-    });
-  }
-
-  /** DC.prRow(p, {onFeature, viewer, view, canAct, actions, onAction, onOpen}): #n title · one computed status
-   *  (failing checks > blocked by tool > draft > waiting on you > checks running > review pending > ready) · age ·
-   *  one primary. Expanded: branch line, checks, reviews, links, actions + reason line. */
-  function prRow(p, o = {}) {
-    if (!p) return null;
-    const run = o.onAction || ((a) => DC.action(a));
-    const onFeature = o.onFeature || openFeatureMsg;
-    const acts = (o.actions || p.actions || []).filter((a) => a && a.label);
-    const anyAllowed = acts.some((a) => a.allowed !== false);
-    const canAct = o.canAct != null ? !!o.canAct : acts.length ? anyAllowed : true;
-    const waitingOn = o.view ? personaLabel(o.view) : "";
-    const st = prStatus(p, { canAct, waitingOn });
-    const merged = p.state === "merged";
-    const ic = icon(merged ? "git-merge" : p.state === "closed" ? "git-pull-request-closed" : p.draft ? "git-pull-request-draft" : "git-pull-request");
-    const prLink = (p.links || []).find((l) => l && l.kind === "github") || (isHttps(p.url) ? { kind: "github", label: "PR #" + p.number, target: p.url } : null);
-    const allLinks = p.links && p.links.length ? p.links : prLink ? [prLink] : [];
-    const { primary, rest } = splitActions(acts, (a) => a.allowed !== false);
-    const pOpts = { viewer: o.viewer };
-    const primaryBtn = primary
-      ? button(primary.label, () => run(primary), { kind: p.needsYou && canAct && primary.allowed !== false ? "primary" : "secondary", size: "sm",
-        disabled: primary.allowed === false, reason: primary.allowed === false ? defaultReason(primary, pOpts) : null })
-      : prLink ? button("Open", () => (o.onOpen ? o.onOpen(p) : DC.openLink(prLink)), { kind: "secondary", size: "sm" }) : null;
-    const featureItem = p.featureId ? { label: "Open feature " + p.featureId, icon: "arrow-right", onClick: () => onFeature(p.featureId) } : null;
-    const menuList = [...actionItems(rest, run, pOpts)];
-    const extraLinks = linkMenu(allLinks, 3);
-    if (extraLinks.length) { if (menuList.length) menuList.push("-"); menuList.push(...extraLinks); }
-    if (featureItem) { if (menuList.length) menuList.push("-"); menuList.push(featureItem); }
-    const attempt = Number(p.aiAttempt) || 0;
-    const labels = p.labels || [];
-    return row({
-      key: "pr-" + p.number, icon: ic, num: "#" + p.number, title: p.title, draft: !!p.draft,
-      status: { tone: st.tone, text: st.text }, age: p.age || ago(p.updatedAt || p.mergedAt), since: p.updatedAt || null,
-      primary: primaryBtn, strip: linkStrip(allLinks), menu: menuList,
-      expanded: () => [
-        kv([
-          ["Branch", h("span", h("span.mono", str(p.branch)), p.author ? " · " + p.author : null, p.storyKey ? " · " + p.storyKey : null,
-            attempt >= 3 ? " · attempt " + attempt : null, labels.includes("needs-human") ? " · needs-human" : null)],
-          ["Checks", checksLine(p.checks)],
-          ["Reviews", reviewList(normReviews(p), { missing: p.missing })],
-          ["Links", links(allLinks)],
-          ["Actions", rest.length || featureItem ? h("div.dc-acts", actionGhosts(rest, run, pOpts),
-            featureItem ? button(featureItem.label, featureItem.onClick, { kind: "ghost", size: "sm", icon: "arrow-right" }) : null) : null],
-        ]),
-        reasonLine(acts.map((a) => (a.allowed === false ? Object.assign({}, a, { reason: a.label + ": " + defaultReason(a, pOpts) }) : a))),
-      ],
-      hash: [p, canAct, o.viewer || null, acts],
-      announce: "PR #" + p.number + ": " + st.text,
-    });
-  }
-
-  /** DC.connectionRow(r, {onConnect, onCheck, onDisconnect, onManage}): 20 px logo · label · state word (· account) ·
-   *  connect button. Strip: Check (optimistic busy state) and Manage (vendor page); menu: links, Disconnect.
-   *  Messages (defaults): {type:"connect"|"check"|"disconnect"|"manage", id}. */
-  function connectionRow(r, o = {}) {
-    if (!r) return null;
-    const id = r.id;
-    const busy = r.state === "checking";
-    const dis = r.actionable === false;
-    const onConnect = o.onConnect || (() => post({ type: "connect", id }));
-    const onCheck = o.onCheck || (() => post({ type: "check", id }));
-    const onDisconnect = o.onDisconnect || (() => post({ type: "disconnect", id }));
-    const onManage = o.onManage || (() => post({ type: "manage", id }));
-    const st = connStatus(r);
-    const check = (e) => {
-      const item = e.currentTarget.closest(".dc-item");
-      if (item) {
-        item.setAttribute("data-dc-optimistic", "");
-        item.setAttribute("data-state", "checking");
-        const rw = item.querySelector(":scope > .dc-row");
-        rw.setAttribute("aria-busy", "true");
-        const s = rw.querySelector(":scope > .dc-status");
-        if (s) s.replaceWith(status("running", "Checking"));
-      }
-      announce("Checking " + r.label);
-      onCheck(id);
-    };
-    const connectLabel = r.connectLabel === null ? null : r.connectLabel || (r.state === "connected" ? "Reconnect" : r.state === "error" ? "Fix" : "Connect");
-    const reason = dis ? str(r.reason) || "Managed by a repo or org admin" : null;
-    const menuList = linkMenu(r.links, 0);
-    if (r.canDisconnect) { if (menuList.length) menuList.push("-"); menuList.push({ label: "Disconnect", icon: "debug-disconnect", danger: true, disabled: busy, onClick: () => onDisconnect(id) }); }
-    return row({
-      key: "c-" + id, icon: brand(id, { size: 20 }), title: r.label,
-      status: { tone: busy ? "running" : st.tone, text: st.text }, busy,
-      primary: connectLabel ? button(connectLabel, () => onConnect(id), {
-        // primary only when the connection needs attention (problem / expiring); optional "not connected" rows stay quiet
-        kind: r.state === "error" || r.state === "expiring" ? "primary" : "secondary",
-        size: "sm", disabled: dis || busy, reason: dis ? reason : busy ? "Checking…" : null,
-      }) : null,
-      strip: [{ icon: "sync", label: "Check now", onClick: check, disabled: busy, reason: busy ? "Checking…" : null },
-        r.manageUrl ? { brand: id, label: "Manage " + str(r.label) + " at the vendor", onClick: () => onManage(id) } : null],
-      menu: menuList,
-      expanded: () => [
-        kv([["Detail", str(r.detail)], ["Expires", str(r.expiryText) || (r.expiresAt ? String(r.expiresAt).slice(0, 10) : "")],
-          ["Account", r.state !== "connected" ? str(r.account) : ""], ["Links", links(r.links)],
-          ["Needed by", (r.neededBy || []).length ? (r.neededBy || []).map(personaLabel).join(" · ") + (r.scope ? " · " + r.scope + " scope" : "") : ""]]),
-        reason && connectLabel ? reasonLine(connectLabel + ": " + reason) : null,
-      ],
-      hash: r, state: r.state, announce: r.label + ": " + st.text,
-    });
-  }
   // =====================================================================================================
   // Page structure (DESIGN.md §5.1, §5.2, §5.8, §5.9)
   // =====================================================================================================
-  /** DC.personaChip(persona, {personas, onSwitch}): pill; a menu of personas when there is a choice. */
-  function personaChip(persona, o = {}) {
-    if (!persona) return null;
-    const choices = (o.personas || []).filter((p) => PERSONA[p]);
-    const inner = [icon(PERSONA[persona] ? PERSONA[persona].icon : "account", { size: 12 }), h("span", personaLabel(persona))];
-    if (choices.length <= 1) return h("span.dc-persona", { title: "Acting as " + personaLabel(persona) }, inner);
-    const onSwitch = o.onSwitch || ((p) => post({ type: "switchPersona", persona: p }));
-    const host = menu(choices.map((p) => ({ label: personaLabel(p), checked: p === persona, onClick: () => { if (p !== persona) { announce("Acting as " + personaLabel(p)); onSwitch(p); } } })),
-      { label: "Act as persona" });
-    const btn = h("button.dc-persona", { type: "button", "aria-haspopup": "menu", "aria-expanded": "false", "aria-label": "Acting as " + personaLabel(persona) + ". Switch persona",
+  /** DC.roleChip(role, {roles, onSwitch}): pill; a menu of roles when there is a choice. Posts {type:"switchRole", role}. */
+  function roleChip(role, o = {}) {
+    if (!role) return null;
+    const choices = (o.roles || []).filter((r) => ROLE[r]);
+    const inner = [icon(ROLE[role] ? ROLE[role].icon : "account", { size: 12 }), h("span", roleLabel(role))];
+    if (choices.length <= 1) return h("span.dc-persona", { title: "Working as " + roleLabel(role) }, inner);
+    const onSwitch = o.onSwitch || ((r) => post({ type: "switchRole", role: r }));
+    const host = menu(choices.map((r) => ({ label: roleLabel(r), checked: r === role, onClick: () => { if (r !== role) { announce("Working as " + roleLabel(r)); onSwitch(r); } } })),
+      { label: "Switch role" });
+    const btn = h("button.dc-persona", { type: "button", "aria-haspopup": "menu", "aria-expanded": "false", "aria-label": "Working as " + roleLabel(role) + ". Switch role",
       onclick: (e) => { e.stopPropagation(); openMenuFor(e.currentTarget.parentElement, false); },
       onkeydown: (e) => { if (e.key === "ArrowDown") { e.preventDefault(); openMenuFor(e.currentTarget.parentElement, false); } },
     }, inner, icon("chevron-down", { size: 12 }));
     host.replaceChildren(btn);
     return host;
   }
-  /** DC.header({title, sub, persona, personas, onSwitch, onRefresh, menu, actions, icon}): sticky page header.
-   *  Right side: persona chip, then extra nodes, then one Refresh ghost icon button and an optional "…" menu. */
+  /** DC.header({title, sub, role, roles, onSwitch, onRefresh, menu, actions, icon}): sticky page header.
+   *  Right side: role chip, then extra nodes, then one Refresh ghost icon button and an optional "…" menu. */
   function header(o = {}) {
     const refresh = o.onRefresh || (o.refresh === true ? () => post({ type: "refresh" }) : null);
     return h("header.dc-header",
       h("div.dc-header-main", h("h1", o.icon ? [icon(o.icon), " "] : null, str(o.title)), str(o.sub) || isNode(o.sub) ? h("div.dc-sub", o.sub) : null),
       h("div.dc-header-right",
-        personaChip(o.persona, o),
+        roleChip(o.role, o),
         o.actions || null,
         o.menu ? menu(o.menu, { label: "More", size: "md" }) : null,
         refresh ? button("Refresh", refresh, { kind: "ghost", icon: "refresh", iconOnly: true }) : null));
@@ -1206,35 +794,6 @@
       }, t.icon ? icon(t.icon) : null, h("span", str(t.label)), t.count != null && t.count !== "" ? h("span.dc-tab-n", "· " + str(t.count)) : null);
       return b;
     }), h("span.dc-tab-ink", { "data-dc-ink": "", "aria-hidden": "true" }));
-  }
-  /** DC.segmented(options: string[] | [{value, label, icon, disabled, tip}], value, onChange, {label}): pill radiogroup. */
-  function segmented(options, value, onChange, o = {}) {
-    const opts = (options || []).filter((x) => x != null).map((x) => (typeof x === "object" ? x : { value: x, label: String(x) }));
-    const seg = h("span.dc-seg", {
-      role: "radiogroup", "aria-label": o.label || null,
-      onkeydown: (e) => {
-        const all = [...e.currentTarget.querySelectorAll(":scope > button:not(:disabled)")];
-        const i = all.indexOf(document.activeElement);
-        if (i < 0) return;
-        const j = e.key === "ArrowRight" || e.key === "ArrowDown" ? (i + 1) % all.length : e.key === "ArrowLeft" || e.key === "ArrowUp" ? (i - 1 + all.length) % all.length : -1;
-        if (j >= 0) { e.preventDefault(); all[j].focus(); all[j].click(); }
-      },
-    }, opts.map((x) => {
-      const on = x.value === value;
-      const b = h("button", {
-        type: "button", role: "radio", "aria-checked": String(on), tabindex: on ? "0" : "-1", disabled: !!x.disabled, "data-value": str(x.value),
-        "data-tip": x.disabled && str(x.reason) ? str(x.reason) : null,
-        onclick: (e) => {
-          const btn = e.currentTarget;
-          if (btn.getAttribute("aria-checked") === "true") return;
-          btn.parentElement.querySelectorAll(":scope > button").forEach((y) => { y.setAttribute("aria-checked", String(y === btn)); y.setAttribute("tabindex", y === btn ? "0" : "-1"); });
-          if (onChange) onChange(x.value);
-        },
-      }, x.icon ? icon(x.icon, { size: 12 }) : null, h("span", str(x.label != null ? x.label : x.value)));
-      if (x.tip) tip(b, x.tip);
-      return b;
-    }));
-    return o.label && o.showLabel ? h("span.dc-seg-wrap", h("span.dc-seg-l", { "aria-hidden": "true" }, o.label), seg) : seg;
   }
 
   // =====================================================================================================
@@ -1289,110 +848,7 @@
       icon(o.icon || ICONS.notice[k] || "info"), h("div.dc-notice-t", isNode(text) || Array.isArray(text) ? text : str(text)),
       o.action && o.action.label ? h("a.dc-notice-a", { href: "#", onclick: (e) => { e.preventDefault(); if (o.action.onClick) o.action.onClick(); } }, str(o.action.label)) : null);
   }
-  /** DC.progress({value, max, segments: {passed, failed, blocked, error}, label}): 4 px bar, teal fill or status segments. */
-  function progress(o = {}) {
-    const seg = o.segments;
-    const sum = seg ? Object.values(seg).reduce((a, b) => a + (Number(b) || 0), 0) : 0;
-    const max = o.max != null ? Number(o.max) || 0 : seg ? sum : 100;
-    const now = o.value != null ? Number(o.value) || 0 : seg ? sum : 0;
-    const pct = (n) => (max > 0 ? Math.max(0, Math.min(100, (100 * (Number(n) || 0)) / max)) : 0).toFixed(2) + "%";
-    const text = o.label || (seg ? ["passed", "failed", "blocked", "error"].filter((k) => seg[k]).map((k) => seg[k] + " " + k).join(", ") || now + " of " + max : now + " of " + max);
-    return h("div.dc-bar", { role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(max), "aria-valuenow": String(now), "aria-valuetext": text },
-      seg ? ["passed", "failed", "blocked", "error"].map((k) => (seg[k] ? h("i." + k, { style: { width: pct(seg[k]) } }) : null))
-        : h("i", { style: { width: pct(now) } }));
-  }
-  /** DC.ring(value, max, {size = 20, label, tone}): 20 px progress ring (stroke 2); value null = spinner. */
-  function ring(value, max, o = {}) {
-    const size = o.size || 20;
-    if (value == null) return icon("loading", { spin: true, label: o.label || "In progress", cls: "info" });
-    const sw = 2;
-    const r = (size - sw) / 2, c = 2 * Math.PI * r;
-    const frac = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
-    return svg("svg", { class: "dc-ring" + (o.tone ? " " + o.tone : ""), width: size, height: size, viewBox: "0 0 " + size + " " + size, role: "img", "aria-label": o.label || value + " of " + max },
-      svg("circle", { class: "bg", cx: size / 2, cy: size / 2, r, "stroke-width": sw }),
-      svg("circle", { class: "fg", cx: size / 2, cy: size / 2, r, "stroke-width": sw, "stroke-dasharray": c.toFixed(2), "stroke-dashoffset": (c * (1 - frac)).toFixed(2), "stroke-linecap": frac > 0 ? "round" : "butt" }));
-  }
-  function logLineClass(l) {
-    return /\b(error|failed|failure)\b/i.test(l) ? "err" : /\bPASSED\b|^Run finished/.test(l) ? "ok" : /^\[W\d+\]\s+===|^===/.test(l) ? "case" : /->/.test(l) ? "tool" : "line";
-  }
-  function logLine(l) {
-    const s = str(l);
-    const m = s.match(/^(\[W\d+\])\s?/);
-    return h("div." + logLineClass(s), m ? [h("span.w", m[1] + " "), s.slice(m[0].length)] : s);
-  }
-  function followCheck(pre) {
-    const at = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8;
-    if (at) pre.setAttribute("data-dc-follow", ""); else pre.removeAttribute("data-dc-follow");
-    const jump = pre.parentElement && pre.parentElement.querySelector(".dc-jump");
-    if (jump) jump.hidden = at;
-  }
-  function appendLines(pre, lines) {
-    const follow = pre.hasAttribute("data-dc-follow");
-    lines.forEach((l) => pre.append(logLine(l)));
-    pre.setAttribute("data-count", String(pre.childElementCount));
-    if (follow) pre.scrollTop = pre.scrollHeight;
-    else { const jump = pre.parentElement && pre.parentElement.querySelector(".dc-jump"); if (jump) jump.hidden = false; }
-  }
-  /** DC.log(id, lines, {follow = true, maxHeight}): <pre role=log> (mono 12, max 240 px) with "Jump to latest" when
-   *  not following; reconcile appends only new lines. DC.logAppend(id, lines) streams in place. */
-  function log(id, lines, o = {}) {
-    const ls = (lines || []).filter((l) => l != null);
-    const pre = h("pre.dc-log#dc-log-" + String(id).replace(/[^\w-]/g, "_"), {
-      role: "log", "aria-live": "off", tabindex: "0", "data-scroll": "log:" + id, "data-count": String(ls.length),
-      "data-dc-follow": o.follow === false ? null : "", style: o.maxHeight ? { maxHeight: o.maxHeight } : null,
-      onscroll: (e) => followCheck(e.currentTarget),
-    }, ls.map(logLine));
-    const jump = button("Jump to latest", (e) => { const p = e.currentTarget.parentElement.querySelector(".dc-log"); p.scrollTop = p.scrollHeight; followCheck(p); },
-      { kind: "secondary", size: "sm", icon: "arrow-down", cls: "dc-jump" });
-    jump.hidden = true;
-    const wrap = h("div.dc-log-wrap", { "data-key": "log:" + id }, pre, jump);
-    wrap.__dcPatch = (old, nw) => {
-      const op = old.querySelector(".dc-log"), np = nw.querySelector(".dc-log");
-      if (!op || !np || op.id !== np.id) return false;
-      const have = op.childElementCount, want = np.childElementCount;
-      if (want < have) { op.replaceChildren(...np.childNodes); op.setAttribute("data-count", String(op.childElementCount)); op.scrollTop = op.scrollHeight; return true; }
-      if (want > have) appendLines(op, [...np.children].slice(have).map((d) => d.textContent));
-      return true;
-    };
-    return wrap;
-  }
-  function logAppend(id, lines) {
-    const pre = document.getElementById("dc-log-" + String(id).replace(/[^\w-]/g, "_"));
-    if (!pre) return false;
-    appendLines(pre, (Array.isArray(lines) ? lines : [lines]).filter((l) => l != null));
-    return true;
-  }
-  /** DC.box({title, icon, status, actions, busy, key}, ...body): the one box a page may have (run panel, chat log). */
-  function box(o = {}, ...body) {
-    return h("div.dc-box", { "aria-busy": o.busy ? "true" : null, "data-key": o.key || null },
-      str(o.title) || o.actions ? h("div.dc-box-h", h("h3", o.status || (o.icon ? icon(o.icon) : null), h("span", str(o.title))), o.actions ? h("span.dc-acts", o.actions) : null) : null,
-      body);
-  }
 
-  // =====================================================================================================
-  // First-kit helpers kept for pages not yet rebuilt (quiet style)
-  // =====================================================================================================
-  /** DC.steps([{label, state, title}]): dot + label per step (gate/stage strips). */
-  function steps(entries) {
-    const es = (entries || []).filter(Boolean);
-    if (!es.length) return null;
-    return h("span.steps", es.map((e) => h("span.step." + (e.state || "todo"), { title: e.title || null }, str(e.label))));
-  }
-  /** DC.table(columns: [{key, label, render, width}], rows, {rowKey, rowHash, rowState}): quiet table with dividers. */
-  function table(columns, rows, o = {}) {
-    return h("table", h("thead", h("tr", (columns || []).map((c) => h("th", { style: c.width ? { width: c.width } : null }, str(c.label))))),
-      h("tbody", (rows || []).filter(Boolean).map((r) => {
-        const tr = h("tr", { "data-state": o.rowState ? o.rowState(r) || null : null }, columns.map((c) => h("td", c.render ? c.render(r) : str(r[c.key]))));
-        return o.rowKey ? keyed(o.rowKey(r), o.rowHash ? o.rowHash(r) : r, tr) : tr;
-      })));
-  }
-  /** DC.keyed(key, data, node): sets data-key and data-hash (= DC.hash(data)) for reconcile. */
-  function keyed(key, obj, node) {
-    if (!node) return node;
-    node.setAttribute("data-key", String(key));
-    node.setAttribute("data-hash", hash(obj));
-    return node;
-  }
 
   // =====================================================================================================
   const DC = {
@@ -1410,27 +866,19 @@
     /** Re-place tab inks after a page changes layout outside mount. */
     layout: () => placeInks(document, false),
     openLink(link) { if (link) post({ type: "openLink", link }); },
-    action(action) { if (action) post({ type: "action", action }); },
     /** Expand or collapse a row by key (true/false/undefined = toggle). */
     toggle(key, open) {
       const item = [...document.querySelectorAll(".dc-item[data-key]")].find((x) => x.getAttribute("data-key") === String(key));
       if (item) toggleRow(item, open); else { if (open === false) delete ui.open[key]; else ui.open[key] = true; saveUi(); }
     },
     // helpers
-    hash, keyed, stateClass, toneOf: stateClass, word, iconFor, when, ago, announce, tip, setLoading, personaLabel, brandLabel, prStatus, connStatus,
-    PERSONA, GATES, STAGES, ICONS,
+    hash, stateClass, toneOf: stateClass, word, iconFor, when, ago, announce, tip, setLoading, roleLabel, brandLabel, ROLE, ICONS,
     // primitives
-    icon, brand, dot, status, chip, badge, kbd, button, menu, strip, links, linkList: links, linkStrip, linkMenu,
+    icon, brand, dot, status, chip, button, menu, strip,
     // structure
-    header, personaChip, section, tabs, segmented, row, list, kv, checksLine, reviewList, reasonLine, box,
-    // domain rows
-    queueRow, featureRow, stageLine, prRow, connectionRow, actionButtons, splitActions,
-    // feedback and data
-    toast, skeleton, empty, notice, progress, ring, log, logAppend,
-    // first-kit names
-    steps, table,
-    progressBar: progress, stageBar: (s) => stageLine(s), queueCard: queueRow, featureCard: featureRow,
-    gateRing: (done, total, o = {}) => ring(done, total, { size: o.size || 20, label: done + " of " + total + " gates done" }),
+    header, roleChip, section, tabs, row, list, kv,
+    // feedback
+    toast, skeleton, empty, notice,
   };
   root.DC = DC;
 })(typeof window !== "undefined" ? window : this);

@@ -1,16 +1,17 @@
 # Test fixture: placeholder values only. Contains no secrets.
 github:
-  org: acme
-  repo: sales
-people:
-  architects: [{ gh: "arch1", atlassian: "demo.user@example.com", slack: "" }]
-  developers: [{ gh: "dev1", atlassian: "", slack: "" }]
-  testers:    [{ gh: "qa1", atlassian: "", slack: "" }]
+  org: acme-org
+  repo: acme-salesforce
 jira:
   site: https://acme.atlassian.net
   project_key: ABC
-  fields: { design_page: customfield_10050, approved_design_version: customfield_10051, testability_confirmed: customfield_10052, acceptance_criteria: customfield_10053 }
+  ready_status: "Ready for Dev"
+  fields: { design_page: customfield_10050, acceptance_criteria: customfield_10053 }
 confluence:
   space_key: SD
-ai:
-  max_attempts: 3
+environments:
+  - { branch: "sprint/*", environment: qa,         test_level: RunLocalTests }
+  - { branch: dev,        environment: dev,        test_level: RunLocalTests }
+  - { branch: sit,        environment: sit,        test_level: RunLocalTests }
+  - { branch: uat,        environment: uat,        test_level: RunLocalTests }
+  - { branch: main,       environment: production, test_level: RunLocalTests }

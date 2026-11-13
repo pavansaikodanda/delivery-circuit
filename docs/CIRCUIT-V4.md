@@ -19,7 +19,7 @@ CodeRabbit mechanics for everything else.
 
 | # | Who | What | Where |
 |---|---|---|---|
-| 1 | Architect | Brings a transcript: paste, file (.vtt/.srt/.txt/.md/.docx/.pdf) or Fireflies | extension Sources / `/circuit-intake` |
+| 1 | Architect | Brings a transcript: paste, file (.vtt/.srt/.txt/.md/.docx/.pdf) or Fireflies | extension "New design from transcript" / `/circuit-intake` |
 | 2 | Architect + AI | AI reads the transcript and **checks the org** (`sf`, read-only, DEV alias): what already exists | `/circuit-intake` |
 | 3 | Architect + AI | AI writes the **design page** on Confluence and a **Lucid diagram**. Every component is tagged **EXISTS · EXTEND · CHANGE · REBUILD · NEW**. Open questions are answered by people and recorded as decisions | `/circuit-intake`, `/arch-design`, `/record-decision` |
 | 4 | Architect (human) | Sets the Confluence page status to **Approved** | Confluence |
@@ -115,8 +115,44 @@ Removed: `arch-approve-design`, `arch-review-pr`, `qa-push-tests`, `qa-review-te
 
 ## 7. VS Code extension
 
-Unchanged in v4. It still reads Jira through `acli` and its Connections page still lists v3 rows (runner, Claude
-Tag); those rows may show as not configured and can be ignored. A later pass will slim it to the v4 flow.
+One sidebar view with **three tabs**. Nothing else opens except a story detail panel. Calm, short, one action per
+row (keep the approved "Quiet Circuit" look: indigo/teal/slate, monochrome app logos, airy spacing).
+
+Header: user · role chip (Architect / Developer / QA / Lead, click to switch) · refresh.
+
+**Work** (default tab)
+- *Next steps* for the current role, at most 5 rows, each with one button that starts the matching skill:
+  - Architect: "New design from transcript" (paste, file or Fireflies chosen in a quick pick; transcript stays local
+    and is never committed) → `/circuit-intake`; "Finish design <feature>" (open questions) → `/arch-design`;
+    "Create stories for <feature>" (page Approved, no epic yet) → `/arch-jira-push`.
+  - Developer: "Build <KEY>" (story Ready for Dev, no PR) → `/dev-start-story <KEY>`; "Fix <KEY>" (scan failed or
+    CodeRabbit requested changes) → `/dev-fix <KEY>`; "Review PR #n" (a teammate's PR waits for a code-owner
+    approval) → opens the PR.
+  - QA: "Write tests for <KEY>" (Ready for Dev, no test cases) → `/qa-design-tests <KEY>` then `/qa-add-tests`;
+    "Test <KEY> in QA" (merged into the sprint branch, deployed) → `/qa-explore <KEY>`.
+  - Lead: "Sprint review: promote sprint/<name> → dev" (opens or creates the promotion PR); "Approve production
+    deploy" (deploy.yml waiting on the production environment) → opens the run.
+- *Sprint* list: the sprint's stories, one line each with a single status: Design · Ready · Building · In PR · QA ·
+  Done. Click → story panel: a 5-step line (Design → Stories → Build → QA → Release), PR status (scan ✓/✗,
+  CodeRabbit: approved / changes / pending, human approval), links (Jira, Design page, Diagram, PR).
+
+**Connections** (about 7 rows, no tokens, no secrets): GitHub (`gh` / VS Code sign-in) · Claude (logged-in `claude`)
+· Salesforce DEV org (`sf`; QA org for the QA role) · Atlassian (Jira + Confluence via the Atlassian MCP; `acli` only
+if installed) · Lucid (Architect) · CodeRabbit (GitHub App on the repo) · Fireflies (optional). Each row: status dot,
+who it is connected as, one button (Connect / Fix / Check). Rows not needed by the current role are hidden.
+
+**Missing** (badge with a count; empty state "Nothing missing"): everything that blocks the flow, each with a fix
+button or a link to the place to fix it:
+- connections needed by this role that are not connected;
+- repo setup: environment branches (`sprint/*`, `dev`, `sit`, `uat`, `main`), GitHub Environments without
+  `SFDX_AUTH_URL` (checked by name only via `gh api`, never the value), rulesets, CodeRabbit app, auto-merge;
+- story gaps: no approved design, no acceptance criteria, no test cases, PR without the Jira key, scan failing,
+  CodeRabbit changes requested, waiting for a human approval for more than a day.
+
+Removed from v3: the persona view, gates G1–G9 panel, feature page, Sources page (replaced by the quick pick),
+Testing page (SF AI Tester has its own extension), Setup wizard (replaced by the Missing tab + `/circuit-bootstrap`),
+token/secret/webhook rows, runner and Claude Tag rows. Commands: Refresh, Switch Role, New Design from Transcript,
+Open Story.
 
 ## 8. Live test
 

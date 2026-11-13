@@ -4,52 +4,14 @@ import * as path from "path";
 import { deflateRawSync } from "zlib";
 import { afterAll, describe, expect, it } from "vitest";
 import {
-  decrypt, docxToText, encrypt, extractText, loadUpload, newKey, parseIndex, readIndex, readZipEntry, serializeIndex, storeUpload,
-  subtitlesToText, uploadFile, uploadId, upsertSource, withUsage, writeIndex,
+  decrypt, docxToText, encrypt, extractText, loadUpload, newKey, readZipEntry, storeUpload, subtitlesToText, uploadFile, uploadId,
 } from "../../src/project/sources";
 import { siteUrl } from "../../src/project/jira";
-import { firefliesPointer, readFirefliesMeta, readFirefliesRecent, type ClaudeExec } from "../../src/project/mcpReader";
+import { firefliesPointer, readFirefliesRecent, type ClaudeExec } from "../../src/project/mcpReader";
 
-const FIX = path.join(__dirname, "..", "fixtures", "project", "repo");
 const tmpDirs: string[] = [];
 const tmp = async () => { const d = await fsp.mkdtemp(path.join(os.tmpdir(), "dc-src-")); tmpDirs.push(d); return d; };
 afterAll(async () => { for (const d of tmpDirs) await fsp.rm(d, { recursive: true, force: true }); });
-
-describe(".circuit/sources.json index", () => {
-  it("reads the fixture index and drops invalid ids", async () => {
-    const list = await readIndex(FIX);
-    expect(list.map((s) => s.id)).toEqual(["fireflies:01JD7K2M9Q", "upload:3f9a0c1b2d4e"]);
-    expect(list[0]).toEqual({ id: "fireflies:01JD7K2M9Q", kind: "fireflies", title: "Support escalations call", date: "2026-11-01T15:00:00.000Z" });
-  });
-  it("serializes metadata only, newest first", () => {
-    const text = serializeIndex([
-      { id: "upload:aaaaaaaaaaaa", kind: "upload", title: "A", date: "2026-01-01", ...({ content: "SECRET TEXT", path: "/x" } as any) },
-      { id: "fireflies:abc", kind: "fireflies", title: "B", date: "2026-02-01", usedBy: ["002", "001", "001"] },
-    ]);
-    expect(text).not.toContain("SECRET");
-    expect(text).not.toContain("/x");
-    const back = JSON.parse(text);
-    expect(back.version).toBe(1);
-    expect(back.sources.map((s: any) => s.id)).toEqual(["fireflies:abc", "upload:aaaaaaaaaaaa"]);
-    expect(back.sources[0].usedBy).toEqual(["001", "002"]);
-    expect(parseIndex(text)).toHaveLength(2);
-    expect(parseIndex("[{\"id\":\"upload:abcdef\"}]")[0]).toMatchObject({ kind: "upload", title: "upload:abcdef" });
-    expect(parseIndex("nope")).toEqual([]);
-  });
-  it("upserts and computes usage from spec citations", () => {
-    let list = upsertSource([], { id: "upload:abc123", kind: "upload", title: "old", date: "1", usedBy: ["001"] });
-    list = upsertSource(list, { id: "upload:abc123", kind: "upload", title: "new", date: "2" });
-    expect(list).toEqual([{ id: "upload:abc123", kind: "upload", title: "new", date: "2", usedBy: ["001"] }]);
-    const used = withUsage(list, { "001": [], "003": ["upload:abc123"], "002": ["upload:abc123"] });
-    expect(used[0].usedBy).toEqual(["002", "003"]);
-    expect(withUsage(list, {})[0].usedBy).toBeUndefined();
-  });
-  it("writes the index under .circuit/", async () => {
-    const root = await tmp();
-    await writeIndex(root, [{ id: "fireflies:xyz", kind: "fireflies", title: "Call", date: "2026-11-11T00:00:00.000Z" }]);
-    expect(await readIndex(root)).toEqual([{ id: "fireflies:xyz", kind: "fireflies", title: "Call", date: "2026-11-11T00:00:00.000Z" }]);
-  });
-});
 
 describe("encrypted uploads", () => {
   it("round-trips AES-256-GCM and refuses tampering or a wrong key", () => {
@@ -119,10 +81,13 @@ describe("text extraction", () => {
     expect(extractText("call.DOCX", buf)).toBe("Client & partner\nLine \ttwo");
     expect(() => docxToText(Buffer.from("not a zip at all, definitely not"))).toThrow(/\.docx/);
   });
-  it("passes txt and md through, rejects other types", () => {
+  it("passes txt and md through, reads pdf text, rejects other types", () => {
     expect(extractText("a.md", Buffer.from("﻿# Call"))).toBe("# Call");
     expect(extractText("a.txt", Buffer.from("x"))).toBe("x");
-    expect(() => extractText("a.pdf", Buffer.from("x"))).toThrow(/Unsupported/);
+    const pdf = Buffer.from("%PDF-1.4\n1 0 obj << /Length 44 >> stream\nBT /F1 12 Tf (Client: we need escalation) Tj ET\nendstream endobj\n%%EOF");
+    expect(extractText("call.pdf", pdf)).toContain("Client: we need escalation");
+    expect(() => extractText("a.pdf", Buffer.from("x"))).toThrow();
+    expect(() => extractText("a.xlsx", Buffer.from("x"))).toThrow(/Unsupported/);
   });
 });
 
@@ -145,7 +110,7 @@ describe("Fireflies through the person's Fireflies MCP (read-only claude call)",
     const out = await fsp.readFile(path.join(FF, "fireflies-recent.json"), "utf8");
     const c = fakeClaude(() => ({ stdout: out }));
     const list = await readFirefliesRecent(c, 500);
-    expect(list).toEqual([{ id: "fireflies:01JD7K2M9Q", kind: "fireflies", title: "Support escalations call", date: "2026-11-01T15:00:00.000Z" }]);
+    expect(list).toEqual([{ id: "fireflies:01JD7K2M9Q", kind: "fireflies", title: "Support escalations call", date: "2026-11-01T15:00:00.000Z", origin: "fireflies" }]);
     const args = c.calls[0].args;
     const allowed = args[args.indexOf("--allowedTools") + 1].split(",");
     expect(allowed.every((t) => /^mcp__[A-Za-z_]+__fireflies_get_transcripts?$/.test(t))).toBe(true);
@@ -153,10 +118,7 @@ describe("Fireflies through the person's Fireflies MCP (read-only claude call)",
     expect(c.calls[0].prompt).toContain("50 most recent");
     expect(args.join(" ")).not.toMatch(/api[_-]?key|token/i);
   });
-  it("reads one meeting's metadata and never copies the transcript", async () => {
-    const c = fakeClaude(() => ({ stdout: JSON.stringify({ type: "result", result: JSON.stringify({ meetings: [{ id: "01ABC", title: "Kickoff", date: "2026-11-01T10:00:00Z" }] }) }) }));
-    expect(await readFirefliesMeta(c, "01ABC")).toEqual({ id: "fireflies:01ABC", kind: "fireflies", title: "Kickoff", date: "2026-11-01T10:00:00.000Z" });
-    await expect(readFirefliesMeta(c, "bad id!")).rejects.toThrow(/Invalid/);
+  it("never copies a Fireflies transcript: the session reads it at the source", () => {
     const p = firefliesPointer("01ABC");
     expect(p).toContain("fireflies_get_transcript");
     expect(p).toContain("Source: fireflies:01ABC");

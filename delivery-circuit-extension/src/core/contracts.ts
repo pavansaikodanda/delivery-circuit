@@ -1,136 +1,96 @@
-// Shared contracts for every Delivery Circuit module. Modules code against these types and interfaces only;
-// they never import another module's internals. Changing this file is the integrator's job.
+// Shared contracts of the Delivery Circuit v4 extension (docs/CIRCUIT-V4.md section 7). Modules code against these
+// types only; they never import another module's internals.
 
 import type * as vscode from "vscode";
 
-// ---------- personas and identity ----------
-export type Persona = "architect" | "developer" | "tester";
-export const PERSONAS: Persona[] = ["architect", "developer", "tester"];
+// ---------- roles and identity ----------
+/** "tester" is the QA role (GitHub team "testers", Claude agent "tester"). */
+export type Role = "architect" | "developer" | "tester" | "lead";
+export const ROLES: Role[] = ["architect", "developer", "tester", "lead"];
+export const ROLE_LABEL: Record<Role, string> = { architect: "Architect", developer: "Developer", tester: "QA", lead: "Lead" };
+/** GitHub team slug per role (deliveryCircuit.githubTeams overrides it). */
+export const DEFAULT_TEAMS: Record<Role, string> = { architect: "architects", developer: "developers", tester: "testers", lead: "leads" };
+/** Claude Code agent (plugin agents/<name>.md) a role's sessions run as. Leads have none: plain claude. */
+export const ROLE_AGENT: Record<Role, string | undefined> = { architect: "architect", developer: "developer", tester: "tester", lead: undefined };
+
+export const isRole = (x: unknown): x is Role => typeof x === "string" && (ROLES as string[]).includes(x);
 
 export interface Identity {
   /** GitHub login of the person using VS Code */
   login: string;
-  /** Personas from GitHub team membership (or the personal-repo override). Empty = no persona. */
-  personas: Persona[];
-  /** The persona the person is acting as now (one of personas). */
-  active: Persona | null;
-  /** Org admin (or repo admin): may open Project Setup. */
+  /** Roles from GitHub team membership. Empty when no team says (personal repo, or not in a team). */
+  roles: Role[];
+  /** The role the person works as now (the header chip). */
+  active: Role | null;
+  /** Org or repo admin. */
   isAdmin: boolean;
   /** owner/repo of the open workspace, from git remote "origin" */
   owner: string;
   repo: string;
-  /** True when the repo is owned by an organisation (teams exist), false for a personal account. */
+  /** True when the repo is owned by an organisation (teams exist). */
   orgOwned: boolean;
-  /** Why personas are missing or incomplete (not in a persona team, personal repo without personaOverride, ...). */
+  /** Why roles are missing (not in a team, team membership unreadable, ...). */
   notice?: string;
 }
 
-/** Architect sees every persona view; Developer and Tester see only their own. */
-export function canView(id: Identity, view: Persona): boolean {
-  return id.personas.includes("architect") || id.personas.includes(view);
-}
-/** Actions (AI or gate) in a view need that persona AND acting as it. The Architect acts only as Architect. */
-export function canAct(id: Identity, view: Persona): boolean {
-  return id.active === view && id.personas.includes(view);
+/** Roles the chip offers: the person's team roles, or all four when no team says (the chip is a view filter; GitHub
+ *  rulesets, CODEOWNERS and the production environment still decide who may approve or merge). */
+export function roleChoices(id: Identity | null): Role[] {
+  if (!id) return [];
+  return id.roles.length ? id.roles : [...ROLES];
 }
 
 export interface IdentityService {
   get(): Identity | null;
   refresh(): Promise<Identity | null>;
-  setActive(p: Persona): Promise<void>;
+  setActive(r: Role): Promise<void>;
   onDidChange: vscode.Event<Identity | null>;
 }
 
-// ---------- connections ----------
-/** v3: every connection is a login (docs/CIRCUIT-V3.md section 1); none of them holds a stored token. */
-export type ConnectionId =
-  | "github" | "claude" | "sf-dev" | "sf-qa" | "acli" | "slack" | "lucid" | "testing-browsers"
-  // review tools
-  | "coderabbit" | "code-analyzer" | "ai-reviewer"
-  // vendor MCP servers that Claude uses (sign-in happens in Claude Code's /mcp)
-  | "mcp-atlassian" | "mcp-github" | "mcp-salesforce" | "mcp-slack" | "mcp-lucid" | "mcp-fireflies"
-  // project rows: the self-hosted runner and the GitHub for Jira app
-  | "runner" | "github-jira";
-
-export type ConnectionState = "connected" | "disconnected" | "expiring" | "error" | "checking" | "unknown";
-export type ConnectionScope = "personal" | "project";
+// ---------- connections (section 7: about 7 rows, logins only, no tokens or secrets) ----------
+export type ConnectionId = "github" | "claude" | "sf-dev" | "sf-qa" | "atlassian" | "lucid" | "coderabbit" | "fireflies";
+export type ConnectionState = "connected" | "disconnected" | "error" | "checking" | "unknown";
 
 export interface ConnectionStatus {
   id: ConnectionId;
   label: string;
-  scope: ConnectionScope;
   state: ConnectionState;
-  /** One short line: account, org alias, error, or what to do */
-  detail?: string;
+  /** who it is connected as (login, email, org username) */
   account?: string;
-  /** ISO date when a token/cert expires, if known */
-  expiresAt?: string;
-  /** Personas that need this connection */
-  neededBy: Persona[];
-  /** Where to manage it (vendor page) */
-  manageUrl?: string;
-}
-
-export interface SfOrgGuard {
-  alias: string;
-  instanceUrl?: string;
-  allowed: boolean;
-  /** Why it was refused (or a note when allowed, e.g. a declared trial org). */
-  reason?: string;
+  /** one short line: what is connected, or what to do */
+  detail?: string;
+  /** roles that need it; other roles do not see the row */
+  neededBy: Role[];
+  /** nice to have (Fireflies): never listed as missing */
+  optional?: boolean;
 }
 
 export interface ConnectionsService {
   list(): Promise<ConnectionStatus[]>;
+  /** last known rows without waiting for checks */
+  cached(): ConnectionStatus[];
   check(id: ConnectionId): Promise<ConnectionStatus>;
-  /** Interactive connect flow (sign-in, acli web login, sf org login web, /mcp, ...). Never prompts for a token. */
+  /** Interactive connect / fix flow (sign-in, browser login, /mcp). Never asks for a token. */
   connect(id: ConnectionId): Promise<ConnectionStatus>;
-  disconnect(id: ConnectionId): Promise<void>;
   onDidChange: vscode.Event<void>;
-  /** GitHub session token (VS Code auth provider). Throws if not signed in. */
-  githubToken(): Promise<string>;
-  /** sf CLI alias for an org role, e.g. "dev" / "qa". */
-  sfAlias(role: "dev" | "qa"): string;
-  /** Resolves the role's alias with the sf CLI and decides whether AI may work in that org (browser agent, org
-   *  exploration). Allowed when the alias resolves to a connected org of any type (SDO and demo orgs are production orgs). */
-  sfOrgGuard(role: "dev" | "qa"): Promise<SfOrgGuard>;
-  /** GitHub REST call as the signed-in person (path like "/repos/o/r/pulls"). Throws on non-2xx with the API message. */
-  githubRequest<T = any>(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<T>;
+  /** sf CLI alias of the DEV or QA org (build.config.yml salesforce.dev_alias / qa_alias). */
+  sfAlias(org: "dev" | "qa"): string;
+  /** GitHub REST call as the signed-in person. Throws on non-2xx (error.status = HTTP status). */
+  githubRequest<T = any>(method: "GET" | "POST", path: string, body?: unknown): Promise<T>;
   /** GitHub GraphQL call as the signed-in person. */
   githubGraphql<T = any>(query: string, variables?: Record<string, unknown>): Promise<T>;
-  /** Names of the repo's Actions secrets (values are never readable). v3 stores none; setup uses this only to find
-   *  leftover v2 credentials so an admin can delete them. */
-  repoSecretNames(): Promise<string[]>;
 }
 
-// ---------- project context (Jira, Confluence, GitHub, sources) ----------
-export type GateId = "G1" | "G2" | "G3" | "G4" | "G5" | "G6" | "G7" | "G8" | "G9";
-export type GateState = "done" | "waiting" | "blocked" | "not-started";
-
-export const GATES: Record<GateId, { owner: Persona; label: string }> = {
-  G1: { owner: "architect", label: "Design approved" },
-  G2: { owner: "tester", label: "Testability confirmed (ai-ready)" },
-  G3: { owner: "developer", label: "AI plan approved" },
-  G4: { owner: "tester", label: "AI test plan approved" },
-  G5: { owner: "developer", label: "Code review" },
-  G6: { owner: "tester", label: "QA on sandbox" },
-  G7: { owner: "architect", label: "Schema and design review" },
-  G8: { owner: "architect", label: "Merge" },
-  G9: { owner: "architect", label: "Production approval" },
-};
-
-/** Feature lifecycle stages, derived from the Confluence design page (intake..signoff), Jira (stories, tests; "jira" =
- *  testability) and GitHub (build, qa, release). Nothing is read from .specify/specs (gitignored local drafts). */
-export type StageId = "intake" | "clarify" | "plan" | "signoff" | "stories" | "tests" | "jira" | "build" | "qa" | "release";
-export type StageState = "done" | "active" | "todo" | "blocked";
-
+// ---------- links ----------
 export interface DeepLink {
-  kind: "github" | "jira" | "salesforce" | "slack" | "confluence" | "lucid" | "fireflies" | "coderabbit" | "file" | "report" | "url";
+  kind: "github" | "jira" | "confluence" | "lucid" | "salesforce" | "url";
   label: string;
-  /** https URL, or a workspace-relative file path for kind "file"/"report" */
+  /** https URL */
   target: string;
 }
 
-export type SourceOrigin = "paste" | "file" | "fireflies" | "fireflies-export" | "wispr-flow" | "watch-folder";
+// ---------- transcripts (New design from transcript) ----------
+export type SourceOrigin = "paste" | "file" | "fireflies";
 
 export interface SourceRef {
   /** "fireflies:<meetingId>" or "upload:<sha256-12>" */
@@ -139,256 +99,121 @@ export interface SourceRef {
   title: string;
   /** ISO date of the call or upload */
   date: string;
-  /** How the Architect added it (Sources page). */
   origin?: SourceOrigin;
-  /** Feature ids whose design page cites this source */
-  usedBy?: string[];
 }
 
-export interface TestCaseRef { id: string; level: "ui" | "unit" | "manual"; ac?: string; jiraKey?: string }
-
-/** C5: the story's Approved design version compared with the design page's current approved version. */
-export type DesignSync = "ok" | "changed" | "missing" | "ahead" | "unknown";
-export type DesignApprovalState = "approved" | "changed" | "draft" | "unverified-approver" | "missing" | "unknown";
-
-/** A Jira story of a feature epic. */
-export interface Story {
-  num: string;               // "00", "01", ...
-  title: string;
-  jiraKey?: string;
-  testCases: TestCaseRef[];
-  prNumber?: number;
-  status?: string;
-  /** Jira status category key: "new" | "indeterminate" | "done" */
-  statusCategory?: string;
-  labels: string[];
-  acceptanceCriteria?: string;
-  /** Jira field *Approved design version* */
-  approvedDesignVersion?: number;
-  /** Jira field *Testability confirmed* (G2 together with label ai-ready) */
-  testabilityConfirmed?: boolean;
-  designSync: DesignSync;
-  /** keys of issues that block this story (Jira "is blocked by") */
-  blockedBy: string[];
-  url?: string;
-}
-
-/** G1: a feature's Confluence design page and its approval. */
-export interface FeatureDesign {
-  pageId: string;
-  url?: string;
-  title?: string;
-  status?: string;
-  version?: number;
-  approval: {
-    state: DesignApprovalState;
-    approvedVersion?: number;
-    approvedBy?: string;
-    /** true = a configured architect; false = not one; undefined = cannot tell */
-    approverIsArchitect?: boolean;
-    changedSinceApproval: boolean;
-    detail: string;
-  };
-  orgSnapshotUrl?: string;
-  readAt?: string;
-  error?: string;
-}
-
-/** A Jira epic with its Confluence design page, or a design page (label circuit-design) that has no epic yet. */
-export interface Feature {
-  /** the epic key ("ACME-10"), or "page-<confluencePageId>" for a design page without an epic */
-  id: string;
-  slug: string;
-  title: string;
-  epicKey?: string;
-  design?: FeatureDesign;
-  stages: Record<StageId, StageState>;
-  gates: Partial<Record<GateId, GateState>>;
-  openQuestions: number;
-  signedOff: boolean;
-  stories: Story[];
-  sources: string[];         // SourceRef ids cited by the design page
-  score?: number;
-  links: DeepLink[];
-}
+// ---------- work (Jira + GitHub, section 7 Work and Missing tabs) ----------
+/** The one status a sprint story shows. */
+export type StoryStatus = "design" | "ready" | "building" | "in-pr" | "qa" | "done";
+export const STORY_STATUS_LABEL: Record<StoryStatus, string> = {
+  design: "Design", ready: "Ready", building: "Building", "in-pr": "In PR", qa: "QA", done: "Done",
+};
 
 export type CheckState = "success" | "failure" | "pending" | "missing";
+export type CodeRabbitState = "approved" | "changes" | "pending";
 
-/** One review signal on a PR, from any review tool or person. */
-export interface ReviewSignal {
-  source: "human" | "coderabbit" | "ai-reviewer" | "code-analyzer" | "sf-ai-tester";
-  author: string;
-  state: "approved" | "changes-requested" | "commented" | "pass" | "block";
-  summary: string;
-  url?: string;
-  at: string;
-}
+/** What one click does. Steps and missing items keep it on the extension side; the webview only sends the row id. */
+export type RunSpec =
+  | { kind: "skill"; role: Role; command: string; arg?: string }
+  | { kind: "url"; url: string }
+  | { kind: "intake" }
+  | { kind: "connect"; id: ConnectionId }
+  | { kind: "story"; key: string }
+  | { kind: "bootstrap" };
 
-export interface PrRef {
-  number: number;
-  url: string;
-  title: string;
-  branch: string;
-  draft: boolean;
-  author: string;
-  labels: string[];
-  /** commit statuses and check runs by name: guard, static, qa, design-gate, gate/developer, ... */
-  checks: Record<string, CheckState>;
-  reviews: ReviewSignal[];
-  storyKey?: string;         // Jira key from branch feature/ABC-12-...
-  featureId?: string;
-  aiAttempt?: number;
-  updatedAt: string;
-  state?: "open" | "merged" | "closed";
-  mergedAt?: string;
-  /** paths changed by the PR (first 100), e.g. to tell whether tests/<KEY>.tc.json is on it */
-  files?: string[];
-}
-
-export interface QueueItem {
+export interface WorkRow {
   id: string;
-  persona: Persona;
-  gate?: GateId;
-  kind: "sign-off" | "clarify" | "review-stories" | "design-tests" | "testability" | "approve-plan" | "approve-testplan"
-    | "review-pr" | "qa-pr" | "needs-human" | "needs-qa" | "merge" | "deploy-approval" | "connect"
-    // v3
-    | "create-stories" | "design-changed" | "start-story" | "add-tests" | "fix" | "review-room" | "record-verdict"
-    | "build" | "mark-ready";
   title: string;
   detail?: string;
-  featureId?: string;
-  storyKey?: string;
-  prNumber?: number;
-  since?: string;
-  links: DeepLink[];
-  actions: ActionRef[];
+  /** the one button: short label */
+  button: string;
+  run: RunSpec;
 }
 
-export interface ProjectContextService {
-  features(): Promise<Feature[]>;
-  feature(id: string): Promise<Feature | undefined>;
-  prs(): Promise<PrRef[]>;
-  /** Everything waiting on this persona now. */
-  queue(id: Identity, persona: Persona): Promise<QueueItem[]>;
-  jiraBrowseUrl(key: string): string | undefined;
-  /** Design page of a feature: status, versions, G1 approval (Circuit MCP design_get). */
-  design(featureId: string): Promise<unknown>;
-  /** Decisions section of the design page (C1, Circuit MCP decisions_get). */
-  decisions(featureId: string): Promise<unknown>;
-  /** "Org snapshot" child page of the design page (C4, Circuit MCP org_snapshot_get). */
-  orgSnapshot(featureId: string): Promise<unknown>;
-  /** One Jira story with ACs, versions, test cases and PR (Circuit MCP story_get). */
-  story(key: string): Promise<unknown>;
-  sources(): Promise<SourceRef[]>;
-  /** Recent Fireflies meetings, read through the person's Fireflies MCP login. Empty when it isn't signed in. */
+export interface MissingItem extends WorkRow {
+  group: "connections" | "repo" | "stories";
+}
+
+export interface SprintRow {
+  key: string;
+  title: string;
+  status: StoryStatus;
+  url?: string;
+}
+
+export interface StoryPrState {
+  number: number;
+  url: string;
+  state: "open" | "merged" | "closed";
+  scan: CheckState;
+  scanUrl?: string;
+  coderabbit: CodeRabbitState;
+  /** human approvals (GitHub logins) */
+  approvedBy: string[];
+  /** ISO time the PR is waiting for a human approval since (open PRs without one) */
+  waitingSince?: string;
+}
+
+export interface StoryDetail {
+  key: string;
+  title: string;
+  status: StoryStatus;
+  /** Design → Stories → Build → QA → Release */
+  steps: { id: "design" | "stories" | "build" | "qa" | "release"; label: string; state: "done" | "active" | "todo" }[];
+  pr?: StoryPrState;
+  links: DeepLink[];
+}
+
+export interface WorkSnapshot {
+  /** next steps for the role (at most 5) */
+  next: WorkRow[];
+  sprint: { name?: string; stories: SprintRow[] };
+  missing: MissingItem[];
+  /** short reasons data could not be read (Jira, GitHub) */
+  errors: string[];
+  updatedAt: string;
+}
+
+export interface ProjectService {
+  /** Everything the Work and Missing tabs show for a role (connections come from ConnectionsService). */
+  work(role: Role, login: string | undefined, connections: ConnectionStatus[]): Promise<WorkSnapshot>;
+  /** One story for the story panel. */
+  story(key: string): Promise<StoryDetail | undefined>;
+  /** Store pasted text or a transcript file outside git (encrypted, local) and index it. */
+  addText(text: string, opts: { title: string; origin: SourceOrigin }): Promise<SourceRef>;
+  addFile(file: string): Promise<SourceRef>;
+  /** Recent Fireflies meetings through the person's Fireflies MCP login. Empty when it is not connected. */
   firefliesRecent(limit?: number): Promise<SourceRef[]>;
-  /** Add a Fireflies meeting to .circuit/sources.json (metadata only). meta avoids a second Fireflies read. */
-  indexFireflies(meetingId: string, meta?: { title: string; date: string }): Promise<SourceRef>;
-  /** Store an uploaded transcript outside git (encrypted, local) and index it. */
-  addUpload(fileUri: vscode.Uri, title?: string): Promise<SourceRef>;
-  /** Store pasted or dictated text (or text from a PDF / Wispr Flow) encrypted with no temp file, and index it. */
-  addText(text: string, opts: { title: string; origin: SourceOrigin; date?: string }): Promise<SourceRef>;
-  /** Text of an upload; for Fireflies a pointer to read it at the source. Callers enforce Architect only. */
+  /** Text of an upload; for Fireflies a pointer to read it at the source. */
   transcript(sourceId: string): Promise<string>;
   refresh(): Promise<void>;
   onDidChange: vscode.Event<void>;
 }
 
-// ---------- Circuit MCP ----------
-export interface McpEndpoint { url: string; token: string; persona: Persona }
+// ---------- Circuit MCP (transcript_get for /circuit-intake) ----------
+export interface McpEndpoint { url: string; token: string }
 
 export interface CircuitMcpService {
-  /** Starts the local HTTP MCP server if needed and returns the persona-bound endpoint. */
-  endpoint(persona: Persona): Promise<McpEndpoint>;
-  /** Writes .claude/personas/<persona>.local.mcp.json (gitignored) with Circuit + vendor servers for that persona. */
-  writePersonaConfig(persona: Persona): Promise<string>;
-  /** In-process MCP server config for Agent SDK sessions (mcpServers entry). */
-  sdkServer(persona: Persona): unknown;
+  /** Writes .claude/personas/<agent>.local.mcp.json (gitignored) with the tracked vendor servers plus, for the
+   *  Architect, the Circuit MCP. Returns the file, or undefined when the role has no agent config. */
+  writeSessionConfig(role: Role): Promise<string | undefined>;
   stop(): Promise<void>;
 }
 
-// ---------- testing (ported SF AI Tester engine) ----------
-export type TestMode = "manual" | "automation" | "both";
-export type TestStatus = "passed" | "failed" | "blocked" | "error";
-
-export interface SuiteSummary {
-  file: string;              // workspace-relative
-  name: string;
-  cases: number;
-  last?: Partial<Record<TestStatus, number>>;
-  storyKey?: string;
-  /** Set when the suite file fails to load or validate. */
-  error?: string;
-}
-
-export interface RunRequest { suite: string; caseIds?: string[]; mode: TestMode; orgRole: "dev" | "qa" }
-
-export interface RunSummary {
-  runDir: string;            // workspace-relative
-  suite: string;
-  total: number;
-  counts: Record<TestStatus, number>;
-  route: "pass" | "dev" | "qa" | "infra";
-  reportPath: string;        // workspace-relative report.html
-  startedAt?: string;        // ISO
-  org?: string;              // sf alias the run used
-}
-
-export interface TestingService {
-  suites(): Promise<SuiteSummary[]>;
-  run(req: RunRequest, onEvent?: (e: { type: string; message?: string; caseId?: string; status?: TestStatus }) => void): Promise<RunSummary>;
-  cancel(): void;
-  runs(limit?: number): Promise<RunSummary[]>;
-  onDidChange: vscode.Event<void>;
-}
-
-// ---------- actions and sessions ----------
-export interface ActionRef {
-  /** Grammar (src/actions/grammar.ts): "ai:<skill command>" (e.g. "ai:/dev-review-plan"), "gate:label" or
-   *  "gate:label:<label>", "gate:review", "gate:merge", "gate:deploy", "nav:feature", "nav:testing",
-   *  "nav:connections", and the v3 named actions:
-   *  dev:start-story {storyKey, featureId?, pr?, phase?: "build"}, qa:add-tests {storyKey, pr?},
-   *  dev:fix {pr, checks?, attempt?, failure?}, review:open-room {pr}, review:record-verdict {pr},
-   *  decision:record {featureId, text?}, arch:approve-design {featureId | pageId | url} (opens the Confluence page;
-   *  G1 is a human status change, never AI). AI-run named actions may also carry {command, arg}. */
-  id: string;
-  label: string;
-  persona: Persona;
-  kind: "ai" | "gate" | "nav";
-  /** AI actions: {command, argKind?: "feature"|"pr"|"source", arg?, intent?}. nav:feature: {featureId}. nav:testing: {suite?}.
-   *  gate:review / gate:merge: {pr, sha?} where sha is the head commit the person was shown. */
-  args?: Record<string, string | number>;
-}
-
-/** Argument shapes of the cross-module commands. */
-export interface OpenPersonaOptions { featureId?: string }
-export interface OpenTestingOptions { suite?: string }
-
-export interface ActionsService {
-  /** Runs an action as the current identity. Gate actions confirm first and use the person's own GitHub token. */
-  run(action: ActionRef): Promise<void>;
-  /** Whether the current identity may run it (canAct + gate rules). */
-  allowed(action: ActionRef): boolean;
-}
-
 export interface SessionsService {
-  /** Start Claude as a persona with a prompt (usually a skill command such as "/dev-review-plan 42"). */
-  start(persona: Persona, prompt: string, opts?: { mode?: "terminal" | "panel"; title?: string }): Promise<void>;
+  /** Start Claude in a terminal as the role with a prompt (usually a skill command such as "/dev-start-story ACME-12"). */
+  start(role: Role, prompt: string): Promise<void>;
 }
 
 // ---------- module wiring ----------
 export interface CircuitServices {
   ctx: vscode.ExtensionContext;
-  /** Absolute path of the workspace root (the client Salesforce DX repo). */
+  /** Absolute path of the workspace root (the Salesforce DX repo). */
   root: string;
-  /** Absolute path of the bundled sf-delivery-circuit plugin (templates, installer, skills). */
-  pluginRoot: string;
   log: (msg: string) => void;
   identity: IdentityService;
   connections: ConnectionsService;
-  project: ProjectContextService;
+  project: ProjectService;
   mcp: CircuitMcpService;
-  testing: TestingService;
-  actions: ActionsService;
   sessions: SessionsService;
 }

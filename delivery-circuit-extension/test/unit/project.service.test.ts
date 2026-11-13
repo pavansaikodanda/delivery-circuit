@@ -1,4 +1,8 @@
+// createProject wiring: Jira through acli (or the Atlassian MCP when acli is missing), the design-page listing in the
+// background, one GitHub GraphQL query plus REST for deploys, environments (secret names only) and rulesets, and the
+// encrypted transcript store.
 import { promises as fsp } from "fs";
+import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -6,27 +10,19 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 vi.mock("vscode", async (importOriginal) => {
   const orig: any = await importOriginal();
   const watcher = { onDidCreate: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }), onDidDelete: () => ({ dispose() {} }), dispose() {} };
-  return {
-    ...orig,
-    RelativePattern: class { constructor(public base: unknown, public pattern: string) {} },
-    workspace: { ...orig.workspace, createFileSystemWatcher: () => watcher, getConfiguration: () => ({ get: (_k: string, d?: unknown) => d }) },
-  };
+  return { ...orig, workspace: { ...orig.workspace, createFileSystemWatcher: () => watcher, getConfiguration: () => ({ get: (_k: string, d?: unknown) => d }) } };
 });
 
-import type { Identity } from "../../src/core/contracts";
+import { baseStatus } from "../../src/connections/catalog";
 import { createProject } from "../../src/project";
 import type { AcliExec } from "../../src/project/acli";
 import type { ClaudeExec } from "../../src/project/mcpReader";
 
 const FIX = path.join(__dirname, "..", "fixtures", "project");
-const raw = (p: string) => require("fs").readFileSync(path.join(FIX, p), "utf8") as string;
-const resp = JSON.parse(raw("github-prs.json"));
+const raw = (p: string) => fs.readFileSync(path.join(FIX, p), "utf8");
 let root: string, storage: string;
 const subs: { dispose(): void }[] = [];
 const secrets = new Map<string, string>();
-const graphqlCalls: any[] = [];
-
-const identity: Identity = { login: "dev1", personas: ["developer"], active: "developer", isAdmin: false, owner: "acme", repo: "sales", orgOwned: true };
 
 beforeAll(async () => {
   root = await fsp.mkdtemp(path.join(os.tmpdir(), "dc-proj-"));
@@ -39,17 +35,16 @@ afterAll(async () => {
   await fsp.rm(storage, { recursive: true, force: true });
 });
 
-/** Recorded acli outputs by command line. */
-function fakeAcli(opts: { fail?: string } = {}): AcliExec & { calls: string[][] } {
-  const calls: string[][] = [];
+function fakeAcli(opts: { missing?: boolean } = {}): AcliExec & { calls: string[] } {
+  const calls: string[] = [];
   const f = (async (args: string[]) => {
-    calls.push(args);
-    if (opts.fail) return { code: 1, stdout: "", stderr: opts.fail };
     const line = args.join(" ");
+    calls.push(line);
+    if (opts.missing) return { code: 1, stdout: "", stderr: "'acli' is not recognized as an internal or external command" };
     if (line.includes("issuetype = Epic")) return { code: 0, stdout: raw("acli/epics.json"), stderr: "" };
+    if (line.includes("openSprints")) return { code: 1, stdout: "", stderr: "Error: the field 'sprint' does not exist" };
     if (line.includes("parent in (")) return { code: 0, stdout: raw("acli/children.json"), stderr: "" };
-    if (line.includes("test-case")) return { code: 0, stdout: raw("acli/tests.json"), stderr: "" };
-    if (line.startsWith("jira workitem view ABC-99")) return { code: 0, stdout: raw("acli/view-ABC-99.json"), stderr: "" };
+    if (line.includes("circuit-test")) return { code: 0, stdout: raw("acli/tests.json"), stderr: "" };
     if (line === "jira auth status") return { code: 0, stdout: "Site: acme.atlassian.net", stderr: "" };
     return { code: 1, stdout: "", stderr: `unexpected: ${line}` };
   }) as any;
@@ -57,251 +52,121 @@ function fakeAcli(opts: { fail?: string } = {}): AcliExec & { calls: string[][] 
   return f;
 }
 
-/** Recorded `claude -p` reader outputs by prompt. pending() resolves when every started read has answered. */
-function fakeClaude(opts: { fireflies?: boolean } = {}): ClaudeExec & { calls: string[]; pending(): Promise<void> } {
-  const calls: string[] = [];
+function fakeClaude(): ClaudeExec & { prompts: string[]; pending(): Promise<void> } {
+  const prompts: string[] = [];
   const inflight: Promise<unknown>[] = [];
-  const f = ((args: string[], prompt: string) => {
-    calls.push(prompt);
+  const f = ((_args: string[], prompt: string) => {
+    prompts.push(prompt);
     const p = (async () => {
       await new Promise((r) => setTimeout(r, 1));
-      const id = /Confluence design page id: (\d+)/.exec(prompt)?.[1];
-      if (id) {
-        try { return { code: 0, stdout: raw(`confluence/page-${id}.json`), stderr: "" }; } catch { return { code: 0, stdout: JSON.stringify({ type: "result", result: "{\"error\":\"not found\"}" }), stderr: "" }; }
-      }
-      if (prompt.includes("labelled circuit-design")) return { code: 0, stdout: raw("confluence/listing.json"), stderr: "" };
-      if (prompt.includes("Fireflies")) {
-        if (!opts.fireflies) return { code: 0, stdout: JSON.stringify({ type: "result", result: "{\"meetings\":[],\"error\":\"Fireflies MCP is not connected\"}" }), stderr: "" };
-        if (prompt.includes("most recent")) return { code: 0, stdout: raw("confluence/fireflies-recent.json"), stderr: "" };
-        return { code: 0, stdout: JSON.stringify({ type: "result", result: JSON.stringify({ meetings: [{ id: "01NEW1", title: "New call", date: "2026-11-11T09:00:00Z" }] }) }), stderr: "" };
+      if (prompt.includes("circuit-design")) return { code: 0, stdout: raw("confluence/listing.json"), stderr: "" };
+      if (prompt.includes("searchJiraIssuesUsingJql")) {
+        const json = prompt.includes("issuetype = Epic") ? raw("acli/epics.json") : prompt.includes("parent in") ? raw("acli/children.json") : prompt.includes("circuit-test") ? raw("acli/tests.json") : "[]";
+        const parsed = JSON.parse(json);
+        return { code: 0, stdout: JSON.stringify({ type: "result", result: JSON.stringify(Array.isArray(parsed) ? { issues: parsed } : parsed) }), stderr: "" };
       }
       return { code: 1, stdout: "", stderr: "unexpected prompt" };
     })();
     inflight.push(p);
     return p;
   }) as any;
-  f.calls = calls;
+  f.prompts = prompts;
   f.pending = async () => { let n = -1; while (n !== inflight.length) { n = inflight.length; await Promise.all(inflight); await new Promise((r) => setTimeout(r, 5)); } };
   return f;
 }
 
-function make(opts: { graphqlFails?: boolean; graphql?: (q: string, v: any) => Promise<any>; state?: Map<string, unknown>; acli?: ReturnType<typeof fakeAcli>; claude?: ReturnType<typeof fakeClaude> } = {}) {
-  const state = opts.state ?? new Map<string, unknown>();
+function make(opts: { acli?: ReturnType<typeof fakeAcli>; graphqlFails?: boolean } = {}) {
+  const requests: string[] = [];
   const ctx: any = {
-    subscriptions: subs,
-    workspaceState: { get: (k: string) => state.get(k), update: async (k: string, v: unknown) => { state.set(k, v); } },
+    subscriptions: subs, workspaceState: { get: () => undefined, update: async () => {} },
     globalStorageUri: { fsPath: storage },
     secrets: { get: async (k: string) => secrets.get(k), store: async (k: string, v: string) => { secrets.set(k, v); } },
   };
   const connections: any = {
     onDidChange: () => ({ dispose() {} }),
-    githubGraphql: async (q: string, v: any) => {
-      graphqlCalls.push(v);
-      if (opts.graphqlFails) throw new Error("Not signed in to GitHub");
-      return opts.graphql ? opts.graphql(q, v) : resp.data;
+    githubGraphql: async () => { if (opts.graphqlFails) throw new Error("Not signed in to GitHub."); return JSON.parse(raw("github-work.json")).data; },
+    githubRequest: async (_m: string, p: string) => {
+      requests.push(p);
+      if (p.includes("/actions/workflows/deploy.yml/runs")) return JSON.parse(raw("deploy-runs.json"));
+      if (p.includes("/compare/dev...")) return { ahead_by: 3 };
+      if (p.includes("/compare/main...")) return { status: "ahead" };
+      if (/\/environments\?/.test(p)) return { environments: [{ name: "qa" }, { name: "dev" }, { name: "sit" }, { name: "production" }] };
+      if (p.includes("/environments/sit/secrets")) return { secrets: [] };
+      if (p.includes("/environments/production/secrets")) throw Object.assign(new Error("403"), { status: 403 });
+      if (p.includes("/secrets")) return { secrets: [{ name: "SFDX_AUTH_URL" }] };
+      if (/\/rulesets\?/.test(p)) return [{ id: 1 }];
+      if (p.includes("/rulesets/1")) return { enforcement: "active", conditions: { ref_name: { include: ["refs/heads/sprint/*", "refs/heads/dev", "refs/heads/sit", "refs/heads/uat", "refs/heads/main"], exclude: [] } } };
+      throw new Error(`unexpected ${p}`);
     },
-    githubRequest: async () => ({ workflow_runs: [{ id: 5, status: "waiting", conclusion: null, html_url: "https://github.com/acme/sales/actions/runs/5", created_at: "2026-11-10T00:00:00Z", head_sha: "abc" }] }),
   };
-  const logs: string[] = [];
   const acli = opts.acli ?? fakeAcli();
-  const claude = opts.claude ?? fakeClaude();
-  const svc = createProject({ ctx, root, pluginRoot: "", log: (m) => logs.push(m) }, {
-    identity: { get: () => identity, refresh: async () => identity, setActive: async () => {}, onDidChange: () => ({ dispose() {} }) } as any,
-    connections, acli, claude,
-  });
-  return { svc, logs, acli, claude, state };
+  const claude = fakeClaude();
+  const svc = createProject({ ctx, root, log: () => {} }, { connections, repo: () => ({ owner: "acme-org", repo: "acme-salesforce" }), acli, claude });
+  return { svc, acli, claude, requests };
 }
 
-/** Reads start the design-page reads in the background; settled() waits until they are all in. */
-async function settled(m: ReturnType<typeof make>) {
-  // pass 1 lists the pages; pass 2 reads the page-only designs the listing found
-  for (let i = 0; i < 2; i++) { await m.svc.features(); await m.claude.pending(); }
-  return m.svc.features();
+/** First call starts the background reads (design pages, repo setup); the second sees them. */
+async function settled(m: ReturnType<typeof make>, role: Parameters<ReturnType<typeof make>["svc"]["work"]>[0] = "developer") {
+  await m.svc.work(role, "dev1", []);
+  await m.claude.pending();
+  await new Promise((r) => setTimeout(r, 20));
+  return m.svc.work(role, "dev1", []);
 }
 
-describe("createProject (v3: Jira via acli, Confluence via the read-only reader, GitHub)", () => {
-  it("serves features from Jira epics and their design pages, with gates from one GraphQL query", async () => {
+describe("createProject", () => {
+  it("serves the Work and Missing tabs from Jira (acli), the design listing and GitHub", async () => {
     const m = make();
-    const first = await m.svc.features();
-    expect(first[0].gates.G1).toBe("waiting"); // design page not read yet
-    const features = await settled(m);
-    expect(features.map((f) => f.id)).toEqual(["ABC-10", "ABC-20", "page-333333"]);
-    expect(features[0].gates).toMatchObject({ G1: "done", G8: "waiting" });
-    expect(graphqlCalls).toContainEqual({ owner: "acme", name: "sales" });
-    expect((await m.svc.feature("ABC-10-case-escalation"))!.id).toBe("ABC-10");
-    expect((await m.svc.feature("123456"))!.id).toBe("ABC-10");
-    // acli calls are argument arrays with --json; no token anywhere
-    expect(m.acli.calls.every((a) => Array.isArray(a) && a[0] === "jira")).toBe(true);
-    expect(JSON.stringify(m.acli.calls)).not.toMatch(/token|password/i);
-    // cached: no new GitHub, Jira or page reads within the TTLs
-    const g = graphqlCalls.length, a = m.acli.calls.length, c = m.claude.calls.length;
-    await m.svc.features();
-    expect([graphqlCalls.length, m.acli.calls.length, m.claude.calls.length]).toEqual([g, a, c]);
+    const w = await settled(m);
+    expect(w.errors).toEqual([]);
+    expect(w.sprint.name).toBe("sprint/2026-11");
+    // no open sprint in Jira: the stories of the open epics
+    expect(w.sprint.stories.map((s) => [s.key, s.status])).toEqual([["ABC-11", "qa"], ["ABC-21", "design"], ["ABC-12", "in-pr"], ["ABC-13", "in-pr"], ["ABC-14", "ready"], ["ABC-15", "design"]]);
+    expect(w.next.map((r) => r.id)).toEqual(["fix:41", "review:43", "review:44", "build:ABC-14"]);
+    const repo = w.missing.filter((x) => x.group === "repo").map((x) => x.id);
+    expect(repo).toEqual(["repo:bootstrap", "repo:branch:uat", "repo:secret:sit", "repo:env:uat", "repo:automerge"]);
+    // secret values are never requested: only the list endpoints (names)
+    expect(m.requests.filter((p) => p.includes("secrets")).every((p) => /\/environments\/[a-z]+\/secrets\?per_page=100$/.test(p))).toBe(true);
+    const a = await m.svc.work("architect", "arch1", []);
+    expect(a.next.map((r) => r.title)).toEqual(["New design from transcript", "Finish design Partner onboarding", "Create stories for Returns portal"]);
+    const lead = await m.svc.work("lead", "lead1", [{ ...baseStatus("github"), state: "disconnected" }]);
+    expect(lead.next.map((r) => r.id)).toEqual(["prod:901", "promote:sprint/2026-11", "promote:dev"]);
+    expect(lead.missing[0]).toMatchObject({ id: "conn:github", button: "Connect" });
   });
-  it("keeps read design pages for the next window", async () => {
-    const first = make();
-    await settled(first);
-    const again = make({ state: first.state });
-    expect((await again.svc.features())[0].gates.G1).toBe("done");
+  it("story panel: release is checked against main", async () => {
+    const m = make();
+    await settled(m);
+    const s = (await m.svc.story("ABC-11"))!;
+    expect(s.steps.find((x) => x.id === "release")!.state).toBe("todo");
+    expect(s.links.map((l) => l.label)).toEqual(["Jira", "Design page", "Diagram", "PR #42"]);
+    expect(m.requests).toContain("/repos/acme-org/acme-salesforce/compare/main...b0b0b0b0");
+    expect(await m.svc.story("not a key")).toBeUndefined();
   });
-  it("lists only open PRs, linked to their stories", async () => {
+  it("reads Jira through the Atlassian MCP when acli is not installed", async () => {
+    const m = make({ acli: fakeAcli({ missing: true }) });
+    const w = await settled(m);
+    expect(w.errors).toEqual([]);
+    expect(w.sprint.stories.map((s) => s.key)).toContain("ABC-14");
+    expect(m.claude.prompts.some((p) => p.includes("searchJiraIssuesUsingJql"))).toBe(true);
+  });
+  it("keeps Jira data and reports GitHub when it fails", async () => {
+    const w = await make({ graphqlFails: true }).svc.work("developer", "dev1", []);
+    expect(w.errors).toEqual(["GitHub: Not signed in to GitHub."]);
+    expect(w.sprint.stories.length).toBeGreaterThan(0);
+    expect(w.missing.some((x) => x.group === "repo")).toBe(false);
+  });
+  it("stores pasted text and files encrypted outside the repo and serves them back", async () => {
     const { svc } = make();
-    const prs = await svc.prs();
-    expect(prs.map((p) => p.number)).toEqual([40, 42, 43, 44, 46]);
-    expect(prs.find((p) => p.number === 43)!.featureId).toBe("ABC-10");
-  });
-  it("builds queues, including pending production approvals", async () => {
-    const m = make();
-    await settled(m);
-    const arch = await m.svc.queue(identity, "architect");
-    expect(arch.some((i) => i.kind === "deploy-approval" && i.actions[0].args!.runId === 5)).toBe(true);
-    expect(arch.some((i) => i.kind === "sign-off" && i.actions[0].id === "arch:approve-design")).toBe(true);
-    expect((await m.svc.queue(identity, "developer")).map((i) => i.kind)).toEqual(["approve-plan", "design-changed", "needs-human"]);
-  });
-  it("shows a connect item and keeps Jira data when GitHub fails", async () => {
-    const m = make({ graphqlFails: true });
-    await settled(m);
-    const q = await m.svc.queue(identity, "architect");
-    expect(q[0]).toMatchObject({ kind: "connect", detail: "Not signed in to GitHub" });
-    expect(q.some((i) => i.kind === "sign-off")).toBe(true);
-    expect(m.logs.filter((l) => l.includes("GitHub read failed"))).toHaveLength(1);
-  });
-  it("shows a Jira connect item when acli is not logged in", async () => {
-    const { svc } = make({ acli: fakeAcli({ fail: "Error: unauthorized" }) });
-    const q = await svc.queue(identity, "developer");
-    expect(q.find((i) => i.id === "developer:connect:jira")).toMatchObject({ detail: "Atlassian CLI is not logged in. Run: acli jira auth login --web" });
-    expect(await svc.features()).toEqual(expect.arrayContaining([]));
-  });
-  it("has no jira-map.json reader (keys come from Jira) and builds browse links from build.config.yml", async () => {
-    const { svc } = make();
-    expect((svc as any).jiraMap).toBeUndefined();
-    await svc.features(); // loads build.config.yml (the Jira site)
-    expect(svc.jiraBrowseUrl("ABC-1")).toBe("https://acme.atlassian.net/browse/ABC-1");
-    expect(svc.jiraBrowseUrl("not a key")).toBeUndefined();
-  });
-  it("serves the Circuit MCP detail reads", async () => {
-    const m = make();
-    await settled(m);
-    expect(await m.svc.design("ABC-10")).toMatchObject({ approvedVersion: 3, state: "approved" });
-    expect(((await m.svc.decisions("ABC-10")) as any).decisions).toHaveLength(2);
-    expect(((await m.svc.orgSnapshot("ABC-10")) as any).snapshot.objects).toEqual(["Case"]);
-    expect(await m.svc.story("ABC-12")).toMatchObject({ key: "ABC-12", design: { c5: "ok" }, pr: { number: 42 } });
-    expect(await m.svc.story("ABC-99")).toMatchObject({ key: "ABC-99", note: "Not a story under a feature epic." });
-    await expect(m.svc.story("abc")).rejects.toThrow(/Not a Jira key/);
-    await expect(m.svc.design("NOPE-1")).rejects.toThrow(/No feature/);
-  });
-  it("adds an encrypted upload, indexes metadata only and returns the text", async () => {
-    const m = make();
-    await settled(m);
-    let fired = 0;
-    m.svc.onDidChange(() => fired++);
-    const src = path.join(storage, "call.vtt");
-    await fsp.writeFile(src, "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n<v Anna>Partners need a portal.\n");
-    const ref = await m.svc.addUpload({ fsPath: src } as any, "Partner call");
-    expect(ref).toMatchObject({ kind: "upload", title: "Partner call" });
-    expect(ref.id).toMatch(/^upload:[0-9a-f]{12}$/);
-    expect(fired).toBe(1);
-    const index = await fsp.readFile(path.join(root, ".circuit", "sources.json"), "utf8");
-    expect(index).toContain(ref.id);
-    expect(index).not.toContain("portal");
-    expect(secrets.get("deliveryCircuit.sourcesKey")).toBeDefined();
-    expect(await m.svc.transcript(ref.id)).toBe("Anna: Partners need a portal.");
-    const sources = await m.svc.sources();
-    expect(sources.find((s) => s.id === "upload:3f9a0c1b2d4e")!.usedBy).toEqual(["ABC-10"]);
-    await expect(m.svc.transcript("upload:000000000000")).rejects.toThrow(/not stored/);
-    await expect(m.svc.transcript("nope")).rejects.toThrow(/Unknown source id/);
-    expect(await m.svc.transcript("fireflies:01ABC")).toContain("fireflies_get_transcript");
-  });
-  it("Fireflies meetings come from the person's Fireflies MCP; none when it is not connected", async () => {
-    const off = make();
-    expect(await off.svc.firefliesRecent()).toEqual([]);
-    expect(off.logs.some((l) => l.includes("Fireflies MCP is not connected"))).toBe(true);
-    await expect(off.svc.indexFireflies("../x")).rejects.toThrow(/Invalid/);
-    const on = make({ claude: fakeClaude({ fireflies: true }) });
-    expect((await on.svc.firefliesRecent(5)).map((s) => s.id)).toEqual(["fireflies:01JD7K2M9Q"]);
-    expect(await on.svc.indexFireflies("01NEW1")).toMatchObject({ id: "fireflies:01NEW1", title: "New call", origin: "fireflies" });
-  });
-  it("indexes a Fireflies meeting from the title and date the Sources page passes, with no second Fireflies read", async () => {
-    const claude = fakeClaude({ fireflies: true });
-    const m = make({ claude });
-    const before = claude.calls.filter((c) => c.includes("Fireflies")).length;
-    const ref = await m.svc.indexFireflies("01META1", { title: "Kick-off\nwith Acme Shipping", date: "2026-11-10T10:00:00Z" });
-    expect(ref).toMatchObject({ id: "fireflies:01META1", kind: "fireflies", title: "Kick-off with Acme Shipping", date: "2026-11-10T10:00:00Z", origin: "fireflies" });
-    expect(claude.calls.filter((c) => c.includes("Fireflies")).length).toBe(before);
-  });
-  it("adds pasted or dictated text encrypted with no temp file, keeping its origin in the index", async () => {
-    const m = make();
-    const ref = await m.svc.addText("  Ops lead: rates must show on the Order.  ", { title: "Dictated note", origin: "wispr-flow", date: "2026-11-09T08:00:00Z" });
-    expect(ref).toMatchObject({ kind: "upload", title: "Dictated note", origin: "wispr-flow", date: "2026-11-09T08:00:00.000Z" });
-    expect(ref.id).toMatch(/^upload:[0-9a-f]{12}$/);
-    expect(await m.svc.transcript(ref.id)).toBe("Ops lead: rates must show on the Order.");
-    const index = await fsp.readFile(path.join(root, ".circuit", "sources.json"), "utf8");
-    expect(index).toContain('"origin": "wispr-flow"');
-    expect(index).not.toContain("rates must show");
-    const stored = await fsp.readdir(path.join(storage, "sources"));
-    expect(stored).toContain(`${ref.id.slice("upload:".length)}.enc`);
-    await expect(m.svc.addText("   ", { title: "x", origin: "paste" })).rejects.toThrow(/no text/);
-    expect((await m.svc.addText("Another note", { title: "", origin: "bogus" as any })).origin).toBe("paste");
-  });
-  it("finds story PRs that merged before the recent-merged window and keeps them", async () => {
-    const clone = () => JSON.parse(JSON.stringify(resp.data));
-    const node43 = resp.data.repository.open.nodes.find((n: any) => n.number === 43);
-    const merged = (n: number, branch: string) => ({ ...node43, number: n, headRefName: branch, state: "MERGED", isDraft: false, mergedAt: "2026-01-02T00:00:00Z" });
-    const searches: any[] = [];
-    const graphql = async (q: string, v: any) => {
-      if (q.includes("CircuitStoryPrs")) {
-        searches.push(v);
-        // head: is a prefix match, so the search also returns ABC-130's PR; only ABC-13's may be used.
-        const i = Object.values(v).indexOf("repo:acme/sales is:pr is:merged head:feature/ABC-13");
-        return i < 0 ? {} : { [`s${i}`]: { nodes: [merged(143, "feature/ABC-13-escalation-queue"), merged(1300, "feature/ABC-130-other")] } };
-      }
-      const d = clone();
-      d.repository.open.nodes = d.repository.open.nodes.filter((n: any) => n.number !== 43);
-      return d;
-    };
-    const state = new Map<string, unknown>();
-    const { svc } = make({ graphql, state });
-    const f = (await svc.feature("ABC-10"))!;
-    expect(searches).toHaveLength(1);
-    expect(Object.values(searches[0])).toContain("repo:acme/sales is:pr is:merged head:feature/ABC-13");
-    expect(f.stories.find((x) => x.jiraKey === "ABC-13")!.prNumber).toBe(143);
-    // A new window (or session) reuses the stored merged PR instead of searching for it again.
-    const again = make({ graphql, state });
-    expect((await again.svc.feature("ABC-10"))!.stories.find((x) => x.jiraKey === "ABC-13")!.prNumber).toBe(143);
-  });
-  it("a forced refresh does not reuse a GitHub read that started before it", async () => {
-    let release!: () => void;
-    const gate = new Promise<void>((r) => (release = r));
-    let calls = 0;
-    let started!: () => void;
-    const pollStarted = new Promise<void>((r) => (started = r));
-    const graphql = async () => {
-      calls++;
-      if (calls === 1) started();
-      const d = JSON.parse(JSON.stringify(resp.data));
-      if (calls === 1) { await gate; return d; } // the poll's read, started before the gate action
-      d.repository.open.nodes = d.repository.open.nodes.filter((n: any) => n.number !== 46); // state after the action
-      return d;
-    };
-    const { svc } = make({ graphql });
-    const before = svc.prs();
-    await pollStarted; // the refresh is requested only once the poll's read is in flight
-    const refreshed = svc.refresh();
-    release();
-    await Promise.all([before, refreshed]);
-    expect((await svc.prs()).map((p) => p.number)).not.toContain(46);
-  });
-  it("refresh re-reads GitHub, Jira and the design pages, and fires", async () => {
-    const m = make();
-    await settled(m);
-    let fired = 0;
-    m.svc.onDidChange(() => fired++);
-    const g = graphqlCalls.length, a = m.acli.calls.length, c = m.claude.calls.length;
-    await m.svc.refresh();
-    await m.claude.pending();
-    expect(graphqlCalls.length).toBe(g + 1);
-    expect(m.acli.calls.length).toBeGreaterThan(a);
-    expect(m.claude.calls.length).toBeGreaterThan(c);
-    expect(fired).toBeGreaterThanOrEqual(1);
+    const ref = await svc.addText("Client: we need Case escalation.", { title: "Kickoff\ncall", origin: "paste" });
+    expect(ref).toMatchObject({ id: expect.stringMatching(/^upload:[0-9a-f]{12}$/), kind: "upload", title: "Kickoff call", origin: "paste" });
+    expect(await svc.transcript(ref.id)).toBe("Client: we need Case escalation.");
+    const file = path.join(storage, "call.vtt");
+    await fsp.writeFile(file, "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n<v Anna>Escalate it.</v>\n");
+    const f = await svc.addFile(file);
+    expect(f).toMatchObject({ title: "call", origin: "file" });
+    expect(await svc.transcript(f.id)).toBe("Anna: Escalate it.");
+    // nothing was written into the repository
+    expect(fs.readdirSync(root).sort()).toEqual(["build.config.yml"]);
+    await expect(svc.addText("  ", { title: "x", origin: "paste" })).rejects.toThrow(/no text/);
+    expect(await svc.transcript("fireflies:01ABC")).toContain("fireflies_get_transcript");
   });
 });

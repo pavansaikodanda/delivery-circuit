@@ -1,187 +1,213 @@
 {
   "mode": "ready",
-  "waiting": [
-    {
-      "id": "a-g1-ACME-20",
-      "kind": "sign-off",
-      "title": "Entitlement SLA timers: approve design",
-      "detail": "Open questions remain. Design page status: In progress (v3)",
-      "gate": "G1",
-      "gateLabel": "G1 Design approved",
-      "age": "2 d",
-      "since": "2026-11-09T13:00:00.000Z",
-      "featureId": "ACME-20",
-      "links": [
-        {
-          "kind": "jira",
-          "label": "ACME-20",
-          "target": "https://acme.atlassian.net/browse/ACME-20"
-        },
-        {
-          "kind": "confluence",
-          "label": "Design page",
-          "target": "https://acme.atlassian.net/wiki/spaces/ACME/pages/2240011/Entitlement+SLA"
-        }
-      ],
-      "actions": [
-        {
-          "id": "arch:approve-design",
-          "label": "Approve design",
-          "persona": "architect",
-          "kind": "nav",
-          "args": {
-            "featureId": "ACME-20",
-            "pageId": "2240011",
-            "url": "https://acme.atlassian.net/wiki/spaces/ACME/pages/2240011/Entitlement+SLA"
-          },
-          "allowed": true
-        },
-        {
-          "id": "decision:record",
-          "label": "Record a decision",
-          "persona": "architect",
-          "kind": "ai",
-          "args": {
-            "command": "/record-decision",
-            "arg": "ACME-20",
-            "featureId": "ACME-20",
-            "pageId": "2240011"
-          },
-          "allowed": true
-        }
-      ]
-    },
-    {
-      "id": "a-g7-42",
-      "kind": "review-pr",
-      "title": "Schema review: ACME-12 Agent escalates a Case",
-      "detail": "Developer and Tester gates pending",
-      "gate": "G7",
-      "gateLabel": "G7 Schema and design review",
-      "age": "5 h",
-      "since": "2026-11-11T10:00:00.000Z",
-      "featureId": "ACME-10",
-      "prNumber": 42,
-      "storyKey": "ACME-12",
-      "links": [
-        {
-          "kind": "github",
-          "label": "PR #42",
-          "target": "https://github.com/acme-org/salesDemoOrg/pull/42"
-        },
-        {
-          "kind": "jira",
-          "label": "ACME-12",
-          "target": "https://acme.atlassian.net/browse/ACME-12"
-        }
-      ],
-      "actions": [
-        {
-          "id": "ai:/arch-review-pr",
-          "label": "AI review",
-          "persona": "architect",
-          "kind": "ai",
-          "args": {
-            "command": "/arch-review-pr",
-            "argKind": "pr",
-            "arg": 42
-          },
-          "allowed": true
-        },
-        {
-          "id": "gate:review",
-          "label": "Approve (G7)",
-          "persona": "architect",
-          "kind": "gate",
-          "args": {
-            "pr": 42
-          },
-          "allowed": true
-        }
-      ]
-    },
-    {
-      "id": "a-human-44",
-      "kind": "needs-human",
-      "title": "AI stopped on ACME-14 after 3 attempts",
-      "detail": "The Developer takes over",
-      "age": "3 h",
-      "since": "2026-11-11T12:00:00.000Z",
-      "featureId": "ACME-10",
-      "prNumber": 44,
-      "storyKey": "ACME-14",
-      "links": [
-        {
-          "kind": "github",
-          "label": "PR #44",
-          "target": "https://github.com/acme-org/salesDemoOrg/pull/44"
-        },
-        {
-          "kind": "jira",
-          "label": "ACME-14",
-          "target": "https://acme.atlassian.net/browse/ACME-14"
-        }
-      ],
-      "actions": []
-    }
-  ],
-  "waitingTotal": 3,
-  "notices": [],
-  "nav": [
-    {
-      "target": "persona:architect",
-      "label": "Architect view"
-    },
-    {
-      "target": "persona:developer",
-      "label": "Developer view",
-      "detail": "view only"
-    },
-    {
-      "target": "persona:tester",
-      "label": "Tester view",
-      "detail": "view only"
-    },
-    {
-      "target": "testing",
-      "label": "Testing"
-    },
-    {
-      "target": "sources",
-      "label": "Sources",
-      "detail": "transcripts and notes for intake"
-    },
-    {
-      "target": "connections",
-      "label": "Connections",
-      "count": 2,
-      "cls": "warn",
-      "detail": "2 need attention"
-    },
-    {
-      "target": "setup",
-      "label": "Project setup"
-    }
-  ],
-  "setupNeeded": false,
-  "teams": {
-    "architect": "architects",
-    "developer": "developers",
-    "tester": "testers"
+  "user": {
+    "login": "demo-user",
+    "role": "architect",
+    "roleLabel": "Architect",
+    "roles": [
+      {
+        "id": "architect",
+        "label": "Architect"
+      },
+      {
+        "id": "developer",
+        "label": "Developer"
+      }
+    ]
   },
-  "attention": 2,
-  "updated": "2026-11-11T15:00:00.000Z",
-  "identity": {
-    "login": "maya-arch",
-    "active": "architect",
-    "activeLabel": "Architect",
-    "personas": [
-      "architect"
+  "connections": [
+    {
+      "id": "github",
+      "label": "GitHub",
+      "state": "connected",
+      "button": "Check",
+      "account": "demo-user",
+      "detail": "acme-org/acme-salesforce"
+    },
+    {
+      "id": "claude",
+      "label": "Claude",
+      "state": "connected",
+      "button": "Check",
+      "account": "demo.user@example.com",
+      "detail": "Max plan"
+    },
+    {
+      "id": "sf-dev",
+      "label": "Salesforce DEV org",
+      "state": "connected",
+      "button": "Check",
+      "account": "demo.user@example.com",
+      "detail": "alias dev · acme-demo.my.salesforce.com"
+    },
+    {
+      "id": "atlassian",
+      "label": "Atlassian",
+      "state": "connected",
+      "button": "Check",
+      "account": "claude.ai Atlassian",
+      "detail": "Jira + Confluence through Claude"
+    },
+    {
+      "id": "lucid",
+      "label": "Lucid",
+      "state": "disconnected",
+      "button": "Connect",
+      "detail": "Sign in with /mcp in Claude"
+    },
+    {
+      "id": "fireflies",
+      "label": "Fireflies",
+      "state": "unknown",
+      "button": "Connect",
+      "detail": "Set up for Claude sessions; sign in with /mcp"
+    }
+  ],
+  "missingCount": 13,
+  "repo": "acme-org/acme-salesforce",
+  "work": {
+    "next": [
+      {
+        "id": "intake",
+        "title": "New design from transcript",
+        "detail": "Paste, a file or Fireflies",
+        "button": "Start"
+      },
+      {
+        "id": "design:222222",
+        "title": "Finish design Partner onboarding",
+        "detail": "2 open questions",
+        "button": "Finish"
+      },
+      {
+        "id": "stories:333333",
+        "title": "Create stories for Returns portal",
+        "detail": "Design approved",
+        "button": "Create"
+      }
     ],
-    "canSwitch": false,
-    "owner": "acme-org",
-    "repo": "salesDemoOrg",
-    "orgOwned": true,
-    "isAdmin": true
-  }
+    "sprint": {
+      "name": "sprint/2026-11",
+      "stories": [
+        {
+          "key": "ABC-11",
+          "title": "Foundation",
+          "status": "qa",
+          "statusLabel": "QA"
+        },
+        {
+          "key": "ABC-12",
+          "title": "Agent escalates a Case",
+          "status": "in-pr",
+          "statusLabel": "In PR"
+        },
+        {
+          "key": "ABC-13",
+          "title": "Escalation queue",
+          "status": "in-pr",
+          "statusLabel": "In PR"
+        },
+        {
+          "key": "ABC-14",
+          "title": "Escalation report",
+          "status": "ready",
+          "statusLabel": "Ready"
+        },
+        {
+          "key": "ABC-15",
+          "title": "Escalation email",
+          "status": "design",
+          "statusLabel": "Design"
+        }
+      ]
+    },
+    "errors": [],
+    "updatedAt": "2026-11-13T11:58:00.000Z"
+  },
+  "missing": [
+    {
+      "id": "conn:lucid",
+      "title": "Connect Lucid",
+      "detail": "Sign in with /mcp in Claude",
+      "button": "Connect",
+      "group": "connections"
+    },
+    {
+      "id": "repo:bootstrap",
+      "title": "Set up the repo",
+      "detail": "Runs /circuit-bootstrap",
+      "button": "Set up",
+      "group": "repo"
+    },
+    {
+      "id": "repo:branch:uat",
+      "title": "Branch uat is missing",
+      "button": "Open",
+      "group": "repo"
+    },
+    {
+      "id": "repo:secret:sit",
+      "title": "sit: no SFDX_AUTH_URL secret",
+      "detail": "Checked by name only",
+      "button": "Open",
+      "group": "repo"
+    },
+    {
+      "id": "repo:env:uat",
+      "title": "Environment uat is missing",
+      "button": "Open",
+      "group": "repo"
+    },
+    {
+      "id": "repo:automerge",
+      "title": "Auto-merge is off",
+      "detail": "Allow auto-merge in the repo settings",
+      "button": "Open",
+      "group": "repo"
+    },
+    {
+      "id": "ac:ABC-13",
+      "title": "ABC-13: no acceptance criteria",
+      "button": "Open",
+      "group": "stories"
+    },
+    {
+      "id": "ac:ABC-14",
+      "title": "ABC-14: no acceptance criteria",
+      "button": "Open",
+      "group": "stories"
+    },
+    {
+      "id": "ac:ABC-15",
+      "title": "ABC-15: no acceptance criteria",
+      "button": "Open",
+      "group": "stories"
+    },
+    {
+      "id": "scan:41",
+      "title": "ABC-12: scan failing",
+      "button": "Open",
+      "group": "stories"
+    },
+    {
+      "id": "rabbit:41",
+      "title": "ABC-12: CodeRabbit asked for changes",
+      "button": "Open",
+      "group": "stories"
+    },
+    {
+      "id": "wait:41",
+      "title": "PR #41 waits for a review",
+      "detail": "3 d without an approval",
+      "button": "Open",
+      "group": "stories"
+    },
+    {
+      "id": "nokey:43",
+      "title": "PR #43 has no Jira key",
+      "detail": "Name the branch feature/<KEY>-<slug>",
+      "button": "Open",
+      "group": "stories"
+    }
+  ]
 }

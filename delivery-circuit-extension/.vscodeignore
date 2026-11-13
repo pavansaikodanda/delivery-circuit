@@ -1,26 +1,19 @@
-# Sources, tests and dev tooling are not shipped: dist/ holds the esbuild bundles.
+# Sources, tests and dev tooling are not shipped: dist/extension.js is the esbuild bundle (dependencies included).
 src/**
 test/**
 preview/**
+design/**
+node_modules/**
 .vscode-test/**
 .vscode/**
 test-results/**
 tsconfig.json
 vitest.config.mjs
 build.mjs
+build-brands.mjs
 ARCHITECTURE.md
 **/*.map
 *.ts
 *.vsix
-design/**
-# preview-only kit gallery (preview/fixtures/shared.kit.*.json)
-media/shared/kit.js
-build-brands.mjs
 .gitignore
 .vscodeignore
-
-# Runtime dependencies (esbuild externals) ARE shipped from node_modules, except:
-#  - the Agent SDK's platform package with its ~330 MB Claude Code binary; sessions and the testing engine use the
-#    person's installed Claude Code instead (src/core/claude.ts, sdkClaudeExecutable()).
-node_modules/@anthropic-ai/claude-agent-sdk-*/**
-node_modules/.cache/**

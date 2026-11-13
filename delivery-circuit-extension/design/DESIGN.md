@@ -1,9 +1,9 @@
 # Delivery Circuit — UI design v2 ("Quiet Circuit")
 
-Reference prototype: `design/prototype.html` (open in a browser: palette swatches, then dark and light side by side
-with a Developer view, a Connections list and a Testing run panel; hover reveal, expand and the overflow menu work).
-Scope: `media/shared/base.css`, `media/shared/ui.js` (`window.DC`) and the seven pages. Plain CSS + the existing
-`h()` renderer, no framework. v1 ("Calm Circuit") was rejected as cluttered; §0 lists what this version drops.
+Screens: `design/screens/*.png` (light and dark of each sidebar tab and the story panel, `npm run screens`).
+Scope: `media/shared/base.css`, `media/shared/ui.js` (`window.DC`) and the two v4 pages (the sidebar with three tabs
+and the story panel, docs/CIRCUIT-V4.md section 7). Plain CSS + the `h()` renderer, no framework.
+v1 ("Calm Circuit") was rejected as cluttered; §0 lists what this version drops.
 
 ## 0. What changed from v1 (and why)
 
@@ -219,14 +219,14 @@ on rows, `2px` on buttons; `:focus-visible` only) · selected (`--dc-primary-sof
 disabled (`opacity: .5; cursor: not-allowed`, reason in tooltip) · loading (`loading` icon replaces the icon, label
 stays, `aria-busy`, width locked) · busy row (`aria-busy`, controls disabled, spinner in status slot).
 
-### 5.1 Header — `DC.header({title, sub, persona, personas, onSwitch, actions})`
+### 5.1 Header — `DC.header({title, sub, role, roles, onSwitch, actions})`
 ```
-Developer view                                            Developer ▾     ⟳
-Signed in as ravi-dev · acme-org/salesDemoOrg
+demo-user                                                  Developer ▾     ⟳
+acme-org/acme-salesforce
 ────────────────────────────────────────────────────────────────────────
 ```
-Title 18/600; sub 12 muted. Persona chip: pill, `--dc-chip` bg, `--dc-fg` text 12/500, codicon of the persona at
-12 px, chevron when switchable (opens a `DC.menu` listbox). Header actions: **one** ghost icon button (Refresh);
+Title 18/600; sub 12 muted. Role chip (`DC.roleChip`): pill, `--dc-chip` bg, `--dc-fg` text 12/500, codicon of the
+role at 12 px, chevron when switchable (opens a `DC.menu` listbox of Architect / Developer / QA / Lead). Header actions: **one** ghost icon button (Refresh);
 anything else (Settings, Export…) goes in a "…" menu. Sticky, `--dc-surface-0`, 1 px bottom border, no shadow.
 
 ### 5.2 Section — `DC.section(title, {count, action, key}, body)`
@@ -245,64 +245,9 @@ viewer, otherwise secondary); a disabled primary keeps its reason as tooltip. `s
 href}`; `menu` = further links and actions. `expanded` = a function returning the panel content (rendered only when
 open). The row sets `data-key`/`data-hash` for reconcile, and its hash excludes `open`.
 
-### 5.4 Queue row — `DC.queueRow(q, {onFeature})` (Home and Persona "Waiting on you")
-Icon = gate codicon (tooltip "G3 · AI plan approved · Developer"). Status = `waiting on you` (tone info) or
-`waiting on <persona>` when the viewer cannot act (tone muted); age with tooltip = ISO `since`; overdue (> 3 d) turns
-the age `--dc-warn`. Primary = `q.actions[0]`; other actions and links in the menu; expanded shows detail, links,
-all actions, reason line. Home sidebar uses the compact variant (`compact: true`): no strip, status under the title,
-primary becomes an icon-only ghost arrow that opens the persona view.
-
-### 5.5 Feature row — `DC.featureRow(f, {onOpen})` with `DC.stageLine(stages)`
-```
-[map]  001-case-escalation                                     ● Build · G3 next, you   [Open]  ›
-       ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ 7/10 stages
-```
-Stage line: 10 segments, 3 px tall, 2 px gap, radius 2; done `--dc-secondary`, active `--dc-primary`, todo
-`--dc-border`, blocked `--dc-err`; `role="progressbar"` with `aria-valuetext="Build, 7 of 10 stages"`. Status text
-= current stage name; when a gate waits on the viewer, `· G3 next, you` in `--dc-secondary`. Expanded: title line,
-gates list (`G1 Plan signed off · Architect · done` with dot, own gates 500), `n open questions · n stories ·
-score 92`, links list. No gate chips, no ring.
-
-### 5.6 PR row — `DC.prRow(p, {onFeature, viewer})`
-```
-collapsed │ [pr]  #44 CE-14 Notify the account owner on escalation      ● 2 checks failing · 3 h   [Take over]  ›
-expanded  │ [pr]  #44 CE-14 Notify the account owner on escalation      ● 2 checks failing · 3 h   [Take over]  ˅
-          │        feature/CE-14-escalation-notify · claude[bot] · attempt 3 · needs-human
-          │        Checks    ● guard  ● static  ● qa  ● design-gate  ○ gate/developer  ○ gate/tester
-          │        Reviews   [cr] CodeRabbit · changes requested · SOQL inside loop in NotifyOwnerHandler
-          │                  [an] AI Reviewer · block · VERDICT: BLOCK (bulk safety)
-          │                  [sf] Code Analyzer · block · 2 violations
-          │                  [bk] SF AI Tester · block · S03-TC-01 failed: no email sent
-          │        Links     [gh] PR #44 ↗   [jira] CE-14 ↗   [cr] CodeRabbit ↗   [gh] Checks ↗
-          │        [AI review]  [Approve (G5)]  — Approve needs every check green
-```
-Status text is computed, one phrase, in priority order: `n checks failing` (err) → `blocked by <tool>` (err) →
-`waiting on you` (info) → `checks running` (info) → `review pending` (muted) → `ready` (ok) → `draft` (muted).
-Labels are not shown collapsed; `ai-attempt-n ≥ 3` appears in the expanded meta line. Draft PR: muted title and
-draft icon. Checks line: dots + names, pending dot pulses once per state change only. Reviews: logo (human =
-codicon `person`), author, state word in its tone, summary truncated to one line, link via the whole line.
-
-### 5.7 Connection row — `DC.connectionRow(r, {onConnect, onCheck, onDisconnect, onManage})`
-```
-[gh]  GitHub                                      ● Connected · demo-architect      [Reconnect]  ›
-[cl]  Claude (subscription)                       ● Expires in 19 days               [Reconnect]  ›
-[at]  Atlassian MCP                               ● Problem                          [Sign in]    ›
-```
-Brand logo 20 px. Status word from state (`Connected` ok · `Expires in n days` warn · `Problem` err · `Checking`
-spinner · `Not verified` muted · `Not connected` muted) followed by `· account` when it fits in one line. Primary =
-`connectLabel`; strip = Check (codicon `sync`) + Manage (logo of the vendor page) ; menu = Disconnect (danger) when
-allowed. Expanded: detail line, links, scope + needed-by personas as muted text, disabled reason. Check puts the row
-in busy state; the result arrives through state → hash changes → flash + `DC.announce`.
-v3 stores no credentials, so there are no secret rows: the Project section shows read-only repo checks instead
-(rulesets, production environment, "workflows without stored credentials").
-
 ### 5.8 Tabs — `DC.tabs(items, selected, onSelect)`
 Text 13/500, selected `--dc-fg` with 2 px `--dc-primary` underline (one `.tab-ink` that slides 200 ms), others
 `--dc-muted`. Count as muted text after the label. Roving tabindex, arrows, Home/End. Hidden panels not rendered.
-
-### 5.9 Segmented — `DC.segmented(options, value, onChange, {label})`
-Pill container 1 px `--dc-border`; selected option `--dc-primary-soft` bg + `--dc-primary` text 500; `role="radiogroup"`.
-Used for Mode / Org on Testing and for Act-as on Connections.
 
 ### 5.10 Buttons — `DC.button(label, onClick, {kind, icon, iconOnly, loading, disabled, reason, size, tip})`
 Kinds: **primary** (`--dc-primary-strong` bg, white text) · **secondary** (transparent, 1 px `--dc-border-strong`,
@@ -324,14 +269,6 @@ Rows of two bars (title 40 %, meta 24 %), `--dc-chip` colour, no shimmer (static
 ### 5.13 Empty state — `DC.empty({icon, title, text, action})`
 Centred, 24 px codicon in `--dc-icon`, title 13/500, text meta, one secondary button. No dashed box.
 
-### 5.14 Progress — `DC.progress({value, max, segments})`, `DC.ring(value, max, {size})`
-Bar 4 px, track `--dc-border`, fill `--dc-secondary` (stacked segments in status colours when `segments` given),
-width transition 240 ms, `role="progressbar"`. Ring 20 px, stroke 2, same colours; used only in the run panel heading.
-
-### 5.15 Log — `DC.log(id, lines, {follow})`
-`<pre role="log">`, `--dc-surface-1`, mono 12, line classes as v1, max-height 240 px, "Jump to latest" ghost link
-when not following. The only box on the Testing page besides the run panel that contains it.
-
 ### 5.16 Chip — `DC.chip(text, {tone})`
 18 px, 12/500, `--dc-chip` bg, `--dc-muted` text; tones `primary` (soft primary bg, primary text) and `secondary`.
 No status chips: status is `DC.status(tone, text)` = dot + text.
@@ -340,146 +277,23 @@ No status chips: status is `DC.status(tone, text)` = dot + text.
 CSS tooltip `[data-tip]::after`, `--dc-surface-2`, shadow, 12 px, max 280 px, appears on hover/focus after 300 ms,
 mirrored to `aria-label`/`aria-describedby`.
 
-## 6. Per-page layouts (collapsed default state)
+## 6. Page layouts (v4, docs/CIRCUIT-V4.md section 7)
 
-### 6.1 Home (sidebar, compact rows)
-```
-ravi-dev · Developer ▾                                  ⟳
-────────────────────────────────────────────────────────
-Waiting on you · 3
-[G3]  Approve AI plan: CE-13 Tier 2 routing          →
-      waiting on you · 1 d
-[G5]  Code review: CE-12 Agent escalates a Case      →
-      waiting on you · 5 h
-[!]   Take over CE-14: AI stopped after 3 attempts   →
-      needs a human · 3 h
-Show all 7
+### 6.1 Sidebar (`media/views/home.js`)
+Header (user · role chip · refresh), then `DC.tabs`: **Work** (default) · **Connections** · **Missing · n**. The view
+badge shows the Missing count. Every row is a compact `DC.row` with **one** button; the webview sends the row id and
+the extension runs what it stands for (a skill in a Claude terminal, a GitHub link, a connect flow).
+- Work: *Next steps* (at most 5 rows, icon by kind, title, one muted detail line, button) and *Sprint* (`KEY Title`
+  with one status word: Design · Ready · Building · In PR · QA · Done; click opens the story panel).
+- Connections: brand logo, label, status dot + who it is connected as, detail line, Connect / Fix / Check. Rows the
+  role does not need are hidden. No token, secret, webhook, runner, Claude Tag or AI Reviewer rows.
+- Missing: sections Connections / Repo setup / Stories; "Set up the repo" (primary, runs /circuit-bootstrap) first
+  when anything in the repo is missing. Empty state "Nothing missing".
 
-Go to
-[beaker]  Testing                      2 running
-[plug]    Connections                  1 expiring
-[code]    Developer view
-
-Updated 10:42
-```
-Notices (setup needed, GitHub error) are one `DC.notice` line each (icon + text + one link), above the queue.
-
-### 6.2 Persona view
-```
-Developer view                                     Developer ▾   ⟳
-Signed in as ravi-dev · acme-org/salesDemoOrg
-Developer   (Architect also sees: Architect · Developer · Tester tabs)
-─────────────────────────────────────────────────────────────────────
-Waiting on you · 3
-[G3] Approve AI plan: CE-13 Tier 2 routing     ● waiting on you · 1 d   [AI review plan]  ›
-[G5] Code review: CE-12 Agent escalates a Case ● waiting on you · 5 h   [AI review]       ›
-[!]  Take over CE-14: AI stopped after 3…      ● needs a human · 3 h    [Take over]       ›
-
-Features · 2
-[map] 001-case-escalation                       ● Build · G3 next, you  [Open]  ›
-      ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ 7/10
-[map] 002-entitlement-sla                       ● Clarify · 3 questions [Open]  ›
-      ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ 1/10
-
-Pull requests · 4                                       Start AI session ▾
-[pr] #44 CE-14 Notify the account owner…        ● 2 checks failing · 3 h [Take over]     ›
-[pr] #42 CE-12 Agent escalates a Case…          ● waiting on you · 5 h   [Approve (G5)]  ›
-[pr] #43 CE-13 Escalated Cases route to…        ● draft · 1 d            [AI review plan] ›
-[pr] #41 Spec: case escalation stories…         ● ready · 1 d            [Open]          ›
-```
-AI actions are not a section any more: they are the "Start AI session ▾" menu on the Pull requests section (one
-item per `aiActions` entry, disabled with reason when `!allowed`). When the viewer is an Architect looking at the
-Developer tab, every primary action is disabled with the reason tooltip "You act as Architect; switch persona to
-run Developer actions", and the status text reads `waiting on Developer`.
-
-### 6.3 Feature detail
-```
-001-case-escalation                                       Developer ▾   ⟳
-Case escalation with reason and queue routing · score 92 · signed off
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ Build · 7/10 stages
-Next: G3 AI plan approved · Developer (you)                 [AI review plan]
-─────────────────────────────────────────────────────────────────────
-Gates · 6 of 9 done
-● G1 Plan signed off              Architect        done
-● G2 Testability confirmed        Tester           done
-● G3 AI plan approved             Developer (you)  waiting      [AI review plan] ›
-…
-Stories · 4
-[book] 00 Contract and data model        ● PR #41 merged     [Open]  ›
-[book] 01 Agent escalates a Case         ● PR #42 in review  [Open]  ›
-Sources · 2       Links · 4        (plain lists; links show logo + label)
-```
-Gate rows are rows with status words; only the gate that waits on the viewer has a primary action. Spec Kit
-actions for other personas live in the gate row's menu, disabled with reason.
-
-### 6.4 Connections
-```
-Connections                                   Act as [Architect|Developer|Tester]   ⟳
-demo-architect · acme-org/salesDemoOrg · admin
-─────────────────────────────────────────────────────────────────────
-Personal · 5                                                        Check all
-[gh] GitHub                      ● Connected · demo-architect    [Reconnect] ›
-[cl] Claude (subscription)       ● Expires in 19 days            [Reconnect] ›
-[sf] Salesforce dev org          ● Connected · demo.user@…       [Reconnect] ›
-[ji] Jira                        ● Connected · dev.user@example.com[Reconnect] ›
-[sl] Slack                       ● Not verified                  [Connect]   ›
-Claude MCP · 3
-[at] Atlassian MCP               ● Problem                       [Sign in]   ›
-[gh] GitHub MCP                  ● Not verified                  [Sign in]   ›
-[sf] Salesforce DX MCP           ● Deprecated                    [Open]      ›
-Review tools · 3
-[cr] CodeRabbit                  ● Not verified                  [Install app]›   (disabled: admin only)
-Project · runner, GitHub for Jira, CodeRabbit rows, then read-only repo checks and reminders (no secrets in v3)
-8 connections only other personas need are hidden · Checked 3 min ago
-```
-
-### 6.5 Testing
-```
-Testing                                                       Tester ▾   …   ⟳
-Runs as maria-qa
-─────────────────────────────────────────────────────────────────────
-Suites                      │ Smoke - Account · 2 cases                  Validate
-[file] Smoke - Account  ●2  │ Mode [manual|automation|both]  Org [qa|dev]   [Run all]
-[file] Lead convert     ●1●1│ Cases   Results   Runs   Generate
-                            │ ☐ SMOKE-ACC-001 Create a Business Account…   ● passed · 4 h  ›
-                            │ ☐ SMOKE-ACC-002 The "Key Customers" list…    ● passed · 4 h  ›
-                            │ ┌ Running · 1 of 2 · SMOKE-ACC-001 manual        [Cancel] ┐
-                            │ │ ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ │
-                            │ │ ● SMOKE-ACC-002 passed   ◌ SMOKE-ACC-001 running         │
-                            │ │ Log ˅  (collapsed; last line shown in meta)              │
-                            │ └──────────────────────────────────────────────────────────┘
-```
-Suite list is a narrow list (not a boxed sidebar); selected suite = primary-soft bg + 2 px rail. Case rows show
-one status (manual or automation, whichever ran last; the other in the expanded row). The run panel is the one box
-on the page: heading, 4 px progress, per-case dots, log collapsed by default with its last line as meta and a
-chevron to open. Results tab: route as status text (`● Pass · every case passed`), four counts as muted text, case
-rows expandable (steps table and evidence inside).
-
-### 6.6 Setup wizard
-```
-Project setup                                              B2 of 13 · Admin ▾   ⟳
-Phases                 │ B2 Self-hosted runners               ● partial     [Check all]
-● B0 Prerequisites     │ ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ 2/4 steps
-● B1 GitHub repo       │ [server] Runner "circuit" online ● online           [Check]   ›
-◐ B2 Runners           │ [server] Runner "circuit-release" ● missing         [Copy]    ›
-○ B3 Salesforce logins │ [person] Sign in the runner user ● waiting for you  [Done]    ›
-```
-Phase list = rows with status dot; step cards become rows (kind icon, title, status, one action; detail and
-checklist inside the expanded row). The config form (`build.config.yml`) is a second tab; Save becomes primary
-only when dirty.
-
-### 6.7 AI session
-```
-Claude · /dev-review-plan 42                                   Developer ▾   ● running
-┌──────────────────────────────────────────────────────────────────────┐
-│ You      Review the plan on PR 42                                      │
-│ Claude   Reading docs/plans/CE-13/PLAN.md …▍                           │
-│          ↳ Read  src/… ✓   ↳ Grep  Handler ✓     (tool rows, meta)     │
-└──────────────────────────────────────────────────────────────────────┘
-claude-sonnet · 3 turns · $0.012                       [Send]  Stop
-```
-The log is the one box. Tool calls are meta rows indented under the message; a streaming message shows a 1-char
-caret. Composer: textarea + primary Send (`Ctrl+Enter` hint in tooltip) + ghost Stop.
+### 6.2 Story panel (`media/views/story.js`)
+Header `KEY Title` with the status, the five-step line (Design → Stories → Build → QA → Release: check = done, dot =
+active, hollow = to do), *Pull request* (Scan ✓/✗ with Logs, CodeRabbit approved / changes requested / pending, Human
+approval by whom or waiting how long) and *Links* (Jira, Design page, Diagram, PR).
 
 ## 7. Keyed updates (`DC.mount`)
 
