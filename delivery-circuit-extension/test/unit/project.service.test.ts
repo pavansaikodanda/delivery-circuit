@@ -60,6 +60,11 @@ function fakeClaude(): ClaudeExec & { prompts: string[]; pending(): Promise<void
     const p = (async () => {
       await new Promise((r) => setTimeout(r, 1));
       if (prompt.includes("circuit-design")) return { code: 0, stdout: raw("confluence/listing.json"), stderr: "" };
+      const arr = (f: string) => { const j = JSON.parse(raw(f)); return Array.isArray(j) ? j : j.issues ?? j; };
+      if (prompt.includes("1. epics:")) {
+        const batch = { epics: arr("acli/epics.json"), children: arr("acli/children.json"), tests: arr("acli/tests.json"), sprint: [] };
+        return { code: 0, stdout: JSON.stringify({ type: "result", result: JSON.stringify(batch) }), stderr: "" };
+      }
       if (prompt.includes("searchJiraIssuesUsingJql")) {
         const json = prompt.includes("issuetype = Epic") ? raw("acli/epics.json") : prompt.includes("parent in") ? raw("acli/children.json") : prompt.includes("circuit-test") ? raw("acli/tests.json") : "[]";
         const parsed = JSON.parse(json);
@@ -75,7 +80,7 @@ function fakeClaude(): ClaudeExec & { prompts: string[]; pending(): Promise<void
   return f;
 }
 
-function make(opts: { acli?: ReturnType<typeof fakeAcli>; graphqlFails?: boolean } = {}) {
+function make(opts: { acli?: ReturnType<typeof fakeAcli>; graphqlFails?: boolean; atlassianOff?: boolean } = {}) {
   const requests: string[] = [];
   const ctx: any = {
     subscriptions: subs, workspaceState: { get: () => undefined, update: async () => {} },
@@ -84,6 +89,7 @@ function make(opts: { acli?: ReturnType<typeof fakeAcli>; graphqlFails?: boolean
   };
   const connections: any = {
     onDidChange: () => ({ dispose() {} }),
+    cached: () => [{ id: "atlassian", state: opts.atlassianOff ? "disconnected" : "connected" }],
     githubGraphql: async () => { if (opts.graphqlFails) throw new Error("Not signed in to GitHub."); return JSON.parse(raw("github-work.json")).data; },
     githubRequest: async (_m: string, p: string) => {
       requests.push(p);
@@ -146,7 +152,13 @@ describe("createProject", () => {
     const w = await settled(m);
     expect(w.errors).toEqual([]);
     expect(w.sprint.stories.map((s) => s.key)).toContain("ABC-14");
-    expect(m.claude.prompts.some((p) => p.includes("searchJiraIssuesUsingJql"))).toBe(true);
+    expect(m.claude.prompts.filter((p) => p.includes("searchJiraIssuesUsingJql")).length).toBe(1); // one Claude run, not four
+  });
+  it("starts no Claude run while the Atlassian MCP is not connected", async () => {
+    const m = make({ acli: fakeAcli({ missing: true }), atlassianOff: true });
+    const w = await settled(m);
+    expect(m.claude.prompts.length).toBe(0);
+    expect(w.errors.join(" ")).toMatch(/Connect Atlassian/);
   });
   it("keeps Jira data and reports GitHub when it fails", async () => {
     const w = await make({ graphqlFails: true }).svc.work("developer", "dev1", []);

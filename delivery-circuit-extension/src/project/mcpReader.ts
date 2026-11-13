@@ -6,6 +6,7 @@ import type { ExecResult } from "../core/util";
 import type { SourceRef } from "../core/contracts";
 import { normalizeIssues, parseCliJson } from "./acli";
 import { normalizeDesignPages } from "./design";
+import { epicsJql, sprintJql, testCasesJql } from "./jira";
 import type { DesignPage, JiraIssue } from "./model";
 
 /** Confluence label the intake skill puts on every design page. */
@@ -100,6 +101,31 @@ export async function readJiraIssues(exec: ClaudeExec, jql: string, model?: stri
   const list = normalizeIssues(json);
   if (!list.length && json?.error) throw new Error(`Jira: ${String(json.error).slice(0, 200)}`);
   return list;
+}
+
+export function jiraBatchPrompt(projectKey: string): string {
+  const issue = { key: "", fields: { summary: "", issuetype: { name: "" }, status: { name: "", statusCategory: { key: "" } }, labels: [""],
+    parent: { key: "" }, description: "", issuelinks: [{ type: { name: "" }, outwardIssue: { key: "" } }] } };
+  return [RULES, "",
+    "Run these searches with searchJiraIssuesUsingJql (up to 100 issues each):",
+    `1. epics: ${epicsJql(projectKey)}`,
+    "2. children: parent in (<keys of the epics from 1 whose status category is not done>) ORDER BY key ASC (skip if there are none)",
+    `3. tests: ${testCasesJql(projectKey)}`,
+    `4. sprint: ${sprintJql(projectKey)} (if this JQL fails because the project has no sprints, return an empty list)`,
+    "For each issue give key, summary, issue type, status with its status category key (new | indeterminate | done), labels, parent key,",
+    "the description as plain text (first 3000 characters) and its issue links. Return exactly this JSON shape:",
+    JSON.stringify({ epics: [issue], children: [issue], tests: [issue], sprint: [issue], error: "" }),
+  ].join("\n");
+}
+
+/** Jira through the Atlassian MCP in one Claude run (epics, their stories, test cases, the open sprint). */
+export async function readJiraBatch(exec: ClaudeExec, projectKey: string, model?: string):
+    Promise<{ epics: JiraIssue[]; children: JiraIssue[]; tests: JiraIssue[]; sprint: JiraIssue[] }> {
+  const json = readerJson(await exec(readerArgs(allowedTools(ATLASSIAN_SERVERS, JIRA_READ_TOOLS), model), jiraBatchPrompt(projectKey)));
+  const part = (k: string) => normalizeIssues({ issues: Array.isArray(json?.[k]) ? json[k] : [] });
+  const out = { epics: part("epics"), children: part("children"), tests: part("tests"), sprint: part("sprint") };
+  if (!out.epics.length && !out.children.length && !out.sprint.length && json?.error) throw new Error(`Jira: ${String(json.error).slice(0, 200)}`);
+  return out;
 }
 
 function meetings(json: any): SourceRef[] {

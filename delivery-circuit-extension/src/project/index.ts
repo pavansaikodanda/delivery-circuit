@@ -13,7 +13,7 @@ import {
   environmentNames, hasAuthSecret, mapDeployRuns, mapWorkResponse, rulesetCoverage, sampleBranch, workQuery,
 } from "./github";
 import { childrenJql, designPageOf, epicsJql, parseConfig, sprintJql, storiesOf, testCasesJql } from "./jira";
-import { firefliesPointer, readDesignPages, readFirefliesRecent, readJiraIssues, type ClaudeExec } from "./mcpReader";
+import { firefliesPointer, readDesignPages, readFirefliesRecent, readJiraBatch, readJiraIssues, type ClaudeExec } from "./mcpReader";
 import type { CircuitConfig, DeployRun, DesignPage, Feature, JiraIssue, PrInfo, RepoRef, RepoSetup, WorkData } from "./model";
 import { extractText, loadUpload, newKey, SOURCE_REF_RE, storeUpload, uploadId } from "./sources";
 import { missingItems, nextSteps, sprintRows, storyDetail } from "./work";
@@ -92,17 +92,28 @@ export function createProject(base: ModuleBase, deps: ProjectDeps): ProjectServi
         logOnce(`project: ${e.message.split(".")[0]}; reading Jira through the Atlassian MCP`);
       }
     }
-    if (!readerOn()) throw new Error("Jira cannot be read: acli is not set up and deliveryCircuit.designReader is off");
-    return readJiraIssues(claude, jql, readerModel());
+    throw new AcliUnavailable();
   }
+  class AcliUnavailable extends Error { constructor() { super("acli is not available"); } }
+  /** Claude reads (Jira, Confluence, Fireflies) cost a full `claude -p` run each: only start one when its MCP is connected. */
+  const mcpReady = (id: "atlassian" | "fireflies") => connections.cached().find((c) => c.id === id)?.state === "connected";
+  const NEED_ATLASSIAN = "Connect Atlassian on the Connections tab to read Jira";
 
   let jira: JiraState | undefined;
   let jiraInflight: Promise<JiraState> | undefined;
+  /** Without acli: everything in ONE Claude run (it used to be four runs, each loading every MCP server). */
+  async function fetchJiraViaClaude(pk: string): Promise<JiraState> {
+    if (!readerOn()) throw new Error("Jira cannot be read: acli is not set up and deliveryCircuit.designReader is off");
+    if (!mcpReady("atlassian")) throw new Error(NEED_ATLASSIAN);
+    const b = await readJiraBatch(claude, pk, readerModel());
+    return { epics: b.epics, stories: storiesOf(b.sprint.length ? b.sprint : b.children), tests: b.tests, at: Date.now() };
+  }
   async function fetchJira(): Promise<JiraState> {
     await loadConfig();
     const pk = cfg.projectKey;
     if (!pk) return { epics: [], stories: [], tests: [], at: Date.now(), error: "Set jira.project_key in build.config.yml" };
     try {
+      if (acliOff) return await fetchJiraViaClaude(pk);
       const epics = await search(epicsJql(pk));
       const jql = childrenJql(epics.filter((e) => e.statusCategory !== "done").map((e) => e.key));
       const [children, tests, sprint] = await Promise.all([
@@ -115,6 +126,9 @@ export function createProject(base: ModuleBase, deps: ProjectDeps): ProjectServi
       if (!cfg.site && !acliSite && !acliOff) acliSite = (await authSite(acli).catch(() => undefined))?.site;
       return { epics, stories, tests, at: Date.now() };
     } catch (e) {
+      if (e instanceof AcliUnavailable) {
+        try { return await fetchJiraViaClaude(pk); } catch (e2) { e = e2; }
+      }
       logOnce(`project: Jira read failed: ${short(e)}`);
       return { epics: jira?.epics ?? [], stories: jira?.stories ?? [], tests: jira?.tests ?? [], at: Date.now(), error: `Jira: ${short(e)}` };
     }
@@ -130,7 +144,7 @@ export function createProject(base: ModuleBase, deps: ProjectDeps): ProjectServi
   let pages: { list: DesignPage[]; at: number; read: boolean } = { list: [], at: 0, read: false };
   let pagesInflight: Promise<void> | undefined;
   function refreshPages(force = false): void {
-    if (!readerOn() || !cfg.spaceKey || pagesInflight) return;
+    if (!readerOn() || !cfg.spaceKey || pagesInflight || !mcpReady("atlassian")) return;
     if (!force && pages.at && Date.now() - pages.at < DESIGN_TTL) return;
     pagesInflight = readDesignPages(claude, cfg.spaceKey, readerModel())
       .then((list) => { pages = { list, at: Date.now(), read: true }; changed.fire(); },
@@ -301,7 +315,10 @@ export function createProject(base: ModuleBase, deps: ProjectDeps): ProjectServi
       const data = await snapshot();
       let issue = data.stories.find((s) => s.key === key);
       if (!issue) {
-        try { issue = acliOff ? (await readJiraIssues(claude, `key = ${key}`, readerModel()))[0] : await viewIssue(acli, key); }
+        try {
+          issue = !acliOff ? await viewIssue(acli, key)
+            : mcpReady("atlassian") ? (await readJiraIssues(claude, `key = ${key}`, readerModel()))[0] : undefined;
+        }
         catch (e) { logOnce(`project: reading ${key} failed: ${short(e)}`); }
       }
       if (!issue) return undefined;

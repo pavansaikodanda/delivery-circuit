@@ -125,7 +125,7 @@ export function createConnections(base: ModuleBase, getIdentity: () => Identity 
   }
 
   async function mcpList(force = false): Promise<McpListEntry[]> {
-    if (!force && mcpListCache && Date.now() - mcpListCache.at < 120_000) return mcpListCache.entries;
+    if (!force && mcpListCache && Date.now() - mcpListCache.at < 30 * 60_000) return mcpListCache.entries;
     const r = await run("claude", ["mcp", "list"], { cwd: root, timeoutMs: 90_000 });
     mcpListCache = { at: Date.now(), entries: parseMcpList(r.stdout) };
     return mcpListCache.entries;
