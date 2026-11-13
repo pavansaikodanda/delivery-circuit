@@ -41,7 +41,7 @@ that one wins.
 | 9 | GitHub Actions | `scan`: Code Analyzer, LWC Jest, check-only deploy and Apex tests against the target sandbox. Only when scan passes does the `coderabbit` job ask CodeRabbit to review | `pr-checks.yml` |
 | 10 | CodeRabbit | Approves or requests changes, on the PR and in Slack | GitHub, Slack |
 | 11 | Developer + AI | Fixes failed checks or CodeRabbit comments | `/dev-fix` |
-| 12 | GitHub | Scan green + CodeRabbit approval: auto-merge into the sprint branch, then `deploy.yml` deploys it to QA | GitHub |
+| 12 | GitHub | Scan green + CodeRabbit review + human approval: auto-merge into the sprint branch, then `deploy.yml` deploys it to QA | GitHub |
 | 13 | QA | Manual testing and the SF AI Tester suite in QA; results in Jira; story to Done or back to the Developer | QA sandbox, Jira |
 | 14 | Leads + Dev + QA | Sprint review. A lead approves the promotion PR `sprint/<name>` → `dev` | GitHub |
 | 15 | Leads | Promote by PR: `dev` → `sit` → `uat` → `main`. Each merge deploys to that sandbox; `main` waits for a human approval on the `production` environment | GitHub |

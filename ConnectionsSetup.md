@@ -109,8 +109,8 @@ Links branches, commits and PRs to Jira stories.
 ## 6. CodeRabbit
 
 1. In the CodeRabbit dashboard, sign in with GitHub, choose `<ORG>`, and give the CodeRabbit GitHub App access to
-   `<REPO>`. Its approval only counts toward the `sprint/*` ruleset if the app has write access; check this on the
-   first PR, otherwise a Developer lead approves.
+   `<REPO>`. CodeRabbit is an extra review layer; every sprint PR also needs a human approval from a code owner
+   (`developers` or `leads`).
 2. `.coderabbit.yaml` comes from `/circuit-bootstrap` (`auto_review.enabled: false`, `request_changes_workflow: true`),
    so CodeRabbit reviews only when the `coderabbit` job asks, after the scan passed.
 3. Install the **CodeRabbit Slack agent** from the CodeRabbit dashboard in your Slack workspace. It joins public
@@ -139,9 +139,8 @@ One environment per sandbox. The names match `build.config.yml` → `environment
 above. For `production`: **Required reviewers** = team `leads`, tick **Prevent self-review**, deployment branches =
 `main` only.
 
-> VERIFY your GitHub plan. In private repos, environment secrets need GitHub Team (or higher), and GitHub documents
-> required reviewers on private repos as a GitHub Enterprise feature. Without them, the `leads` approval on the PR into
-> `main` is the only production gate; record that in the test results.
+> Plan note: required reviewers on environments in private repos need the right GitHub plan (Enterprise). The project
+> licenses this, so `production` always waits for a `leads` approval.
 
 ### 7.2 Set each secret (admin only, never with Claude)
 

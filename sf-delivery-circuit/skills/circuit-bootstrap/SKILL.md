@@ -122,8 +122,8 @@ Verify: `gh secret list --env <env> -R $ORG/$REPO` shows `SFDX_AUTH_URL` (name a
 `gh api repos/$ORG/$REPO/environments/production --jq '.protection_rules'` shows the reviewers.
 
 ## B6 CodeRabbit
-1. **HC-3 (GitHub org owner):** install the CodeRabbit GitHub App on this repo with write access (its approval only
-   counts on `sprint/*` when it can write: VERIFY on the first PR).
+1. **HC-3 (GitHub org owner):** install the CodeRabbit GitHub App on this repo (an extra review layer; the human
+   code-owner approval is what the ruleset requires).
 2. `.coderabbit.yaml` (installed in B2): `auto_review.enabled: false`, so CodeRabbit reviews only when the
    `coderabbit` job comments `@coderabbitai review` after `scan` passed; `request_changes_workflow: true`.
 3. **HC-4 (Slack admin, optional):** add the CodeRabbit Slack agent to the workspace and the channel in
@@ -134,8 +134,8 @@ Verify: CodeRabbit appears under Settings → GitHub Apps; on the dry-run PR (B1
 ## B7 Rulesets (HC-5)
 1. Copy `templates/github/ruleset-promotion.json` and replace `"LEADS_TEAM_ID"` with the leads team id (number).
 2. Show both rulesets to the person:
-   - `ruleset-sprint.json` (`refs/heads/sprint/*`): PR only, 1 approval (CodeRabbit's counts when the app has write
-     access; else a Developer lead approves), required check `scan`, no force-push, no deletion, no linear-history
+   - `ruleset-sprint.json` (`refs/heads/sprint/*`): PR only, 1 human code-owner approval (CODEOWNERS: `developers`/`leads`;
+     CodeRabbit's changes-requested still blocks), required check `scan`, no force-push, no deletion, no linear-history
      rule; auto-merge allowed.
    - `ruleset-promotion.json` (`dev`, `sit`, `uat`, `main`): PR only, 1 approval from the `leads` team, required
      check `scan`, no force-push, no deletion. VERIFY the `required_reviewers` field of the pull_request rule
@@ -163,7 +163,7 @@ needs the production alias for the circuit.
 ## B10 Dry run (HC-7)
 One made-up change through the whole ladder, people acting at every step:
 feature PR into `sprint/<name>` → `scan` green → `coderabbit` posts `@coderabbitai review` once (a second push gives
-a new marker for the new SHA, a re-run does not post twice) → CodeRabbit approves → auto-merge → `deploy` to `qa`
+a new marker for the new SHA, a re-run does not post twice) → CodeRabbit reviews → a developer approves → auto-merge → `deploy` to `qa`
 with a job summary → promotion PRs `sprint → dev → sit → uat → main`, each needing a lead and deploying its sandbox
 → the `production` deploy waits for a lead's approval (approve it only if the change is safe, or reject it to end the
 dry run). Also check: a fork PR (or a PR from a branch whose base has no environment entry) fails `scan`.

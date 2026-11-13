@@ -30,7 +30,7 @@ CodeRabbit mechanics for everything else.
 | 9 | GitHub Actions | **scan** job: Code Analyzer, LWC Jest, check-only deploy + Apex tests against the target sandbox. Only when scan passes, the **coderabbit** job comments `@coderabbitai review` | `pr-checks.yml` |
 | 10 | CodeRabbit | Reviews. Approves, or requests changes (visible on the PR and in Slack) | GitHub, Slack |
 | 11 | Developer + AI | Fixes failed checks or CodeRabbit comments | `/dev-fix` |
-| 12 | GitHub | scan green + CodeRabbit approval → auto-merge into the sprint branch → `deploy.yml` deploys the sprint branch to the **QA** sandbox | GitHub |
+| 12 | GitHub | scan green + CodeRabbit review + human code-owner approval → auto-merge into the sprint branch → `deploy.yml` deploys the sprint branch to the **QA** sandbox | GitHub |
 | 13 | QA | Manual testing in QA; SF AI Tester runs the story's suite; results go to Jira; story → Done or back to the Developer | QA sandbox, Jira |
 | 14 | Team leads + Dev + QA | **Sprint review**: walk through what is implemented. A lead approves the promotion PR `sprint/<name>` → `dev` | GitHub |
 | 15 | Leads | Promote by PR: `dev` → `sit` → `uat` → `main`. Each merge deploys to that sandbox. `main` deploys to production only after a required human approval on the `production` environment | GitHub |
@@ -59,8 +59,7 @@ environments:
 Rules (rulesets created by `/circuit-bootstrap`):
 - `sprint/*`, `dev`, `sit`, `uat`, `main`: no direct pushes, PR only, required check `scan`, linear history off,
   no force-push, no deletion.
-- `sprint/*`: 1 approval (CodeRabbit's approval counts when its GitHub App has write access; VERIFY on the first PR,
-  else a Developer lead approves). Auto-merge allowed.
+- `sprint/*`: 1 human approval from a code owner (`developers` or `leads`, via CODEOWNERS; teams may raise it to 2). CodeRabbit is an extra layer: its review is required in practice because its "changes requested" blocks the merge, but its approval never replaces a person. Auto-merge allowed.
 - `dev`, `sit`, `uat`, `main`: 1 approval from the `leads` team (promotion = sprint review / release sign-off).
 - GitHub Environment `production`: required reviewers = `leads`, prevent self-review, branch `main` only.
 

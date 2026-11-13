@@ -1,16 +1,14 @@
 # Last match wins. Replace @ORG with the GitHub organisation (bootstrap does this).
-*                                   @ORG/architects @ORG/developers
-/force-app/                         @ORG/developers
-/force-app/main/default/objects/    @ORG/architects @ORG/developers
-/force-app/main/default/permissionsets/ @ORG/architects
-/.specify/                          @ORG/architects
-/.specify/specs/*/tests/            @ORG/testers
-/test-cases/                        @ORG/testers
-/tests/                             @ORG/testers
-/docs/plans/                        @ORG/developers @ORG/testers
-/inputs/                            @ORG/architects
-/.claude/                           @ORG/architects
-/CLAUDE.md                          @ORG/architects
-/.coderabbit.yaml                   @ORG/architects
-/scripts/ci/                        @ORG/architects
-/.github/                           @ORG/architects
+# Code owner review is required on sprint/* PRs, so every feature PR needs a human approval from these teams.
+# CodeRabbit is not a code owner: its review is an extra layer, never the approval that merges.
+*                                         @ORG/developers @ORG/leads
+/force-app/                               @ORG/developers @ORG/leads
+/force-app/main/default/objects/          @ORG/architects @ORG/developers
+/force-app/main/default/permissionsets/   @ORG/architects @ORG/leads
+/test-cases/                              @ORG/testers @ORG/leads
+/.claude/                                 @ORG/architects @ORG/leads
+/CLAUDE.md                                @ORG/architects @ORG/leads
+/.coderabbit.yaml                         @ORG/architects @ORG/leads
+/build.config.yml                         @ORG/architects @ORG/leads
+/scripts/ci/                              @ORG/architects @ORG/leads
+/.github/                                 @ORG/architects @ORG/leads

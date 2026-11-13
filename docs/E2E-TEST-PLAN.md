@@ -147,7 +147,7 @@ Do Story 00 (`ACME-11`) end to end first, then `ACME-12`. Repeat for `ACME-13` a
 |---|---|---|---|
 | D-13 | `/dev-fix <PR>` | Claude reads the failed scan log and CodeRabbit comments, fixes, pushes | |
 | D-14 | Wait | `scan` green, CodeRabbit reviews the new commit and approves | |
-| D-15 | **2nd person** only if CodeRabbit's approval does not count (app without write access) | A Developer lead approves the PR. Record which case applied | |
+| D-15 | **2nd person** (`developers` or `leads`) approves the PR | Code-owner approval recorded; with scan green and no CodeRabbit changes requested, auto-merge fires | |
 | D-16 | Auto-merge | PR squash-merged into `sprint/s1` without anyone clicking merge | |
 | D-17 | Actions → `deploy` on `sprint/s1` | Environment `qa`; `sf project deploy start` succeeds; job summary written | |
 | D-18 | QA sandbox | `Escalation_Reason__c` and the permission set exist | |
@@ -242,6 +242,6 @@ Do Story 00 (`ACME-11`) end to end first, then `ACME-12`. Repeat for `ACME-13` a
 | One person, all roles | | | |
 | Second person (2nd-person rows) | | | |
 
-Record while running: whether CodeRabbit's approval satisfies the `sprint/*` ruleset, whether the GitHub plan enforces
-required reviewers on the private repo's `production` environment, and whether every environment pointed at the same
+Record while running: that CodeRabbit's changes-requested blocks the merge until resolved, that the `production`
+environment waits for a `leads` approval, and whether every environment pointed at the same
 SDO org.

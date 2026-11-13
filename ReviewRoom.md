@@ -2,8 +2,8 @@
 
 In v4 ([`docs/CIRCUIT-V4.md`](docs/CIRCUIT-V4.md), steps 9 to 11) CodeRabbit is the reviewer on every feature PR. It
 reviews only after the `scan` job passes, so it never spends time on code that does not compile or deploy. People
-talk to it on the PR or in Slack with `@coderabbit`. AI never approves or merges; CodeRabbit's approval plus a green
-scan lets the ruleset auto-merge into the sprint branch.
+talk to it on the PR or in Slack with `@coderabbit`. AI never approves or merges; a green scan, CodeRabbit's review and a
+human code-owner approval let the ruleset auto-merge into the sprint branch.
 
 ## How a review runs
 
@@ -16,7 +16,7 @@ scan lets the ruleset auto-merge into the sprint branch.
 | 5 | The Developer runs `/review-room <PR>`: Claude summarises CodeRabbit's review and, if the Slack MCP is connected, posts the summary and PR link to the team channel | Claude, Slack |
 | 6 | Anyone asks follow-ups in that thread: `@coderabbit why is this a bulkification risk?` | Slack |
 | 7 | The Developer runs `/dev-fix`, pushes; scan runs again, then CodeRabbit reviews the new commit | Claude, GitHub |
-| 8 | Scan green + CodeRabbit approval → auto-merge → `deploy.yml` deploys the sprint branch to QA | GitHub |
+| 8 | Scan green + CodeRabbit review + human approval → auto-merge → `deploy.yml` deploys the sprint branch to QA | GitHub |
 
 Promotion PRs (`sprint/<name>` → `dev`, `dev` → `sit`, and so on) skip the `coderabbit` job. Leads approve those.
 
