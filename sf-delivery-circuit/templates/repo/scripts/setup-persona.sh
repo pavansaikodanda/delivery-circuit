@@ -74,7 +74,7 @@ cat <<EOF
   Open a new terminal and run: $ALIAS
   Inside Claude Code run /mcp and choose Authenticate for each server:
 EOF
-grep -oE '"(atlassian|lucid|fireflies|slack|playwright)"' ".claude/personas/$P.mcp.json" | tr -d '"' | sed 's/^/    - /'
+grep -oE '"(atlassian|lucid|fireflies|slack)"' ".claude/personas/$P.mcp.json" | tr -d '"' | sed 's/^/    - /'
 cat <<EOF
   Notes:
     - Salesforce is used through the sf CLI (no Salesforce MCP server; @salesforce/mcp is retired).

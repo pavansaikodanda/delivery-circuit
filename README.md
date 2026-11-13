@@ -1,92 +1,80 @@
 # Agentic Implementation Circuit
 
-**From a client call to a deployed Salesforce org, with AI doing the drafting and building, and people approving
-every step that matters.**
+**From a client call to a deployed Salesforce org. AI designs and builds; people decide.**
 
 This repository holds a [Claude Code](https://claude.com/claude-code) plugin, `sf-delivery-circuit`, a VS Code
 extension, `delivery-circuit-extension`, and the guides for setting them up. Together they turn a client call into a
-Confluence design, Jira stories and test cases, working Salesforce code and a production deployment. Three AI
-personas (Architect, Developer, Tester) draft the work, and nine human gates (G1 to G9) control it.
+Confluence design, Jira stories and test cases, Salesforce code on a pull request, and a deployment that climbs a
+branch-per-sandbox ladder up to production.
 
-This is **v3**. The design contract is [`docs/CIRCUIT-V3.md`](docs/CIRCUIT-V3.md); where any other doc disagrees,
+This is **v4**. The design contract is [`docs/CIRCUIT-V4.md`](docs/CIRCUIT-V4.md); where any other doc disagrees,
 that one wins.
 
-> AI never approves, never merges, and never touches the org the project names as production. A guard hook enforces
-> this on every laptop and on the runner. It isn't left to the prompt.
+> AI never approves a design, a story, a PR or a deployment. It never merges, never pushes to a protected branch and
+> never deploys anywhere but the developer's own DEV org. A guard hook enforces this on every laptop.
 
-## The v3 principles
+## The v4 principles
 
-1. **No stored credentials.** Every connection is a login people already have: GitHub (VS Code sign-in, `gh`),
-   Claude (the logged-in `claude` CLI on a Claude Team seat), Salesforce (`sf` CLI), Atlassian (`acli` web login and
-   the Atlassian MCP), Fireflies and Slack (MCP sign-in). No API keys, JWT keys or `CLAUDE_CODE_OAUTH_TOKEN`.
-2. **The repo holds code and tests only.** Specs, designs and decisions live in **Confluence**; epics, stories and
-   test cases live in **Jira**. Transcripts stay at their source or encrypted on the Architect's machine.
-3. **People keep creative control.** AI drafts; people decide. Architects never create PRs. Developers start their
-   own stories and own their PRs.
-4. **No org-type checks.** Any connected org can be DEV or QA (sandbox, scratch, Developer Edition, SDO or demo org).
-   Only the alias the project names as production is off limits to AI.
-5. **Everything shared is written down** in Confluence, Jira, the PR or Slack, so the next step reads from there.
+1. **AI designs and builds; people decide.** AI drafts the design and writes the code. People approve the design page,
+   move stories to Ready for Dev, approve PRs and approve production.
+2. **Few connections.** GitHub, the `sf` CLI, the Atlassian MCP (Jira + Confluence), Lucid, CodeRabbit (GitHub App +
+   Slack agent). Fireflies is optional. No AI in CI, no self-hosted runner.
+3. **Branches are environments.** Merging into a branch deploys it to that branch's sandbox. Nobody deploys by hand.
+4. **CI uses GitHub-hosted runners.** Each sandbox has a GitHub Environment with one secret, `SFDX_AUTH_URL`. That is
+   the only stored credential. Laptops use each person's own `sf`, `gh`, `claude` and MCP logins.
+5. **The repo holds code, tests and config.** The design lives on Confluence; stories and test cases live in Jira.
 
 ---
 
 ## The flow
 
-| # | Step | Who | App | Gate |
-|---|---|---|---|---|
-| 1 | **Add a source**: paste, attach a file (txt, md, docx, vtt, srt, pdf), fetch a Fireflies meeting, or import from Wispr Flow | Architect | Extension → Sources | |
-| 2 | **Intake**: Claude reads the source, the org and the house rules, drafts the spec with Spec Kit locally, and publishes a Confluence design page | Architect + AI | Claude, Atlassian MCP | |
-| 3 | **Clarify and design**: answers become decisions; plan, data model, org snapshot and a Lucid diagram go on the design page | Architect + AI | Confluence, Lucid | |
-| 4 | **Approve design**: an `architects` member sets the page status to Approved; the version is recorded | Architect | Confluence | **G1** |
-| 5 | **Stories**: epic and stories in Jira (Story 00 first), each with its *Approved design version* | Architect + AI | Jira | |
-| 6 | **Story review**: buildability, estimates, dependencies as Jira comments | Developer | Claude, Jira | |
-| 7 | **Test design**: Jira test cases per acceptance criterion; runnable suite drafted locally | Tester + AI | Jira, `sf` | |
-| 8 | **Testability**: *Testability confirmed* + label `ai-ready` | Tester | Jira | **G2** |
-| 9 | **Start story**: the Developer's Claude writes PLAN.md and TESTPLAN.md, creates `feature/<KEY>-<slug>` and a **draft PR** titled `<KEY> …` | Developer + AI | Extension | |
-| 10 | **Tests onto the PR**: the suite and test-case index are committed to the PR | Tester | Extension | |
-| 11 | **Approve plans**: `plan-approved`, `testplan-approved` | Developer, Tester | Extension | **G3**, **G4** |
-| 12 | **Build**: check-only `sf project deploy validate` on DEV; pushes to the branch | Developer + AI | Claude | |
-| 13 | **Checks**: no-login checks on GitHub-hosted runners; Salesforce and Claude checks on the **self-hosted runner** | CI | GitHub Actions | |
-| 14 | **Fix**: failed checks become "Fix with AI" (3 AI attempts, then `needs-human`); blocked UI cases go to the Tester | Developer / Tester | Extension | |
-| 15 | **Review room**: the Developer's Claude opens a `#review-room` thread; CodeRabbit and Claude Tag debate the PR | Developer | Slack | |
-| 16 | **Verdict to PR**: Must fix / Disputed / Dropped posted as a PR comment | Developer | Extension | |
-| 17 | **Reviews**: code review, QA exploration with SF AI Tester on QA, design review against the approved version | Developer, Tester, Architect | Extension | **G5 · G6 · G7** |
-| 18 | **Merge**: architects only | Architect | GitHub | **G8** |
-| 19 | **Release**: `deploy-prod` on the release runner, no AI, after environment approval | Architect | GitHub environment | **G9** |
-
-If the design page changes after a story was planned, the `design-gate` check and the extension say "Design changed
-since this story was planned: re-plan or re-approve" (C5).
+| # | Who | What | Where |
+|---|---|---|---|
+| 1 | Architect | Brings a transcript: paste, file (.vtt/.srt/.txt/.md/.docx/.pdf) or Fireflies | Extension Sources, `/circuit-intake` |
+| 2 | Architect + AI | AI reads the transcript and checks the org (read-only, DEV alias) for what already exists | `/circuit-intake` |
+| 3 | Architect + AI | AI writes the Confluence design page and a Lucid diagram. Each component is tagged EXISTS, EXTEND, CHANGE, REBUILD or NEW. People answer open questions; answers become decisions | `/circuit-intake`, `/arch-design`, `/record-decision` |
+| 4 | Architect | Sets the Confluence page status to **Approved** | Confluence |
+| 5 | Architect + AI | AI creates the Jira epic and stories from the approved page, each with its part of the change table, acceptance criteria and the design link | `/arch-jira-push` |
+| 6 | Scrum team | Refinement: Developer and QA agree; the story moves to **Ready for Dev** | Jira |
+| 7 | QA + AI | AI drafts Jira test cases and an SF AI Tester suite `test-cases/<KEY>.sf-tests.yaml` | `/qa-design-tests`, `/qa-add-tests` |
+| 8 | Developer + AI | AI builds the story on `feature/<KEY>-<slug>`, validates against the developer's DEV org, and opens a PR into the sprint branch with auto-merge on | `/dev-start-story` |
+| 9 | GitHub Actions | `scan`: Code Analyzer, LWC Jest, check-only deploy and Apex tests against the target sandbox. Only when scan passes does the `coderabbit` job ask CodeRabbit to review | `pr-checks.yml` |
+| 10 | CodeRabbit | Approves or requests changes, on the PR and in Slack | GitHub, Slack |
+| 11 | Developer + AI | Fixes failed checks or CodeRabbit comments | `/dev-fix` |
+| 12 | GitHub | Scan green + CodeRabbit approval: auto-merge into the sprint branch, then `deploy.yml` deploys it to QA | GitHub |
+| 13 | QA | Manual testing and the SF AI Tester suite in QA; results in Jira; story to Done or back to the Developer | QA sandbox, Jira |
+| 14 | Leads + Dev + QA | Sprint review. A lead approves the promotion PR `sprint/<name>` → `dev` | GitHub |
+| 15 | Leads | Promote by PR: `dev` → `sit` → `uat` → `main`. Each merge deploys to that sandbox; `main` waits for a human approval on the `production` environment | GitHub |
 
 ```
- source ─▶ /circuit-intake ─▶ Confluence design page ─▶ /arch-design (decisions, org snapshot, Lucid) ──[G1 Approved]
-     ─▶ /arch-jira-push ─▶ Jira epic + stories ─▶ /dev-review-stories ─▶ /qa-design-tests ──[G2 ai-ready]
-     ─▶ Developer: Start story ─▶ PLAN.md + TESTPLAN.md + draft PR ◀── Tester: Add tests
-     ──[G3 plan-approved][G4 testplan-approved] ─▶ build (check-only on DEV) ─▶ pr-checks (hosted + self-hosted)
-     ─▶ Fix with AI (≤ 3) ─▶ review room (Slack) ─▶ verdict on PR ──[G5][G6][G7] ──[G8 merge] ─▶ deploy-prod ──[G9]
+feature/<KEY>-<slug> ──PR──► sprint/<name> ──PR──► dev ──PR──► sit ──PR──► uat ──PR──► main
+                             deploys QA            DEV          SIT          UAT          PROD (human approval)
 ```
 
-### The personas
+The map lives in `build.config.yml` → `environments` (branch → GitHub Environment → test level). Changing the ladder
+is a config edit.
 
-| Persona | Does | Never does |
+### Roles
+
+| Role | Does | Never does (AI on their behalf) |
 |---|---|---|
-| **Architect** | Sources, intake, Confluence design, decisions, org snapshot, Lucid, Jira epic and stories, design review, merge, release | Write code or tests, create PRs, approve the design for itself (a person sets Approved), deploy |
-| **Developer** | Story review, Start story (plan, branch, draft PR), build with check-only validation, Fix with AI, review room, code review | Edit test cases, the design or the constitution, deploy for real, merge |
-| **Tester** | Jira test cases, runnable suites, Add tests to the PR, test-plan review, QA exploration with SF AI Tester | Edit `force-app/`, weaken an expected result, deploy anywhere but QA, commit outside `tests/` and `test-cases/` |
-| **Reviewer** (runner only) | Read-only check of each PR against the approved design, security and limits | Edit files or approve |
+| **Architect** | Transcript, intake, design page, Lucid, decisions, Jira epic and stories | Set the page to Approved, write code, deploy |
+| **Developer** | Story review, build, PR, fixes | Approve or merge a PR, push to protected branches, deploy beyond their DEV org |
+| **QA** | Jira test cases, SF AI Tester suites, testing in QA | Move a story to Done for the team, deploy |
+| **Leads** | Sprint review, promotion PRs, production approval | (people only) |
 
 ### The safety model
 
-`circuit-guard` is a Claude Code hook that runs before every tool call, on laptops and on the self-hosted runner. It
-denies:
+`circuit-guard` is a Claude Code hook that runs before every tool call. It denies:
 
-- any Salesforce command aimed at the alias the project names as production;
-- `gh pr merge`, approving reviews, pushes to `main`, and force pushes;
-- `gh pr create` for the Architect persona (Developers may create draft PRs);
-- persona boundary violations: the Developer editing tests, the Tester editing code, the Architect editing either;
-- AI adding the gate labels or marking a design approved;
-- reading keys, `.env` files or Salesforce session files.
+- pushes and force-pushes to `sprint/*`, `dev`, `sit`, `uat`, `main`, and deleting those branches;
+- approving or merging a PR (turning on auto-merge for your own feature PR is allowed; the rulesets still decide);
+- deploying anywhere except the developer's own DEV alias, and anything against the production alias;
+- setting a Confluence page to Approved or moving a Jira story to Ready for Dev or Done;
+- reading, printing or setting `SFDX_AUTH_URL` values, `sf org display --verbose`, or any secret.
 
-On top of that: GitHub rulesets (code-owner reviews, required checks, architects-only merge), a protected `production`
-environment, team checks on every gate, a hard limit of 3 AI fix attempts, and fork-PR guards on the self-hosted jobs.
+On top of that: GitHub rulesets (PR only, required check `scan`, approvals from `leads` on promotion branches) and the
+`production` environment with required reviewers and prevent self-review.
 
 ---
 
@@ -94,14 +82,14 @@ environment, team checks on every gate, a hard limit of 3 AI fix attempts, and f
 
 | Path | What it is |
 |---|---|
-| [`docs/CIRCUIT-V3.md`](docs/CIRCUIT-V3.md) | **The v3 design contract** |
-| [`ConnectionsSetup.md`](ConnectionsSetup.md) | Every login the circuit uses, step by step, plus the self-hosted runner and fork-PR safety |
-| [`docs/E2E-TEST-PLAN.md`](docs/E2E-TEST-PLAN.md) | Live test script per persona, covering every step and every app |
+| [`docs/CIRCUIT-V4.md`](docs/CIRCUIT-V4.md) | **The v4 design contract** |
+| [`ConnectionsSetup.md`](ConnectionsSetup.md) | Every connection v4 uses, step by step, including the `SFDX_AUTH_URL` environment secrets |
+| [`docs/E2E-TEST-PLAN.md`](docs/E2E-TEST-PLAN.md) | Live test: the "Case Escalation" use case through every step, one person playing all roles |
+| [`ReviewRoom.md`](ReviewRoom.md) | How CodeRabbit reviews after the scan passes, and how to discuss a PR with `@coderabbit` in Slack |
 | [`sf-delivery-circuit/`](sf-delivery-circuit/) | **The plugin**: personas, skills, guard hook, templates ([details](sf-delivery-circuit/README.md)) |
-| [`delivery-circuit-extension/`](delivery-circuit-extension/) | **The VS Code extension**: queues, sources, connections, Circuit MCP, AI testing, setup wizard ([details](delivery-circuit-extension/README.md)) |
-| [`ReviewRoom.md`](ReviewRoom.md) | Slack `#review-room`: CodeRabbit and Claude Tag debate each PR; the verdict goes to the PR |
-| [`AgenticImplementation.md`](AgenticImplementation.md) | The v2 build runbook (history; superseded sections are marked) |
-| [`AgenticImplementation.v1.md`](AgenticImplementation.v1.md) | The original pipeline design (history) |
+| [`delivery-circuit-extension/`](delivery-circuit-extension/) | **The VS Code extension** (unchanged in v4; see below) ([details](delivery-circuit-extension/README.md)) |
+| [`docs/CIRCUIT-V3.md`](docs/CIRCUIT-V3.md) | The v3 contract (history) |
+| [`AgenticImplementation.md`](AgenticImplementation.md), [`AgenticImplementation.v1.md`](AgenticImplementation.v1.md) | Earlier designs (history) |
 | `.claude-plugin/marketplace.json` | Lets Claude Code install the plugin straight from this repo |
 
 ## Install
@@ -118,76 +106,62 @@ For local development, run `claude --plugin-dir ./sf-delivery-circuit`. Install 
 
 ## Quick start
 
-1. **Connect everything once:** follow [`ConnectionsSetup.md`](ConnectionsSetup.md). It is logins only: GitHub org and
-   repo, VS Code sign-in, `claude` on a Claude Team seat, `sf` for DEV and QA, `acli`, the Atlassian, Fireflies, Slack
-   and Lucid MCP sign-ins, CodeRabbit, Claude Tag, GitHub for Atlassian, and the self-hosted runner.
-2. **Set up the client repo:** open it in VS Code and run **Delivery Circuit: Project Setup** (or `/circuit-bootstrap`
-   in Claude Code). It installs the workflows, rulesets and house rules, and stops at each step that needs you.
-3. **Start a feature:** as the Architect, add a source on the Sources page (paste, file, Fireflies or Wispr Flow) and
-   run intake. The design page appears in Confluence.
-4. **Follow your queue:** each person's view in the extension shows the next action (Approve design, Start story, Add
-   tests, Fix with AI, Open review room, Record verdict). `/circuit` in Claude Code shows the map and where any story
-   stands.
+1. **Connect everything once:** follow [`ConnectionsSetup.md`](ConnectionsSetup.md): GitHub org, repo and teams,
+   laptop logins (`gh`, `claude`, `sf`), the Atlassian and Lucid MCPs, Jira and Confluence, GitHub for Atlassian,
+   CodeRabbit, and one GitHub Environment per sandbox with its `SFDX_AUTH_URL`.
+2. **Set up the client repo:** run `/circuit-bootstrap` in Claude Code. It installs the files and workflows, creates
+   `dev sit uat main` and the first `sprint/<name>`, the environments, rulesets and CodeRabbit config, and stops where
+   you must paste a secret yourself.
+3. **Start a feature:** as the Architect, add a transcript on the extension's Sources page (or pass it to
+   `/circuit-intake`). The design page appears in Confluence.
+4. **Follow the flow:** approve the page, push stories, refine, build, review, test, promote. `/circuit` shows the map
+   and where a story stands.
 
 ## Skills
 
-| Skill | Persona | What it does |
+| Skill | Who | What it does |
 |---|---|---|
-| `/circuit` | any | Map, v3 conventions, and status of a feature or story |
-| `/circuit-bootstrap` | admin | Sets up a client repo: no secrets, runner setup, `acli` and MCP logins |
-| `/circuit-intake` | Architect | Source → spec drafted locally → Confluence design page |
-| `/arch-design` | Architect | Plan, data model, decisions, org snapshot, Lucid diagram on the design page |
-| `/arch-approve-design` | Architect | Walks the human through G1 (AI cannot approve) |
-| `/arch-jira-push` | Architect | Epic, Story 00 and stories in Jira with the approved design version |
-| `/arch-review-pr` | Architect | Schema and design review against the approved design (G7) |
-| `/record-decision` | any | Adds a decision to the design page's Decisions section (C1) |
-| `/dev-review-stories` | Developer | Buildability, estimates and dependencies as Jira comments |
-| `/dev-start-story` | Developer | PLAN.md + TESTPLAN.md, branch and draft PR |
-| `/dev-review-plan` | Developer | Reviews the plan (G3) |
-| `/dev-fix` | Developer | Fixes failed checks, attempt cap 3 |
-| `/dev-review-pr` | Developer | Code review (G5) |
-| `/review-room` | Developer | Kick-off brief to `#review-room`; verdict to the PR |
-| `/qa-design-tests` | Tester | Jira test cases per acceptance criterion, local SF AI Tester suite |
-| `/qa-push-tests` | Tester | Test cases to Jira, linked to stories; guides G2 |
-| `/qa-add-tests` | Tester | Commits the suite and test-case index to the story PR |
-| `/qa-review-testplan` | Tester | Reviews the test plan (G4) |
-| `/qa-explore` | Tester | QA on the QA org: re-runs, manual scripts, exploration, triage (G6) |
-
-Spec Kit and spec-kit-sf remain the Architect's local drafting scaffold. `.specify/specs/` is gitignored, and its
-output is published to Confluence and Jira.
+| `/circuit` | all | Conventions: flow, branches, change tags, Jira story layout, what AI may never do |
+| `/circuit-bootstrap` | admin | Repo files, branches, environments (admin pastes each `SFDX_AUTH_URL`), rulesets, CodeRabbit config, labels |
+| `/circuit-intake` | Architect | Transcript → org check → Confluence design page with change table → Lucid diagram → open questions |
+| `/arch-design` | Architect | Answers open questions, refines change table, data model and story outline; status "Ready for review" (never Approved) |
+| `/record-decision` | Architect | Adds a decision row (date, decision, who, why, source) to the design page |
+| `/arch-jira-push` | Architect | Approved page → Jira epic + stories; idempotent; Story 00 (shared data model) blocks the rest |
+| `/dev-review-stories` | Developer | Buildability, estimate and dependencies as a comment on each story |
+| `/dev-start-story` | Developer | Needs Ready for Dev; branch from the sprint branch; plan in the PR body; build; validate on DEV; PR with auto-merge |
+| `/dev-fix` | Developer | Reads failed `scan` logs and CodeRabbit comments, fixes, pushes |
+| `/dev-review-plan`, `/dev-review-pr` | Developer | Read-only second look at a PR before asking for review |
+| `/qa-design-tests` | QA | Jira test cases from the acceptance criteria, linked to the story |
+| `/qa-add-tests` | QA | SF AI Tester suite `test-cases/<KEY>.sf-tests.yaml`, PR into the sprint branch |
+| `/qa-explore` | QA | Exploratory run in the QA sandbox; results as a Jira comment |
+| `/review-room` | Developer | Summarises CodeRabbit's review and, if the Slack MCP is connected, posts it with the PR link |
 
 ## GitHub workflows installed into a client repo
 
-| Workflow | Runs on | Does |
+| Workflow | Trigger | Does |
 |---|---|---|
-| `design-gate` | self-hosted `circuit` | G1 + C5: the story's approved design version matches the page's current approved version (read with `acli` and Confluence) |
-| `pr-checks` | GitHub-hosted (no logins) | guard, lint, Jest, test-case coverage |
-| `pr-checks` | self-hosted `circuit` | QA deploy, Apex tests, SF AI Tester, AI Reviewer, Code Analyzer |
-| `persona-gates` | GitHub-hosted | Only `developers` set `plan-approved`, only `testers` set `testplan-approved`; approvals become `gate/*` statuses |
-| `fix-router` | GitHub-hosted | Labels failures and notifies the Developer or Tester; no AI runs in CI |
-| `deploy-prod` | self-hosted `circuit-release` | **No AI.** Environment approval, then delta validate and quick deploy |
+| `pr-checks.yml` | PR to `sprint/**`, `dev`, `sit`, `uat`, `main` | `scan` (required): Code Analyzer, LWC Jest, check-only deploy + Apex tests against the target sandbox. `coderabbit`: after scan passes, on feature PRs only, comments `@coderabbitai review` |
+| `deploy.yml` | push to the same branches | Deploys the branch to its environment's sandbox; `production` waits for its required reviewers |
 
-No workflow reads `CLAUDE_CODE_OAUTH_TOKEN`, `SF_JWT_*` or `JIRA_API_TOKEN`.
+Both run on GitHub-hosted `ubuntu-latest`. The only secret is `SFDX_AUTH_URL` per environment. No Claude, Jira or
+Slack calls from CI.
 
 ## Requirements
 
-- Claude Code on a **Claude Team** seat per person (and one for the runner). No Anthropic API key is used anywhere.
-- A GitHub organisation with teams, and a **private** repo for the circuit.
-- Salesforce DEV and QA orgs (any edition), and the org the project names as production.
-- Jira Cloud and Confluence on one Atlassian site; Lucid; Slack with Claude Tag and the CodeRabbit Slack agent;
-  CodeRabbit on the repo; GitHub for Atlassian. Fireflies and Wispr Flow are optional sources.
-- A machine for the self-hosted runner (Linux, macOS or Windows).
-- Node 22+, Salesforce CLI, `gh`, `acli`, `jq`, `uv` + `specify-cli`, Python 3 (for the SF AI Tester validator).
+- Claude Code on a **Claude Team** seat per person. No `ANTHROPIC_API_KEY`.
+- A GitHub organisation with teams (`architects`, `developers`, `testers`, `leads`) and a **private** repo.
+- A Salesforce DEV org per developer, sandboxes for QA, DEV, SIT and UAT, and production.
+- Jira Cloud and Confluence on one Atlassian site; Lucid; Slack with the CodeRabbit Slack agent; CodeRabbit on the
+  repo; GitHub for Atlassian. Fireflies is optional.
+- Node 22+, Salesforce CLI, `gh`, `acli` (the extension still reads Jira with it), Python 3 (SF AI Tester validator).
 - [SF AI Tester](https://github.com/pavansaikodanda/sf-ai-tester) for UI acceptance tests.
-- Built on [GitHub Spec Kit](https://github.com/github/spec-kit) and
-  [spec-kit-sf](https://github.com/Evernorth/spec-kit-sf) v2.0.1, installed from upstream into each client repo.
+
+## VS Code extension
+
+Unchanged in v4. It still reads Jira through `acli`, and its Connections page still lists v3 rows (self-hosted runner,
+Claude Tag). Those rows may show as not configured; ignore them. A later pass will slim it to the v4 flow.
 
 ## Status
 
-v3 is being built to [`docs/CIRCUIT-V3.md`](docs/CIRCUIT-V3.md). Unit tests (guard rules, parsers, queue rules,
-workflow lint) and the VS Code integration tests run locally. The live end-to-end run happens after the owner connects
-the GitHub org repo, Jira, Confluence, Slack, CodeRabbit and the runner; it follows
-[`docs/E2E-TEST-PLAN.md`](docs/E2E-TEST-PLAN.md), and results go in `docs/E2E-RESULTS.md`.
-
-Facts the vendors do not document yet are checked during that run, for example the `acli` JSON output format, Slack
-MCP tool names and the Fireflies Claude Code command.
+v4 is being built to [`docs/CIRCUIT-V4.md`](docs/CIRCUIT-V4.md). The live run follows
+[`docs/E2E-TEST-PLAN.md`](docs/E2E-TEST-PLAN.md); results go in `docs/E2E-RESULTS.md`.

@@ -1,3 +1,5 @@
+> **Superseded by [`docs/CIRCUIT-V4.md`](docs/CIRCUIT-V4.md).** This file describes the original flow and is kept for history.
+
 # AI + Human Salesforce Delivery Pipeline: Implementation Guide
 
 This guide is written for Claude Code. It implements the workflow from the deck "From client call to a deployed org":

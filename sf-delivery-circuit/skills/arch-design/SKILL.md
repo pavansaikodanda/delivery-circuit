@@ -1,34 +1,23 @@
 ---
 name: arch-design
-description: Architect finishes a feature design on its Confluence design page - records answers to open questions as decisions, drafts the technical plan and data model, builds the org snapshot child page from the DEV org, draws the architecture in Lucid, and prepares the human design approval (G1). Use with a feature id like 001-shipping-rates or the design page link.
+description: Architect refines a feature's Confluence design page - answers open questions with the Architect and records them as decisions, refines the change table, data model, automation, UI, security and story outline, updates the Lucid diagram, and sets the page to "Ready for review" (never Approved). Use with a feature slug or the design page link.
 ---
 
-# Architect: finish the design and prepare G1
+# Architect: refine the design
 
-Persona: **Architect** (`cc-arch`). Input: `$ARGUMENTS` = `NNN-slug` or the design page URL/id.
-Conventions: `circuit` skill. Writes: Confluence (design page + "Org snapshot" child), Lucid, local `.specify/` only.
+Persona: **Architect**. Input: `$ARGUMENTS` = `<slug>` or the design page link. Layouts and tags: `circuit` skill.
 
-1. **Read** the design page (`getConfluenceContent`; find it with `searchConfluence` `label = "feature-NNN"`), its
-   Decisions table, the constitution and `CLAUDE.md`. If the page status is Approved, stop: changes after approval
-   need a new approval (tell the Architect; see `arch-approve-design`).
-2. **Open questions:** list each, numbered. Ask the user for the answers (they are the human Architect or have the
-   client's). Record each answer with `record-decision` (date, decision, who answered, why, source). Never invent an
-   answer. Remove answered items from Open questions.
-3. **Plan locally:** refresh the local draft (`/speckit-sf-clarify`, then `/speckit-sf-plan`) under
-   `.specify/specs/NNN-slug/`. Check it lists reuse decisions (existing objects/flows/classes found in `dev`), the
-   blast radius and the security model.
-4. **Org snapshot (C4):** for every object the feature touches, read `dev`: `sf sobject describe --sobject <X>
-   --target-org dev` (fields, types, required, picklists), flows and triggers on it
-   (`sf data query -q "SELECT ApiName, ProcessType, TriggerObjectOrEventLabel FROM FlowDefinitionView WHERE ..."
-   --target-org dev`), permission sets granting it. Create or update the child page "Org snapshot: NNN slug" with
-   a table per object (marking what the feature adds or changes) and the date and org alias of the snapshot.
-5. **Diagram:** with the Lucid MCP, create or update "NNN-slug architecture": objects and relationships, automation
-   (flows, triggers, handlers), LWCs, integrations, personas and their access. Put the link in the Diagram section.
-6. **Update the design page** (`updateConfluenceContent`, from the version you just read): Technical plan, Data model
-   (new/changed objects and fields with types, FLS, record types), Security model, Diagram, Risks, and the story
-   outline (Story 00 foundation first, then feature stories with acceptance criteria). Keep Decisions as written by
-   `record-decision`.
-7. **Status:** set the page status to "Ready for review" (`setConfluenceContentStatus`). Never "Approved".
-8. **Hand over (G1):** "Review the design page and the org snapshot. If you approve, follow `arch-approve-design`:
-   only an `architects` member sets the status to Approved and records the version on the epic." Then: after G1,
-   run `arch-jira-push NNN-slug`.
+1. **Read** the page (`searchConfluenceUsingCql` `label = "feature-<slug>"`, then `getConfluencePage`): body, version,
+   status. If it is Approved, stop: say changes need the Architect to move it back first.
+2. **Open questions:** go through them one by one with the user. Never invent an answer. Record each answer with
+   `record-decision` (date, decision, who, why, source) and remove the question.
+3. **Re-check the org** where an answer changes scope (same read-only `sf` queries as `circuit-intake`, DEV alias).
+4. **Refine** in one page update based on the version you read:
+   - Change table: every row tagged EXISTS / EXTEND / CHANGE / REBUILD / NEW, Type filled, Notes say what changes;
+   - Data model (types, required, FLS, record types), Automation (order, bulk), UI, Security;
+   - Story outline: Story 00 = shared data model and permissions, then stories small enough for a few days each,
+     each listing its change rows and acceptance criteria (Given/When/Then).
+5. **Diagram:** update the Lucid diagram to match the change table; keep the link in Diagram.
+6. **Status:** when no open questions remain, set *Ready for review*. Never Approved.
+7. **Report:** what changed, remaining questions, and "Next: the Architect reviews the page and sets it to Approved
+   in Confluence; then `arch-jira-push <slug>`".

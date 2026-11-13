@@ -1,5 +1,5 @@
 // Run: node --test sf-delivery-circuit/tests/ci.test.mjs
-// v3 CI pieces: design-gate decision (G1 + C5), resolve-story branch parsing, installer self-check and dry run.
+// v4 CI pieces: env-for-branch (branch -> environment), the two workflows, rulesets, installer self-check and dry run.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -10,205 +10,240 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PLUGIN = join(here, '..');
-const CI = join(PLUGIN, 'templates', 'repo', 'scripts', 'ci');
+const T = join(PLUGIN, 'templates');
+const CI = join(T, 'repo', 'scripts', 'ci');
+const WF = join(T, 'workflows');
+const CONFIG = join(T, 'bootstrap', 'build.config.yml');
+const EFB = join(CI, 'env-for-branch.mjs');
 const INSTALL = join(PLUGIN, 'skills', 'circuit-bootstrap', 'scripts', 'install.mjs');
-const gate = await import(pathToFileURL(join(CI, 'design-gate.mjs')).href);
+const efb = await import(pathToFileURL(EFB).href);
 const inst = await import(pathToFileURL(INSTALL).href);
 
-const F = { approvedVersion: 'customfield_10051', designPage: 'customfield_10050' };
-const PAGE = 'https://acme.atlassian.net/wiki/spaces/SD/pages/123';
-const epic = (v, status = 'Design Approved', page = PAGE) => ({ key: 'ACME-1', fields: { status: { name: status }, [F.approvedVersion]: v, [F.designPage]: page } });
-const story = (v, page = PAGE, parent = 'ACME-1') => ({ key: 'ACME-12', fields: { parent: parent ? { key: parent } : undefined, [F.approvedVersion]: v, [F.designPage]: page } });
-const run = (s, e) => gate.evaluate({ key: 'ACME-12', story: s, epic: e, fieldIds: F });
+const cli = (...a) => spawnSync(process.execPath, [EFB, ...a], { encoding: 'utf8' });
+const wf = name => readFileSync(join(WF, name), 'utf8');
+const jobsOf = text => Object.fromEntries(text.split(/\n  (?=[a-z][a-z0-9-]*:\n)/).slice(1).map(j => [j.split(':')[0], j]));
 
-test('versionOf accepts numbers, numeric strings and option objects only', () => {
-  assert.equal(gate.versionOf(3), 3);
-  assert.equal(gate.versionOf('3'), 3);
-  assert.equal(gate.versionOf('v4'), 4);
-  assert.equal(gate.versionOf('5.0'), 5);
-  assert.equal(gate.versionOf({ value: '6' }), 6);
-  for (const bad of [0, -1, 1.5, '', 'three', null, undefined, {}, '3; rm -rf /']) assert.equal(gate.versionOf(bad), null);
+// ---- env-for-branch ----------------------------------------------------------------------------------------------
+
+test('template build.config.yml maps the v4 ladder', () => {
+  const envs = efb.parseEnvironments(readFileSync(CONFIG, 'utf8'));
+  assert.deepEqual(envs.map(e => [e.branch, e.environment, e.test_level]), [
+    ['sprint/*', 'qa', 'RunLocalTests'], ['dev', 'dev', 'RunLocalTests'], ['sit', 'sit', 'RunLocalTests'],
+    ['uat', 'uat', 'RunLocalTests'], ['main', 'production', 'RunLocalTests'],
+  ]);
 });
 
-test('design-gate passes when story and epic carry the same approved version', () => {
-  const r = run(story(3), epic(3));
-  assert.equal(r.ok, true, r.lines.join('\n'));
-});
-
-test('G1 fails without an approved version or while the epic is in a design status', () => {
-  assert.equal(run(story(3), epic(null)).ok, false);
-  const back = run(story(3), epic(3, 'Design Review'));
-  assert.equal(back.ok, false);
-  assert.match(back.lines.join('\n'), /not approved/);
-});
-
-test('C5 fails with the contract message when the design changed after planning', () => {
-  const r = run(story(2), epic(3));
-  assert.equal(r.ok, false);
-  assert.ok(r.lines.some(l => l.includes(gate.C5_MESSAGE)));
-  assert.equal(gate.C5_MESSAGE, 'Design changed since this story was planned: re-plan or re-approve');
-});
-
-test('design-gate fails for a newer story version, a missing story version, no epic, or a different design page', () => {
-  assert.equal(run(story(4), epic(3)).ok, false);
-  assert.equal(run(story(null), epic(3)).ok, false);
-  assert.equal(run(story(3, PAGE, null), null).ok, false);
-  assert.equal(run(story(3, 'https://acme.atlassian.net/wiki/x'), epic(3)).ok, false);
-});
-
-test('design-gate fails closed when the field id is unknown', () => {
-  const r = gate.evaluate({ key: 'ACME-12', story: story(3), epic: epic(3), fieldIds: {} });
-  assert.equal(r.ok, false);
-});
-
-test('fieldIdsFrom reads jira-config.json and lets env override', () => {
-  const cfg = JSON.stringify({ fields: { 'Approved design version': { id: 'customfield_1' }, 'Design page': { id: 'customfield_2' } } });
-  assert.deepEqual(gate.fieldIdsFrom(cfg, {}), { approvedVersion: 'customfield_1', designPage: 'customfield_2' });
-  assert.equal(gate.fieldIdsFrom(cfg, { JIRA_FIELD_APPROVED_DESIGN_VERSION: 'customfield_9' }).approvedVersion, 'customfield_9');
-  assert.deepEqual(gate.fieldIdsFrom('not json', {}), { approvedVersion: null, designPage: null });
-});
-
-test('design-gate CLI works offline with --story/--epic files', () => {
-  const d = mkdtempSync(join(tmpdir(), 'dg-'));
-  writeFileSync(join(d, 's.json'), JSON.stringify(story(2)));
-  writeFileSync(join(d, 'e.json'), JSON.stringify(epic(3)));
-  const env = { ...process.env, JIRA_FIELD_APPROVED_DESIGN_VERSION: F.approvedVersion, JIRA_FIELD_DESIGN_PAGE: F.designPage };
-  const r = spawnSync(process.execPath, [join(CI, 'design-gate.mjs'), '--key', 'ACME-12', '--story', join(d, 's.json'), '--epic', join(d, 'e.json'), '--config', join(d, 'none.json')], { encoding: 'utf8', env });
-  assert.equal(r.status, 1, r.stdout + r.stderr);
-  assert.match(r.stdout, /Design changed since this story was planned/);
-  const bad = spawnSync(process.execPath, [join(CI, 'design-gate.mjs'), '--key', 'acme-12'], { encoding: 'utf8' });
-  assert.equal(bad.status, 2);
-  rmSync(d, { recursive: true, force: true });
-});
-
-const hasBash = spawnSync('bash', ['-c', 'exit 0']).status === 0;
-test('resolve-story.sh maps only feature/<KEY>-* branches', { skip: !hasBash && 'bash not available' }, () => {
-  const rs = (...a) => spawnSync('bash', [join(CI, 'resolve-story.sh'), ...a], { encoding: 'utf8' });
-  const ok = rs('--branch', 'feature/ACME-12-case-escalation');
-  assert.equal(ok.status, 0);
-  assert.match(ok.stdout, /^KEY=ACME-12$/m);
-  assert.match(ok.stdout, /^SUITE=test-cases\/ACME-12\.sf-tests\.yaml$/m);
-  assert.match(rs('--branch', 'feature/ACME-12').stdout, /^KEY=ACME-12$/m);
-  for (const b of ['main', 'feature/acme-12-x', 'feature/ACME-12x', 'fix/ACME-12-x', 'xfeature/ACME-12-a', 'feature/$(id)-1']) {
-    const r = rs('--branch', b);
-    assert.equal(r.stdout, '', `branch ${b}`);
+test('env-for-branch CLI: sprint -> qa, main -> production, promotion branches -> their sandbox', () => {
+  for (const [branch, env] of [['sprint/2026-S1', 'qa'], ['main', 'production'], ['dev', 'dev'], ['sit', 'sit'], ['uat', 'uat'], ['refs/heads/sprint/x', 'qa']]) {
+    const r = cli(branch, '--config', CONFIG);
+    assert.equal(r.status, 0, `${branch}: ${r.stderr}`);
+    assert.equal(r.stdout, `environment=${env}\ntest_level=RunLocalTests\n`, branch);
   }
-  assert.notEqual(rs('acme-12').status, 0);
-  // Jira project keys may hold '_': the branch parser and the key check agree, so such a branch is a story branch.
-  const us = rs('--branch', 'feature/ACME_X-12-rates');
-  assert.equal(us.status, 0, us.stderr);
-  assert.match(us.stdout, /^KEY=ACME_X-12$/m);
 });
 
-test('design-gate.mjs accepts the same keys as resolve-story (underscores included)', () => {
-  const d = mkdtempSync(join(tmpdir(), 'dg-'));
-  const s2 = { ...story(3), key: 'ACME_X-12' };
-  writeFileSync(join(d, 's.json'), JSON.stringify(s2));
-  writeFileSync(join(d, 'e.json'), JSON.stringify(epic(3)));
-  const env = { ...process.env, JIRA_FIELD_APPROVED_DESIGN_VERSION: F.approvedVersion, JIRA_FIELD_DESIGN_PAGE: F.designPage };
-  const r = spawnSync(process.execPath, [join(CI, 'design-gate.mjs'), '--key', 'ACME_X-12', '--story', join(d, 's.json'), '--epic', join(d, 'e.json'), '--config', join(d, 'none.json')], { encoding: 'utf8', env });
-  assert.equal(r.status, 0, r.stdout + r.stderr);
-  rmSync(d, { recursive: true, force: true });
+test('env-for-branch CLI: unknown branches exit 1 with a clear message', () => {
+  for (const b of ['feature/ACME-12-x', 'sprint/a/b', 'mainx', 'xmain', 'release/1']) {
+    const r = cli(b, '--config', CONFIG);
+    assert.equal(r.status, 1, b);
+    assert.equal(r.stdout, '', b);
+    assert.match(r.stderr, /matches no entry in build\.config\.yml environments/, b);
+  }
+  assert.equal(cli('main', '--config', join(tmpdir(), 'no-such-config.yml')).status, 1);
+  assert.equal(cli().status, 2);
 });
 
-const WF = join(PLUGIN, 'templates', 'workflows');
-const jobsOf = text => text.split(/\n  (?=[a-z][a-z0-9-]*:\n)/).slice(1);
+test('env-for-branch parses flow and block entries, quotes and comments; first match wins', () => {
+  const yaml = [
+    'github: { org: acme-org }',
+    'environments:   # the ladder',
+    '  - { branch: "hotfix/**", environment: uat, test_level: RunSpecifiedTests }  # comment',
+    "  - { branch: 'sprint/*', environment: qa }",
+    '  - branch: dev',
+    '    environment: "dev"',
+    '    test_level: NoTestRun',
+    '  - { branch: "*", environment: catchall, test_level: RunLocalTests }',
+    'slack: { channel: x }',
+    '  - { branch: main, environment: ignored }',
+  ].join('\n');
+  const envs = efb.parseEnvironments(yaml);
+  assert.equal(envs.length, 4);
+  assert.deepEqual(efb.resolveBranch('hotfix/a/b', envs), { environment: 'uat', test_level: 'RunSpecifiedTests' });
+  assert.deepEqual(efb.resolveBranch('sprint/S2', envs), { environment: 'qa', test_level: 'RunLocalTests' });
+  assert.deepEqual(efb.resolveBranch('dev', envs), { environment: 'dev', test_level: 'NoTestRun' });
+  assert.deepEqual(efb.resolveBranch('main', envs), { environment: 'catchall', test_level: 'RunLocalTests' });
+  assert.throws(() => efb.resolveBranch('a/b', envs), /matches no entry/);
+});
 
-test('gate and guard scripts run from the base commit, never from the PR being checked', () => {
-  for (const w of ['pr-checks.yml', 'design-gate.yml', 'persona-gates.yml', 'fix-router.yml']) {
-    const text = readFileSync(join(WF, w), 'utf8');
-    for (const j of jobsOf(text)) {
-      const name = j.split('\n')[0];
-      // A job that runs scripts/ci from the workspace root must have checked the root out at the base commit.
-      if (/(bash|node) scripts\/ci\//.test(j)) {
-        assert.match(j, /ref: "?\$\{\{ github\.event\.pull_request\.base\.sha/, `${w} ${name} runs scripts/ci from an unpinned checkout`);
-        assert.doesNotMatch(j, /fetch-depth: 0/, `${w} ${name}: a full PR checkout must not be where scripts/ci runs from`);
-      }
-      // A job that checks the PR out as data runs its scripts from .circuit-trusted, checked out at the base commit.
-      if (/\.circuit-trusted\/scripts\/ci/.test(j)) {
-        assert.match(j, /path: \.circuit-trusted/, `${w} ${name}`);
-        assert.match(j, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}\n\s+path: \.circuit-trusted/, `${w} ${name}`);
-      }
+test('env-for-branch rejects unsafe environment names and unknown test levels', () => {
+  assert.throws(() => efb.resolveBranch('dev', [{ branch: 'dev', environment: 'qa\nenvironment=production' }]), /invalid environment/);
+  assert.throws(() => efb.resolveBranch('dev', [{ branch: 'dev', environment: '' }]), /invalid environment/);
+  assert.throws(() => efb.resolveBranch('dev', [{ branch: 'dev', environment: 'dev', test_level: 'RunEverything' }]), /test_level/);
+  assert.throws(() => efb.parseEnvironments('github: {}\n'), /no top-level "environments:"/);
+  assert.ok(efb.globToRegExp('sprint/*').test('sprint/2026-S1'));
+  assert.ok(!efb.globToRegExp('sprint/*').test('sprint/a/b'));
+  assert.ok(efb.globToRegExp('sprint/**').test('sprint/a/b'));
+  assert.ok(!efb.globToRegExp('a.b').test('axb'));
+});
+
+// ---- workflows ---------------------------------------------------------------------------------------------------
+
+test('templates/workflows holds exactly pr-checks.yml and deploy.yml; no v2/v3 workflow or script remains', () => {
+  const have = readdirSync(WF).filter(f => f.endsWith('.yml')).sort();
+  assert.deepEqual(have, ['deploy.yml', 'pr-checks.yml']);
+  assert.deepEqual([...inst.WORKFLOWS].sort(), have);
+  for (const w of ['design-gate.yml', 'persona-gates.yml', 'fix-router.yml', 'deploy-prod.yml']) assert.ok(inst.STALE_WORKFLOWS.includes(w), w);
+  assert.deepEqual(readdirSync(CI), ['env-for-branch.mjs']);
+  for (const s of inst.STALE_SCRIPTS) assert.ok(!existsSync(join(T, 'repo', s)), s);
+});
+
+test('workflows read no secret but SFDX_AUTH_URL, run on GitHub-hosted runners and call no AI, Jira or Slack', () => {
+  for (const w of inst.WORKFLOWS) {
+    const text = wf(w);
+    assert.doesNotMatch(text, inst.FORBIDDEN, w);
+    assert.doesNotMatch(text, /self-hosted/, w);
+    for (const m of text.matchAll(/runs-on:\s*(\S+)/g)) assert.equal(m[1], 'ubuntu-latest', w);
+    assert.doesNotMatch(text, /claude-code-action|anthropics\/|\bclaude -p\b|\bacli\b|slack\.com|jira\.sh/i, w);
+    for (const m of text.matchAll(/uses:\s*(\S+)/g)) assert.match(m[1], /^[\w.-]+\/[\w.-]+@v\d+$/, `${w}: pin actions to a major (${m[1]})`);
+    // The auth URL never appears on a command line or in the log: only piped from printf into --sfdx-url-stdin.
+    for (const line of text.split('\n').filter(l => l.includes('$SFDX_AUTH_URL'))) {
+      assert.ok(/printf '%s' "\$SFDX_AUTH_URL" \| sf org login sfdx-url --sfdx-url-stdin/.test(line) || /\[ -z "\$SFDX_AUTH_URL" \]/.test(line), `${w}: ${line.trim()}`);
     }
+    assert.doesNotMatch(text, /echo[^\n]*\$\{?SFDX_AUTH_URL/, w);
+    assert.match(text, /env-for-branch\.mjs/, `${w} resolves the environment with env-for-branch.mjs`);
   }
 });
 
-test('resolve-story failures are fatal wherever its output is eval-ed', () => {
-  for (const w of readdirSync(WF)) {
-    const text = readFileSync(join(WF, w), 'utf8');
-    assert.doesNotMatch(text, /eval "\$\(bash [^)]*resolve-story/, `${w}: eval "$(...)" swallows a resolve-story failure`);
-    for (const m of text.matchAll(/out=\$\(bash \S*resolve-story\.sh[^\n]*/g)) assert.match(m[0], /\|\| exit 1$/, `${w}: ${m[0]}`);
+test('FORBIDDEN allows exactly secrets.SFDX_AUTH_URL', () => {
+  const F = inst.FORBIDDEN;
+  assert.doesNotMatch('SFDX_AUTH_URL: ${{ secrets.SFDX_AUTH_URL }}', F);
+  for (const bad of ['${{ secrets.OTHER }}', '${{ secrets.SFDX_AUTH_URL_PROD }}', '${{ secrets.SFDX_AUTH_URL || secrets.X }}',
+    "${{ secrets['SFDX_AUTH_URL'] }}", '${{ toJSON(secrets) }}', 'secrets: inherit', '${{ secrets.GITHUB_TOKEN }}',
+    'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'SF_JWT_KEY', 'JIRA_API_TOKEN']) assert.match(bad, F, bad);
+});
+
+test('pr-checks: triggers, fork handling, base-commit map, scan steps', () => {
+  const text = wf('pr-checks.yml');
+  const jobs = jobsOf(text);
+  assert.match(text, /pull_request:\n\s+branches: \["sprint\/\*\*", dev, sit, uat, main\]/);
+  assert.deepEqual(Object.keys(jobs), ['resolve', 'scan', 'coderabbit']);
+  // resolve: env map from the base commit, from the base branch, no environment.
+  assert.match(jobs.resolve, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
+  assert.match(jobs.resolve, /env-for-branch\.mjs "\$BASE_REF"/);
+  assert.match(jobs.resolve, /BASE_REF: \$\{\{ github\.base_ref \}\}/);
+  assert.doesNotMatch(jobs.resolve, /^    environment:|secrets\./m);
+  // scan: environment only for same-repo PRs, always reports (never skipped), fails forks before anything else.
+  assert.match(jobs.scan, /if: \$\{\{ !cancelled\(\) \}\}/);
+  assert.match(jobs.scan, /environment: \$\{\{ needs\.resolve\.outputs\.same_repo == 'true' && needs\.resolve\.outputs\.environment \|\| '' \}\}/);
+  const steps = jobs.scan.split('\n      - ').slice(1);
+  assert.match(steps[0], /Same-repository PRs only/);
+  assert.match(steps[0], /\$HEAD_REPO" != "\$GITHUB_REPOSITORY"[\s\S]*exit 1/);
+  assert.match(steps[0], /\$RESOLVED" != success[\s\S]*exit 1/);
+  const order = ['Same-repository', 'code-analyzer run', 'LWC Jest', 'sfdx-url-stdin', 'sf project deploy validate --source-dir force-app'];
+  const pos = order.map(s => jobs.scan.indexOf(s));
+  assert.ok(pos.every(p => p > -1), `scan steps: ${pos}`);
+  assert.deepEqual([...pos].sort((a, b) => a - b), pos, 'scan step order');
+  assert.match(jobs.scan, /--severity-threshold 2/);
+  assert.match(jobs.scan, /--test-level "\$TEST_LEVEL"/);
+  assert.match(jobs.scan, /persist-credentials: false/);
+});
+
+test('pr-checks: coderabbit job needs scan, feature/* only, once per head SHA, pull-requests: write', () => {
+  const j = jobsOf(wf('pr-checks.yml')).coderabbit;
+  assert.match(j, /needs: scan/);
+  assert.match(j, /startsWith\(github\.head_ref, 'feature\/'\)/);
+  assert.match(j, /head\.repo\.full_name == github\.repository/);
+  assert.match(j, /permissions:\n\s+pull-requests: write/);
+  assert.doesNotMatch(j, /contents: write|environment:/);
+  assert.match(j, /SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(j, /MARKER="<!-- circuit:coderabbit-review:\$SHA -->"/);
+  assert.match(j, /grep -qF "\$MARKER"[\s\S]*exit 0[\s\S]*@coderabbitai review/);
+  assert.match(wf('pr-checks.yml'), /^permissions:\n  contents: read$/m);
+});
+
+test('deploy: push to the ladder, environment from env-for-branch, concurrency per environment, job summary', () => {
+  const text = wf('deploy.yml');
+  const jobs = jobsOf(text);
+  assert.match(text, /push:\n\s+branches: \["sprint\/\*\*", dev, sit, uat, main\]/);
+  assert.doesNotMatch(text, /pull_request/);
+  assert.match(jobs.resolve, /env-for-branch\.mjs "\$GITHUB_REF_NAME"/);
+  assert.match(jobs.deploy, /environment: \$\{\{ needs\.resolve\.outputs\.environment \}\}/);
+  assert.match(jobs.deploy, /concurrency:\n\s+group: deploy-\$\{\{ needs\.resolve\.outputs\.environment \}\}\n\s+cancel-in-progress: false/);
+  assert.match(jobs.deploy, /sf project deploy start --source-dir force-app --target-org circuit-target --test-level "\$TEST_LEVEL"/);
+  assert.match(jobs.deploy, /GITHUB_STEP_SUMMARY/);
+  assert.match(jobs.deploy, /sf org logout/);
+  assert.match(text, /^permissions:\n  contents: read$/m);
+});
+
+// ---- rulesets, CodeRabbit, config ----------------------------------------------------------------------------------
+
+test('rulesets: sprint/* and dev/sit/uat/main require scan and a PR; no force-push or deletion', () => {
+  const sprint = JSON.parse(readFileSync(join(T, 'github', 'ruleset-sprint.json'), 'utf8'));
+  const promo = JSON.parse(readFileSync(join(T, 'github', 'ruleset-promotion.json'), 'utf8'));
+  assert.deepEqual(sprint.conditions.ref_name.include, ['refs/heads/sprint/*']);
+  assert.deepEqual(promo.conditions.ref_name.include, ['refs/heads/dev', 'refs/heads/sit', 'refs/heads/uat', 'refs/heads/main']);
+  for (const rs of [sprint, promo]) {
+    const types = rs.rules.map(r => r.type);
+    for (const t of ['deletion', 'non_fast_forward', 'pull_request', 'required_status_checks']) assert.ok(types.includes(t), `${rs.name}: ${t}`);
+    assert.ok(!types.includes('required_linear_history'), rs.name);
+    assert.deepEqual(rs.bypass_actors, []);
+    const checks = rs.rules.find(r => r.type === 'required_status_checks').parameters.required_status_checks.map(c => c.context);
+    assert.deepEqual(checks, ['scan']);
+    assert.equal(rs.rules.find(r => r.type === 'pull_request').parameters.required_approving_review_count, 1);
   }
+  const env = JSON.parse(readFileSync(join(T, 'github', 'environment-production.json'), 'utf8'));
+  assert.equal(env.prevent_self_review, true);
+  assert.equal(env.reviewers[0].type, 'Team');
 });
 
-test('a PR that changes force-app/ must be on a story branch (design-gate and guard)', () => {
-  const dg = readFileSync(join(WF, 'design-gate.yml'), 'utf8');
-  assert.match(dg, /pulls\/\$PR\/files/);
-  assert.match(dg, /grep -q '\^force-app\/'[^\n]*\n[^\n]*::error::/);
-  assert.match(dg, /pull-requests: read/);
-  const guard = jobsOf(readFileSync(join(WF, 'pr-checks.yml'), 'utf8')).find(j => j.startsWith('guard:'));
-  assert.match(guard, /if grep -q '\^force-app\/' "\$RUNNER_TEMP\/changed\.txt"; then\n\s+echo "::error::/);
+test('.coderabbit.yaml: no auto review, request-changes workflow, no v3 references', () => {
+  const y = readFileSync(join(T, 'repo', '.coderabbit.yaml'), 'utf8');
+  assert.match(y, /auto_review:\n\s+enabled: false/);
+  assert.match(y, /request_changes_workflow: true/);
+  assert.doesNotMatch(y, /\.tc\.json|docs\/plans|approved design version|PLAN\.md/i);
 });
 
-test('CODEOWNERS gives tests/ and test-cases/ to the testers', () => {
-  const co = readFileSync(join(PLUGIN, 'templates', 'repo', '.github', 'CODEOWNERS'), 'utf8');
-  assert.match(co, /^\/tests\/\s+@ORG\/testers\s*$/m);
-  assert.match(co, /^\/test-cases\/\s+@ORG\/testers\s*$/m);
+test('build.config.yml: v4 shape, no v3 sections, no secrets', () => {
+  const y = readFileSync(CONFIG, 'utf8');
+  for (const k of ['github', 'people', 'jira', 'confluence', 'salesforce', 'environments', 'slack', 'transcripts']) assert.match(y, new RegExp(`^${k}:`, 'm'), k);
+  for (const k of ['runners', 'ai', 'gates', 'acli']) assert.doesNotMatch(y, new RegExp(`^${k}:`, 'm'), k);
+  assert.match(y, /leads:/);
+  assert.match(y, /ready_status: "Ready for Dev"/);
+  assert.match(y, /SFDX_AUTH_URL/);
+  assert.doesNotMatch(y, /force:\/\/|sk-ant-|ghp_/);
 });
 
-test('no template workflow or CI script reads a stored credential', () => {
-  const files = [
-    ...readdirSync(join(PLUGIN, 'templates', 'workflows')).map(f => join(PLUGIN, 'templates', 'workflows', f)),
-    ...readdirSync(CI).map(f => join(CI, f)),
-  ];
-  for (const f of files) assert.doesNotMatch(readFileSync(f, 'utf8'), inst.FORBIDDEN, f);
-  assert.match('env: { T: "${{ secrets.X }}" }', inst.FORBIDDEN);
-  assert.match('CLAUDE_CODE_OAUTH_TOKEN', inst.FORBIDDEN);
-  assert.ok(!existsSync(join(CI, 'sf-login.sh')), 'sf-login.sh is removed in v3');
-});
+// ---- installer -------------------------------------------------------------------------------------------------------
 
-test('templates/workflows holds exactly the v3 set; self-hosted jobs skip fork PRs', () => {
-  const have = readdirSync(join(PLUGIN, 'templates', 'workflows')).filter(f => f.endsWith('.yml')).sort();
-  assert.deepEqual(have, [...inst.WORKFLOWS].sort());
-  for (const w of inst.STALE_WORKFLOWS) assert.ok(!have.includes(w), w);
-  for (const w of have) {
-    const text = readFileSync(join(PLUGIN, 'templates', 'workflows', w), 'utf8');
-    assert.doesNotMatch(text, /claude-code-action|anthropics\//, `${w} must not run AI through an action`);
-    // Every job block that targets a self-hosted runner carries a same-repository condition (or is push/dispatch only).
-    const jobs = text.split(/\n  (?=[a-z][a-z0-9-]*:\n)/).slice(1);
-    for (const j of jobs) {
-      if (!/runs-on: \[self-hosted/.test(j)) continue;
-      if (w === 'deploy-prod.yml') { assert.doesNotMatch(text, /pull_request/); assert.match(j, /circuit-release/); continue; }
-      assert.match(j, /head\.repo\.full_name == github\.repository|head_repository\.full_name == github\.repository/, `${w}: ${j.split('\n')[0]}`);
-    }
-  }
-  assert.doesNotMatch(readFileSync(join(PLUGIN, 'templates', 'workflows', 'deploy-prod.yml'), 'utf8'), /\bclaude\b/);
-});
-
-test('rulesets require design-gate, not spec-gate', () => {
-  const rs = JSON.parse(readFileSync(join(PLUGIN, 'templates', 'github', 'ruleset-main.json'), 'utf8'));
-  const checks = rs.rules.find(r => r.type === 'required_status_checks').parameters.required_status_checks.map(c => c.context);
-  assert.ok(checks.includes('design-gate'));
-  assert.ok(!checks.includes('spec-gate'));
-  for (const c of ['guard', 'static', 'code-analyzer', 'qa', 'gate/developer', 'gate/tester', 'gate/architect']) assert.ok(checks.includes(c), c);
-});
-
-test('install.mjs --dry-run on a temp git repo writes nothing and reports v2 leftovers', () => {
+test('install.mjs self-check passes: --dry-run on a temp git repo writes nothing and reports v2/v3 leftovers', () => {
   const d = mkdtempSync(join(tmpdir(), 'circuit-install-'));
   spawnSync('git', ['init', '-q', d]);
   mkdirSync(join(d, '.github', 'workflows'), { recursive: true });
+  mkdirSync(join(d, 'scripts', 'ci'), { recursive: true });
   writeFileSync(join(d, '.github', 'workflows', 'ai-fix-loop.yml'), 'name: old\n');
+  writeFileSync(join(d, '.github', 'workflows', 'fix-router.yml'), 'name: old\n');
+  writeFileSync(join(d, 'scripts', 'ci', 'runner-check.sh'), 'echo old\n');
   const r = spawnSync(process.execPath, [INSTALL, '--repo', d, '--org', 'acme-org', '--project-name', 'Acme Shipping', '--dry-run'], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /ADD {4}\.github\/workflows\/design-gate\.yml/);
+  assert.doesNotMatch(r.stderr, /ERROR/);
+  assert.match(r.stdout, /delivery circuit v4/);
+  assert.match(r.stdout, /ADD {4}\.github\/workflows\/pr-checks\.yml/);
+  assert.match(r.stdout, /ADD {4}\.github\/workflows\/deploy\.yml/);
+  assert.match(r.stdout, /ADD {4}scripts\/ci\/env-for-branch\.mjs/);
   assert.match(r.stdout, /STALE {2}\.github\/workflows\/ai-fix-loop\.yml/);
-  assert.match(r.stdout, /No secrets to set/);
+  assert.match(r.stdout, /STALE {2}\.github\/workflows\/fix-router\.yml/);
+  assert.match(r.stdout, /STALE {2}scripts\/ci\/runner-check\.sh/);
+  assert.match(r.stdout, /Labels to create: ai-generated needs-fix/);
+  assert.match(r.stdout, /SFDX_AUTH_URL per GitHub Environment/);
   assert.ok(!existsSync(join(d, 'CLAUDE.md')) && !existsSync(join(d, '.claude')), 'dry run must not write');
   const bad = spawnSync(process.execPath, [INSTALL, '--repo', d, '--org', 'bad org!'], { encoding: 'utf8' });
   assert.equal(bad.status, 2);
   rmSync(d, { recursive: true, force: true });
 });
 
-test('every v3 skill named by the installer exists in the plugin', () => {
+test('installer lists the v4 skills', () => {
+  assert.deepEqual([...inst.SKILLS].sort(), ['arch-design', 'arch-jira-push', 'circuit', 'circuit-bootstrap', 'circuit-intake',
+    'dev-fix', 'dev-review-plan', 'dev-review-pr', 'dev-review-stories', 'dev-start-story', 'qa-add-tests', 'qa-design-tests',
+    'qa-explore', 'record-decision', 'review-room']);
+  for (const s of ['arch-approve-design', 'arch-review-pr', 'qa-push-tests', 'qa-review-testplan']) assert.ok(!inst.SKILLS.includes(s), s);
   for (const s of inst.SKILLS) assert.ok(existsSync(join(PLUGIN, 'skills', s, 'SKILL.md')), s);
 });

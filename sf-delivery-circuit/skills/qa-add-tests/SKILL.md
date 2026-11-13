@@ -1,35 +1,28 @@
 ---
 name: qa-add-tests
-description: Tester commits the runnable tests of a story to the Developer's draft PR - tests/<KEY>.tc.json (with Jira test case keys) and test-cases/<KEY>.sf-tests.yaml - after validating them, committing only tests/ and test-cases/ on the story branch. Also used to correct a test problem found later. Use with a story key ("Add tests to ACME-12") once the Developer has opened the draft PR.
+description: QA turns a story's Jira test cases into the SF AI Tester suite test-cases/<KEY>.sf-tests.yaml, validates it, and opens a PR from feature/<KEY>-tests into the current sprint branch with auto-merge on. Also used to correct a suite later. Use with a story key once qa-design-tests has created the Jira test cases.
 ---
 
-# Tester: add tests to the story PR
+# QA: SF AI Tester suite → PR into the sprint branch
 
-Persona: **Tester** (`cc-qa`; extension queue item "Add tests to <KEY>"). Input: `$ARGUMENTS` = story key.
-You add commits to the Developer's PR; you never open a PR. The guard refuses any commit on a story branch that
-holds files outside `tests/` and `test-cases/`.
+Persona: **Tester (QA)**. Input: `$ARGUMENTS` = story key. Suite format: follow the **`sf-ai-tester-suites`** skill
+exactly. QA alias: `build.config.yml` → `salesforce.qa_alias` (default `qa`).
 
-## Steps
-1. **PR:** `gh pr list --search "<KEY> in:title" --state open --json number,headRefName,isDraft,url`. No PR yet →
-   stop: "Waiting for the Developer to start <KEY> (dev-start-story)".
-2. **Sources:** the local drafts from `qa-design-tests` (`.specify/specs/NNN-slug/tests/<KEY>.tc.json` and
-   `<KEY>.sf-tests.yaml`, with Jira keys from `qa-push-tests`). If they are missing (other machine), rebuild them from
-   the Jira test cases linked to the story (`story_get` / `searchJiraIssuesUsingJql`), then validate as below.
-3. **Check out** the branch: `git fetch origin` and `gh pr checkout <n>`; `git status` must be clean.
-4. **Place** the files: `tests/<KEY>.tc.json`, `test-cases/<KEY>.sf-tests.yaml`. Each case has `jira` set; ids are
-   `<KEY>-TC-nn`; `designVersion` equals the story's *Approved design version*.
-5. **Validate:**
-   - `python .claude/skills/sf-ai-tester-suites/scripts/validate_suite.py test-cases/<KEY>.sf-tests.yaml`
-   - `node scripts/ci/check-tc-coverage.mjs --key <KEY> --design`
-   Fix every error in your files (never by weakening an expected result).
-6. **Commit only tests:** `git add tests/<KEY>.tc.json test-cases/<KEY>.sf-tests.yaml`; `git status --porcelain` must
-   show nothing else staged; `git commit -m "<KEY> tests: test-case index and SF AI Tester suite"`;
-   `git push` (the story branch, never `main`, never `--force`).
-7. **Comment** on the PR: case count by level, the Jira test case keys, "TESTPLAN.md must list every TC id"
-   (`gh pr comment <n> --body-file …`).
+1. **Read** the story and its test cases (`searchJiraIssuesUsingJql` `issue in linkedIssues(<KEY>) AND labels = "circuit-test"`).
+   None → stop: "Run `qa-design-tests <KEY>` first."
+2. **Branch:** current sprint branch = newest remote `sprint/*`
+   (`git fetch origin && git for-each-ref --sort=-committerdate --format='%(refname:lstrip=3)' 'refs/remotes/origin/sprint/*' | head -1`).
+   `git switch -c feature/<KEY>-tests origin/sprint/<name>` (or switch to it if it exists and `git pull`).
+3. **Write** `test-cases/<KEY>.sf-tests.yaml`: one case per `ui` test case, case id = `<KEY>-TC-<nn>`, `section` =
+   story summary, tags `<KEY>` plus `smoke`/`regression` where they belong long term. Ground labels in the QA org
+   (the skill's `org_snapshot.py --alias <qa>`).
+4. **Validate:** `python .claude/skills/sf-ai-tester-suites/scripts/validate_suite.py test-cases/<KEY>.sf-tests.yaml`.
+   Fix every error in the suite, never by weakening an expected result.
+5. **Commit and PR:** `git add test-cases/<KEY>.sf-tests.yaml`, commit `<KEY> tests: SF AI Tester suite`,
+   `git push -u origin feature/<KEY>-tests`, then
+   `gh pr create --base sprint/<name> --head feature/<KEY>-tests --title "<KEY> tests" --body "<Jira link>; cases: <ids>"`
+   and `gh pr merge <n> --auto --squash`.
+6. **Report:** PR link and case count. Comment the PR link on the story (`addCommentToJiraIssue`).
 
-**Correcting a test problem later** (from `qa-explore` or a `needs-qa` label): same steps; change only the affected
-cases, say why in the commit message and PR comment, and never weaken an expected result. If the design changed
-the expectation, the Architect records a decision first (`record-decision`).
-
-Next: human Tester reviews TESTPLAN.md (`qa-review-testplan`) and adds `testplan-approved` (G4).
+**Correcting a suite later:** same steps on a new `feature/<KEY>-tests-<n>` branch; change only the affected cases
+and say why. If the expected behaviour itself changed, the Architect records a decision first.

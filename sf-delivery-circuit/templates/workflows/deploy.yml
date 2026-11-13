@@ -1,0 +1,101 @@
+name: deploy
+# Delivery Circuit v4 (CIRCUIT-V4 section 4): branches are environments. A merge into sprint/<name>, dev, sit, uat or
+# main deploys that branch to its sandbox (build.config.yml -> environments, resolved by scripts/ci/env-for-branch.mjs).
+# The job runs in that GitHub Environment, so `production` waits for its required reviewers (leads) and only `main`
+# may deploy there. One deployment per environment at a time. GitHub-hosted runners, no AI, no Jira or Slack calls.
+on:
+  push:
+    branches: ["sprint/**", dev, sit, uat, main]
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      test_level: ${{ steps.env.outputs.test_level }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/ci       # cone mode also brings root files such as build.config.yml
+      - name: Resolve the environment for this branch
+        id: env
+        run: node scripts/ci/env-for-branch.mjs "$GITHUB_REF_NAME" | tee -a "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment: ${{ needs.resolve.outputs.environment }}
+    concurrency:
+      group: deploy-${{ needs.resolve.outputs.environment }}
+      cancel-in-progress: false
+    env:
+      TARGET_ENV: ${{ needs.resolve.outputs.environment }}
+      TEST_LEVEL: ${{ needs.resolve.outputs.test_level }}
+    steps:
+      - uses: actions/checkout@v5
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - name: Salesforce CLI
+        run: |
+          npm install --global @salesforce/cli
+          sf --version
+      - name: Log in to the target org
+        env:
+          SFDX_AUTH_URL: ${{ secrets.SFDX_AUTH_URL }}
+        run: |
+          if [ -z "$SFDX_AUTH_URL" ]; then
+            echo "::error::GitHub Environment '$TARGET_ENV' has no SFDX_AUTH_URL secret (circuit-bootstrap, environments step)."; exit 1
+          fi
+          # The URL goes over stdin from a shell builtin: never on a command line, never in the log.
+          # VERIFY flag name with 'sf org login sfdx-url --help'.
+          printf '%s' "$SFDX_AUTH_URL" | sf org login sfdx-url --sfdx-url-stdin --alias circuit-target > /dev/null
+          echo "Logged in to the $TARGET_ENV org."
+      - name: Deploy
+        id: deploy
+        run: |
+          if [ ! -d force-app ]; then echo "No force-app folder: nothing to deploy."; echo "outcome=nothing" >> "$GITHUB_OUTPUT"; exit 0; fi
+          set +e
+          sf project deploy start --source-dir force-app --target-org circuit-target --test-level "$TEST_LEVEL" \
+            --wait 180 --json > "$RUNNER_TEMP/deploy.json"
+          rc=$?
+          set -e
+          jq -r '.result | "status=\(.status // "unknown")\ncomponents=\(.numberComponentsDeployed // 0)/\(.numberComponentsTotal // 0)\ntests=\(.numberTestsCompleted // 0)/\(.numberTestsTotal // 0)\ntest_failures=\(.numberTestErrors // 0)\ndeploy_id=\(.id // "")"' \
+            "$RUNNER_TEMP/deploy.json" >> "$GITHUB_OUTPUT" 2>/dev/null || true
+          if [ "$rc" -ne 0 ]; then
+            jq -r '.message // empty, (.result.details.componentFailures // [] | if type == "array" then .[] else . end
+                   | "\(.componentType // "")/\(.fullName // ""): \(.problem // "")")' "$RUNNER_TEMP/deploy.json" 2>/dev/null \
+              | head -50 | sed 's/^/::error::/' || true
+            echo "outcome=failed" >> "$GITHUB_OUTPUT"; exit "$rc"
+          fi
+          echo "outcome=deployed" >> "$GITHUB_OUTPUT"
+      - name: Log out
+        if: always()
+        run: sf org logout --target-org circuit-target --no-prompt > /dev/null 2>&1 || true
+      - name: Job summary
+        if: always()
+        env:
+          OUTCOME: ${{ steps.deploy.outputs.outcome || 'not run' }}
+          STATUS: ${{ steps.deploy.outputs.status }}
+          COMPONENTS: ${{ steps.deploy.outputs.components }}
+          TESTS: ${{ steps.deploy.outputs.tests }}
+          FAILURES: ${{ steps.deploy.outputs.test_failures }}
+          DEPLOY_ID: ${{ steps.deploy.outputs.deploy_id }}
+        run: |
+          {
+            echo "### Deploy $GITHUB_REF_NAME -> $TARGET_ENV"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Commit | \`${GITHUB_SHA:0:8}\` |"
+            echo "| Outcome | $OUTCOME${STATUS:+ ($STATUS)} |"
+            echo "| Test level | $TEST_LEVEL |"
+            echo "| Components | ${COMPONENTS:-n/a} |"
+            echo "| Apex tests | ${TESTS:-n/a}${FAILURES:+, failures: $FAILURES} |"
+            echo "| Deploy id | ${DEPLOY_ID:-n/a} |"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,45 +1,38 @@
-# Delivery Circuit v3 project settings. Filled in by a person at HC-1; every bootstrap phase reads it.
-# It holds NO secrets and no tokens: every connection is a login (gh, sf, acli, claude, MCP OAuth).
-# Placeholders below are samples (acme-org, ACME); replace them with the project's values.
+# Delivery Circuit v4 project settings. Filled in by a person during /circuit-bootstrap and committed with the repo.
+# It holds NO secrets. The only stored credential of the circuit is one SFDX_AUTH_URL secret per GitHub Environment
+# (qa, dev, sit, uat, production), set by an admin with `gh secret set SFDX_AUTH_URL --env <env>`. It lives in
+# GitHub Environments, never in this file, never in git, never in a chat with Claude.
+# Placeholders below are samples (acme-org, ACME, example.com); replace them with the project's values.
 github:
   org: acme-org                     # GitHub organisation that owns the repo
-  repo: acme-salesforce             # new Salesforce DX repo created for this project
-  default_branch: main
-  visibility: private               # private is strongly recommended: the circuit uses self-hosted runners
-people:                             # GitHub login + Atlassian email + Slack handle. Keep the three teams disjoint.
+  repo: acme-salesforce             # Salesforce DX repo for this project
+people:                             # GitHub login + Atlassian email + Slack handle
   architects: [{ gh: "", atlassian: "", slack: "" }]
   developers: [{ gh: "", atlassian: "", slack: "" }]
   testers:    [{ gh: "", atlassian: "", slack: "" }]
-runners:                            # self-hosted GitHub Actions runners (B2). Logins live on these machines only.
-  circuit:                          # PR checks with logins: QA deploy, Apex, SF AI Tester, AI Reviewer, Code Analyzer,
-    name: circuit-1                 #   design-gate, persona-gates, fix-router
-    labels: [circuit]
-    os: linux                       # linux | macos | windows
-  release:                          # deploy-prod only; holds the one login to the named production org
-    name: circuit-release-1
-    labels: [circuit-release]
-    os: linux
+  leads:      [{ gh: "", atlassian: "", slack: "" }]   # approve promotion PRs and production deploys
 jira:
   site: https://acme.atlassian.net
   project_key: ACME
-  test_tool: none                   # none | xray | zephyr
-  design_pending_statuses: "Backlog,Design Review"   # epic statuses that mean "design not approved" (design-gate)
+  ready_status: "Ready for Dev"     # set by people at refinement; /dev-start-story requires it
+  test_issue_type: Test             # Test (Xray/Zephyr) or the sub-task type used for test cases
 confluence:
-  space_key: SD                     # "Solution Designs": one design page per feature
-  architects_group: architects      # only this group may edit design pages / set them to Approved
-salesforce:                         # sf CLI aliases. Any connected org can be DEV or QA; only prod_alias is protected.
-  dev_alias: dev
-  qa_alias: qa
-  prod_alias: prod                  # the org the project NAMES as production: AI never touches it
+  space_key: SD                     # one design page per feature
+salesforce:                         # sf CLI aliases on the laptops (people's own logins)
+  dev_alias: dev                    # each Developer's own DEV org: AI validates and deploys only here
+  qa_alias: qa                      # QA sandbox alias on the Tester's laptop (SF AI Tester, exploratory runs)
+  prod_alias: prod                  # the org the project names as production: AI never touches it
   api_version: "62.0"               # VERIFY current API version
+# Branch -> GitHub Environment -> Apex test level (CIRCUIT-V4 section 3). Read by scripts/ci/env-for-branch.mjs in
+# pr-checks.yml (base branch) and deploy.yml (pushed branch). First match wins; `*` does not match "/".
+environments:
+  - { branch: "sprint/*", environment: qa,         test_level: RunLocalTests }
+  - { branch: dev,        environment: dev,        test_level: RunLocalTests }
+  - { branch: sit,        environment: sit,        test_level: RunLocalTests }
+  - { branch: uat,        environment: uat,        test_level: RunLocalTests }
+  - { branch: main,       environment: production, test_level: RunLocalTests }
 slack:
   workspace: acme
-  channels: { arch: arch-gate, dev: dev-gate, qa: qa-gate, review: review-room }
-  transport: claude                 # claude (runner's claude CLI + Slack MCP) | github-app | off  (CIRCUIT_SLACK_TRANSPORT)
+  channel: dev-review               # CodeRabbit's Slack agent and /review-room post PR reviews here
 transcripts:
-  sources: [paste, file, fireflies, wispr]   # stored at the source or encrypted on the Architect's machine; never in git
-ai:
-  max_attempts: 3                   # Fix with AI attempts before needs-human (MAX_AI_ATTEMPTS)
-  sf_ai_tester_in_ci: false         # true once the SF AI Tester CLI runs headless on the circuit runner
-  sf_ai_tester_ref: ""              # commit SHA of github.com/pavansaikodanda/sf-ai-tester for CI (SF_AI_TESTER_REF)
-  sf_ai_tester_mode: manual         # manual | automation | both (SF_AI_TESTER_MODE)
+  sources: [paste, file, fireflies] # kept at the source or on the Architect's machine; never in git

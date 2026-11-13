@@ -1,5 +1,0 @@
-# actionlint config for the Delivery Circuit workflows: the custom labels of the self-hosted runners.
-self-hosted-runner:
-  labels:
-    - circuit
-    - circuit-release

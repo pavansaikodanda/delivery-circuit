@@ -1,27 +1,36 @@
-# VERIFY keys against the current CodeRabbit configuration schema.
+# Delivery Circuit v4. CodeRabbit reviews only when pr-checks asks it to: the `coderabbit` job comments
+# "@coderabbitai review" after the required `scan` check passed (feature/* PRs into a sprint branch).
+# VERIFY keys against the current CodeRabbit configuration schema (docs.coderabbit.ai -> Configuration reference).
 language: en
 reviews:
   profile: assertive
-  request_changes_workflow: true
+  request_changes_workflow: true        # changes requested until the comments are resolved; approves when clean
   high_level_summary: true
-  auto_review: { enabled: true, drafts: false, base_branches: [main] }
+  auto_review:
+    enabled: false                      # no review on push; only on the "@coderabbitai review" command
+    drafts: false
+    base_branches: ["sprint/.*", "dev", "sit", "uat", "main"]   # VERIFY: regex patterns; only matter if auto_review is turned back on
   path_instructions:
     - path: "force-app/**/classes/**"
       instructions: >
-        Salesforce Apex. Flag SOQL/DML in loops, missing sharing keywords, missing CRUD/FLS, hard-coded IDs,
-        duplicated logic that exists elsewhere in force-app, tests without assertions, and unit test cases
-        from tests/<KEY>.tc.json that no test references ("// TC: <KEY>-TC-nn").
+        Salesforce Apex. Flag SOQL/DML in loops, missing sharing keywords, missing CRUD/FLS (WITH USER_MODE or
+        Security.stripInaccessible), hard-coded IDs, duplicated logic that exists elsewhere in force-app, and tests
+        without meaningful assertions or without bulk (200 records) coverage.
+    - path: "force-app/**/triggers/**"
+      instructions: "One trigger per object delegating to a handler; no logic in the trigger body; bulk-safe."
     - path: "force-app/**/lwc/**"
       instructions: "Error handling, loading states, LDS/UI API before Apex, Jest coverage."
     - path: "force-app/**/flows/**"
       instructions: "Recursion, missing fault paths, hard-coded values, entry criteria."
     - path: "force-app/**/objects/**"
-      instructions: "Every new object or field must appear in the data model of the approved Confluence design page (docs/plans/<KEY>/PLAN.md cites it); flag anything else."
+      instructions: >
+        New objects and fields must match the data model of the approved Confluence design page linked from the Jira
+        story (PR body); flag anything that is not there, and missing descriptions or help text.
     - path: "test-cases/**"
-      instructions: "Expected results must be observable on screen and specific; steps use exact UI labels; ids match tests/<KEY>.tc.json."
-    - path: "docs/plans/**"
-      instructions: "PLAN.md maps every acceptance criterion of the Jira story to work and names the approved design version; TESTPLAN.md lists every TC id from tests/<KEY>.tc.json; both list reuse and blast radius."
+      instructions: >
+        SF AI Tester suites (<KEY>.sf-tests.yaml). Expected results must be observable on screen and specific; steps
+        use exact UI labels; every case traces to an acceptance criterion of the Jira story.
 knowledge_base:
   code_guidelines:
     enabled: true
-    filePatterns: ["CLAUDE.md", ".specify/memory/constitution.md", "docs/definition-of-done.md"]
+    filePatterns: ["CLAUDE.md", "docs/definition-of-done.md"]

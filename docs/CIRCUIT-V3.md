@@ -1,3 +1,5 @@
+> **Superseded by [CIRCUIT-V4.md](CIRCUIT-V4.md).** Kept for history only.
+
 # Delivery Circuit v3: design spec
 
 Status: decided with the product owner on 2026-11-12. This document is the contract for the v3 rebuild of the plugin

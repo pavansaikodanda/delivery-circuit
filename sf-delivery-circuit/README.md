@@ -1,10 +1,11 @@
 # sf-delivery-circuit
 
-A Claude Code plugin for AI + Human Salesforce delivery (v3). It takes a feature from a client call to a Confluence
-design, Jira stories and test cases, code on a Developer-owned PR, and a release, with Architect, Developer and Tester
-personas, nine human gates (G1 to G9), and a guard that keeps AI away from production, merges and approvals.
+A Claude Code plugin for AI + Human Salesforce delivery (v4). It takes a feature from a client call to a Confluence
+design page, Jira stories and test cases, code on a Developer-owned PR into the sprint branch, and a promotion ladder
+of sandboxes up to production. AI designs and builds; people approve. A guard hook keeps AI away from approvals,
+merges, protected branches, secrets and every org except the developer's own DEV org.
 
-The design contract is [`../docs/CIRCUIT-V3.md`](../docs/CIRCUIT-V3.md). Connections are logins only; see
+The design contract is [`../docs/CIRCUIT-V4.md`](../docs/CIRCUIT-V4.md). Connections are in
 [`../ConnectionsSetup.md`](../ConnectionsSetup.md).
 
 Install:
@@ -14,76 +15,77 @@ Install:
 /plugin install sf-delivery-circuit@conscendo-delivery
 ```
 
-See the [repository README](../README.md) for the full picture: the flow, the gates, and the workflows.
+See the [repository README](../README.md) for the full picture: the flow, the branch ladder and the workflows.
 
 ## What's inside
 
 | Folder | Contents |
 |---|---|
-| `agents/` | `architect`, `developer`, `tester` personas, and the read-only `reviewer` that runs on the self-hosted runner |
-| `skills/circuit/` | Map of the circuit, v3 conventions (Confluence, Jira, branches, labels), feature and story status |
-| `skills/circuit-bootstrap/` | Sets up a client repo in v3 phases: no secrets, `acli` and MCP logins, self-hosted runner registration |
-| `skills/circuit-intake/` | Source → spec drafted locally with Spec Kit → Confluence design page |
-| `skills/arch-*` | `arch-design` (plan, data model, decisions, org snapshot, Lucid), `arch-approve-design` (human G1 steps; AI cannot approve), `arch-jira-push` (with `scripts/jira-sync.mjs`), `arch-review-pr` (G7) |
-| `skills/dev-*` | `dev-review-stories` (Jira comments), `dev-start-story` (plan, branch, draft PR), `dev-review-plan` (G3), `dev-fix` (failed checks, cap 3), `dev-review-pr` (G5) |
-| `skills/qa-*` | `qa-design-tests` (Jira test cases + local suite), `qa-push-tests` (G2), `qa-add-tests` (suite onto the story PR), `qa-review-testplan` (G4), `qa-explore` (G6) |
-| `skills/review-room/` | Kick-off brief to `#review-room` and verdict to the PR, through the Slack MCP |
-| `skills/record-decision/` | Adds a decision (date, decision, who, why, source link) to the design page (C1) |
+| `agents/` | Persona agents: `architect`, `developer`, `tester` |
+| `skills/circuit/` | Conventions: flow, branches, change tags (EXISTS · EXTEND · CHANGE · REBUILD · NEW), Jira story layout, what AI may never do |
+| `skills/circuit-bootstrap/` | Repo setup: files, branches `dev sit uat main` + first `sprint/<name>`, environments and their `SFDX_AUTH_URL` (pasted by the admin), rulesets, CodeRabbit config, labels |
+| `skills/circuit-intake/` | Transcript → org check (read-only, DEV) → Confluence design page with change table → Lucid diagram → open questions |
+| `skills/arch-design/` | Answers open questions with the Architect; refines change table, data model and story outline; status "Ready for review" |
+| `skills/record-decision/` | Appends a decision row (date, decision, who, why, source) to the design page |
+| `skills/arch-jira-push/` | Approved page → Jira epic + stories (Story 00 blocks the rest); idempotent by label `feature-<slug>` and summary |
+| `skills/dev-*` | `dev-review-stories` (Jira comments), `dev-start-story` (branch, build, validate on DEV, PR into the sprint branch with auto-merge), `dev-fix` (failed scan, CodeRabbit comments), `dev-review-plan` and `dev-review-pr` (read-only second look) |
+| `skills/qa-*` | `qa-design-tests` (Jira test cases), `qa-add-tests` (SF AI Tester suite PR), `qa-explore` (exploratory run in QA) |
+| `skills/review-room/` | Summarises CodeRabbit's review; posts it to Slack if the Slack MCP is connected |
 | `hooks/hooks.json` | Registers circuit-guard for every session |
-| `templates/repo/` | Installed into a client repo: CLAUDE.md, `.claude/` (settings, guard, persona MCP configs), CODEOWNERS, PR template, DoR/DoD, sf-config, `.coderabbit.yaml`, `scripts/ci/*`, `scripts/setup-persona.sh` |
-| `templates/workflows/` | `design-gate`, `pr-checks`, `persona-gates`, `fix-router`, `deploy-prod` |
-| `templates/github/` | Rulesets: main-branch gates; architects-only merge |
-| `templates/bootstrap/` | `build.config.yml` and `build-state.md` |
-| `tests/` | `guard.test.mjs` policy cases, including the v3 persona rules |
+| `templates/repo/` | Installed into a client repo: CLAUDE.md, `.claude/` (settings, guard), PR template, DoR/DoD, `.coderabbit.yaml`, `build.config.yml`, `scripts/ci/env-for-branch.mjs` |
+| `templates/workflows/` | `pr-checks.yml`, `deploy.yml` |
+| `templates/github/` | Rulesets for `sprint/*`, `dev`, `sit`, `uat`, `main` |
+| `tests/` | Guard policy cases, CI config and workflow checks |
 
-## Where things live (v3)
+Removed in v4: `arch-approve-design`, `arch-review-pr`, `qa-push-tests`, `qa-review-testplan`, and the workflows
+`design-gate`, `persona-gates`, `fix-router`, `deploy-prod`.
+
+## Where things live (v4)
 
 | What | Where |
 |---|---|
-| Spec, clarifications, plan, data model, decisions | Confluence design page (one per feature) |
-| Org snapshot | child page "Org snapshot" of the design page |
-| Epic, stories, test cases | Jira (story fields *Design page*, *Approved design version*, *Acceptance criteria*) |
-| Story plan | on the story PR: `docs/plans/<KEY>/PLAN.md`, `TESTPLAN.md` |
-| Runnable tests | on the story PR: `tests/<KEY>.tc.json`, `test-cases/<KEY>.sf-tests.yaml` |
-| Code | on the story PR: `force-app/` |
-| Transcript index | `.circuit/sources.json` (ids, titles, dates; no content) |
-| Spec Kit drafts | `.specify/specs/` (local only, gitignored) |
+| Design, change table, data model, decisions | Confluence design page (one per feature), Lucid diagram linked on it |
+| Epic, stories, test cases | Jira |
+| Story plan | the PR body |
+| Code | `force-app/` on the story PR |
+| UI tests | `test-cases/<KEY>.sf-tests.yaml` (SF AI Tester) |
+| Branch → environment map | `build.config.yml` → `environments` |
+| Sandbox credentials | GitHub Environment secret `SFDX_AUTH_URL`, one per environment |
 
-`jira-map.json` is gone: epic and story keys come from Jira queries (epic link and labels).
-`scripts/jira-sync.mjs` uses the Atlassian CLI (`acli`) or Atlassian MCP calls and stays idempotent; it reads no API
-token.
+## Branches and environments
+
+```
+feature/<KEY>-<slug> ──PR──► sprint/<name> ──PR──► dev ──PR──► sit ──PR──► uat ──PR──► main
+                             deploys QA            DEV          SIT          UAT          PROD (human approval)
+```
+
+`scripts/ci/env-for-branch.mjs <branch>` reads `build.config.yml` and prints the environment and test level. Both
+workflows use it.
 
 ## circuit-guard
 
 `templates/repo/.claude/hooks/circuit-guard.mjs` is a PreToolUse hook. The plugin registers it for every session;
-when a repo has its own copy (installed by the bootstrap), the plugin's copy steps aside so the repo's version wins.
+when a repo has its own copy (installed by the bootstrap), the repo's version wins.
 
-| Rule | Applies to |
+| Denies | Notes |
 |---|---|
-| No `sf` command against the alias the project names as production (`prod`, `production`, `live`, the `sf-config.yml` prod alias, `CIRCUIT_PROD_ALIASES`), including commands with no `--target-org` when the project default org is that alias. Orgs are not checked by type: any sandbox, scratch, Developer Edition, SDO or demo org can be DEV or QA | everyone |
-| No `gh pr merge`, approving reviews, merges through the API, pushes to `main`/`master`, `deploy-prod` dispatch | everyone |
-| No `gh pr create` for the Architect. The Developer may create draft PRs | personas |
-| No force push; no changes to rulesets, branch protection or environments; no `plan-approved` / `testplan-approved` labels | personas |
-| Real deploys: Developer and Architect none (check-only `deploy validate` only); Tester only to `CIRCUIT_DEPLOY_ORGS` (default `qa`) | personas |
-| Developer can't write `test-cases/`, `tests/` or the constitution; Tester can write and commit only `tests/` and `test-cases/`; Architect can't write `force-app/` or tests | personas |
-| AI never marks a design approved or sets a gate | everyone |
-| No reading `*.key`, `*.pem`, `.env*`, `~/.sf`, `~/.sfdx` | everyone |
-
-The persona is set by `CIRCUIT_PERSONA`, which the `cc-arch` / `cc-dev` / `cc-qa` aliases, the extension and the
-runner jobs set.
+| Push, force-push or delete `sprint/*`, `dev`, `sit`, `uat`, `main` | Feature branches are fine |
+| `gh pr review --approve`, `gh pr merge` without `--auto`, the equivalent `gh api` calls | Auto-merge on your own feature PR is allowed |
+| Deploys to anything but the developer's DEV alias; any command against the production alias | Validate (`--dry-run`, `deploy validate`) against DEV is allowed |
+| Setting a Confluence page to Approved; moving a Jira story to Ready for Dev or Done | People do these |
+| Reading, printing or setting `SFDX_AUTH_URL`, `sf org display --verbose`, or any secret | Only the admin handles secrets |
 
 ## Conventions
 
-Branch `feature/<KEY>-<slug>`; PR title starts with `<KEY>` (the GitHub for Atlassian app links it to Jira).
-Test-case ids are per story; levels `ui`, `unit`, `manual`; code references them with `// TC: <id>`. Labels:
-`ai-ready` (Jira, G2), `plan-approved` (G3), `testplan-approved` (G4), `needs-human`, `needs-qa`. Full list:
+Branch `feature/<KEY>-<slug>`, branched from the current `sprint/<name>`. PR title starts with `<KEY>` (GitHub for
+Atlassian links it to Jira). Every component in the design and the stories carries one change tag. Full list:
 `skills/circuit/SKILL.md`.
 
 ## Development
 
 ```bash
 node tests/guard.test.mjs
+node tests/ci.test.mjs
 actionlint templates/workflows/*.yml
-shellcheck -S warning templates/repo/scripts/ci/*.sh templates/repo/scripts/setup-persona.sh
 claude plugin validate .        # from the repo root: validates the marketplace and this plugin
 ```

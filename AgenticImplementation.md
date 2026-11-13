@@ -1,3 +1,5 @@
+> **Superseded by [`docs/CIRCUIT-V4.md`](docs/CIRCUIT-V4.md).** This file describes an older flow and is kept for history.
+
 # Autonomous Build Plan: Transcript → Spec → Jira → Tests → Code → Deploy
 
 > **v3 notice (2026-11-12).** This runbook describes the v2 circuit and is kept for history. The current design is

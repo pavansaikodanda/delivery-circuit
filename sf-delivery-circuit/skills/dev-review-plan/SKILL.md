@@ -1,26 +1,19 @@
 ---
 name: dev-review-plan
-description: Developer reviews the story plan (docs/plans/<KEY>/PLAN.md) on the draft PR for gate G3 - scope against the acceptance criteria and the approved design version, reuse, layering, files to touch, test approach, risk - and tells the human Developer whether to add the plan-approved label. Use with a PR number or Jira key.
+description: Read-only second look at the plan in a feature PR body before review - covers every change row and acceptance criterion of the Jira story, reuses before building new, layering, security, tests, risks. Posts findings as a PR comment. Use with a PR number or story key.
 ---
 
-# Developer: review the plan (G3)
+# Developer: second look at the plan
 
-Persona: **Developer** (`cc-dev`). Input: `$ARGUMENTS` = PR number or Jira key.
+Persona: **Developer**. Input: `$ARGUMENTS` = PR number or `<KEY>`. Read-only: no code changes, no approvals.
 
-1. Find the PR (`gh pr list --search "<KEY> in:title" --json number,headRefName,labels,isDraft`) and read its branch
-   (`gh pr checkout <n>`; read only).
-2. Read `docs/plans/<KEY>/PLAN.md`, `TESTPLAN.md`, `tests/<KEY>.tc.json` (if the Tester added it), the story and its
-   acceptance criteria (Jira), and the design page at the story's *Approved design version* (`design_get`).
-3. Check:
-   - **Design version (C5):** PLAN.md cites the same version the story carries, and the epic's version is not newer.
-   - **Scope:** every acceptance criterion is covered and nothing outside the story or the design.
-   - **Reuse:** extends existing classes/flows/LWCs where possible; each "new" file has a reason.
-   - **Layering (constitution):** trigger → handler → service → selector; one trigger per object.
-   - **Security:** `with sharing`, `WITH USER_MODE` / `stripInaccessible`, no hard-coded IDs.
-   - **Tests:** each `unit` TC id maps to a planned test method; bulk (201+) and negative cases exist.
-   - **Deploy safety:** only check-only validation on `dev`; no destructive change unless the story says so.
-4. Post a PR comment (`gh pr comment <n> --body-file <file>`) with findings and a final line
-   `G3 RECOMMENDATION: APPROVE` or `G3 RECOMMENDATION: CHANGES`.
-5. Tell the human Developer: if you agree, add the label `plan-approved` yourself in GitHub (or the extension's gate
-   action). The AI can't: the guard blocks it and `persona-gates` removes gate labels added by anyone outside
-   `developers`. The build starts with `dev-start-story <KEY> build` when `testplan-approved` (G4) is also there.
+1. `gh pr view <n> --json number,title,body,headRefName,baseRefName`; the story (`getJiraIssue <KEY>`): Changes rows,
+   acceptance criteria, design link.
+2. Check the plan in the PR body:
+   - every change row has a matching approach, with the right tag (no NEW where something EXISTS);
+   - every acceptance criterion has a test;
+   - layering trigger → handler → service → selector; `with sharing`, CRUD/FLS; bulk (201+);
+   - files listed match the scope; risks named (deletions, permissions, shared files);
+   - base branch is the current `sprint/*`.
+3. Post one PR comment (`gh pr comment <n> --body-file <file>`): findings and a last line
+   `PLAN: OK` or `PLAN: CHANGES`. If changes are needed, the Developer updates the PR body (`dev-start-story <KEY> build`).
